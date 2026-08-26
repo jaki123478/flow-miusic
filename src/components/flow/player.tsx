@@ -22,6 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
+import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { PlayingBars, shareTrack, TrackArt, TrackRow } from "./tracks";
@@ -131,6 +132,7 @@ function IconSwap({
 
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const keepAliveRef = useRef<HTMLAudioElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const ytRef = useRef<YTPlayer | null>(null);
   const ytReady = useRef(false);
@@ -142,6 +144,7 @@ export function AudioEngine() {
   const playbackRate = useFlowStore((s) => s.playbackRate);
   const seekVersion = useFlowStore((s) => s.seekVersion);
   const currentTime = useFlowStore((s) => s.currentTime);
+  const duration = useFlowStore((s) => s.duration);
   const sleepEndsAt = useFlowStore((s) => s.sleepEndsAt);
   const showFullPlayer = useFlowStore((s) => s.showFullPlayer);
   const showQueue = useFlowStore((s) => s.showQueue);
@@ -322,6 +325,10 @@ export function AudioEngine() {
       const dur = p.getDuration();
       if (Number.isFinite(time)) setCurrentTime(time);
       if (Number.isFinite(dur) && dur > 0) setDuration(dur);
+      const cur = useFlowStore.getState().current;
+      if (cur) {
+        pushLockScreen(cur, true, time, dur, useFlowStore.getState().playbackRate);
+      }
     }, 250);
     return () => window.clearInterval(t);
   }, [isYt, isPlaying, setCurrentTime, setDuration]);
@@ -349,48 +356,45 @@ export function AudioEngine() {
   }, [sleepEndsAt, pause]);
 
   useEffect(() => {
-    if (!current || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-    try {
-      navigator.mediaSession.metadata = new MediaMetadata({
-        title: current.title,
-        artist: current.artist,
-        album: current.album || "Flow",
-        artwork: current.artwork ? [{ src: current.artwork, sizes: "512x512", type: "image/jpeg" }] : [],
-      });
-      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    } catch {
-      /* older iOS */
-    }
-    const bind = (action: MediaSessionAction, handler: MediaSessionActionHandler) => {
-      try {
-        navigator.mediaSession.setActionHandler(action, handler);
-      } catch {
-        /* iOS may reject some actions */
-      }
-    };
-    bind("play", () => resume());
-    bind("pause", () => pause());
-    bind("previoustrack", () => prev());
-    bind("nexttrack", () => next());
-    bind("seekto", (d) => {
-      if (typeof d.seekTime === "number") useFlowStore.getState().seek(d.seekTime);
+    if (!current || typeof navigator === "undefined") return;
+    pushLockScreen(current, isPlaying, currentTime, current.isLive ? 0 : duration, current.isLive ? 1 : playbackRate);
+    bindLockScreenActions({
+      play: () => resume(),
+      pause: () => pause(),
+      prev: () => prev(),
+      next: () => next(),
+      seek: (time) => useFlowStore.getState().seek(time),
+      skip: (delta) => useFlowStore.getState().skipBy(delta),
+      stop: () => pause(),
     });
-    bind("seekforward", () => useFlowStore.getState().skipBy(10));
-    bind("seekbackward", () => useFlowStore.getState().skipBy(-10));
-  }, [current, isPlaying, resume, pause, prev, next]);
+  }, [current, isPlaying, duration, playbackRate, resume, pause, prev, next]);
+
+  useEffect(() => {
+    const keep = keepAliveRef.current;
+    if (!keep) return;
+    const apple = isAppleMobile();
+    if (isYt && isPlaying && !apple) {
+      if (keep.paused) void keep.play().catch(() => {});
+    } else if (!keep.paused) {
+      keep.pause();
+    }
+  }, [isYt, isPlaying]);
 
   useEffect(() => {
     const unlock = () => {
       const el = audioRef.current;
-      if (!el) return;
-      void el
-        .play()
-        .then(() => {
-          if (!useFlowStore.getState().isPlaying) el.pause();
-        })
-        .catch(() => {
-          /* gesture consumed */
-        });
+      if (el) {
+        void el
+          .play()
+          .then(() => {
+            if (!useFlowStore.getState().isPlaying) el.pause();
+          })
+          .catch(() => {});
+      }
+      const keep = keepAliveRef.current;
+      if (keep) {
+        void keep.play().then(() => keep.pause()).catch(() => {});
+      }
     };
     window.addEventListener("touchstart", unlock, { once: true, passive: true });
     window.addEventListener("pointerdown", unlock, { once: true, passive: true });
@@ -408,7 +412,14 @@ export function AudioEngine() {
         playsInline
         preload="metadata"
         controls={false}
-        onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
+        onTimeUpdate={(e) => {
+          const t = e.currentTarget.currentTime;
+          setCurrentTime(t);
+          const cur = useFlowStore.getState().current;
+          if (cur && cur.source !== "ytmusic") {
+            pushLockScreen(cur, !e.currentTarget.paused, t, e.currentTarget.duration, e.currentTarget.playbackRate);
+          }
+        }}
         onDurationChange={(e) => {
           const d = e.currentTarget.duration;
           if (Number.isFinite(d)) setDuration(d);
@@ -418,6 +429,7 @@ export function AudioEngine() {
           if (current && current.source !== "ytmusic") onEnded();
         }}
       />
+      <audio ref={keepAliveRef} src="/silence.wav" loop playsInline preload="auto" className="hidden" />
       <div
         className={cn(
           "overflow-hidden bg-bg ring-1 ring-border yt-dock",
