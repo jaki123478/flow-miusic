@@ -1,16 +1,21 @@
 import { useState, type FormEvent } from "react";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 
 export const Route = createFileRoute("/login")({
-  validateSearch: (search: Record<string, unknown>): { mode?: "in" | "up" } => ({
+  validateSearch: (search: Record<string, unknown>): { mode?: "in" | "up"; next?: string } => ({
     mode: search.mode === "up" ? "up" : search.mode === "in" ? "in" : undefined,
+    next:
+      typeof search.next === "string" && search.next.startsWith("/") && !search.next.startsWith("//")
+        ? search.next
+        : undefined,
   }),
   component: Login,
 });
 
 function Login() {
-  const { mode: start } = Route.useSearch();
+  const { mode: start, next } = Route.useSearch();
+  const dest = next || "/";
   const [mode, setMode] = useState<"in" | "up">(start === "up" ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -32,7 +37,7 @@ function Login() {
         setError(res.error.message || "Accesso non riuscito");
         return;
       }
-      window.location.assign("/library");
+      window.location.assign(dest);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Accesso non riuscito");
     } finally {
@@ -41,16 +46,16 @@ function Login() {
   };
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center px-4 py-10">
-      <Link to="/" className="mb-8 flex items-center gap-2">
+    <div className="mx-auto flex min-h-dvh max-w-md flex-col justify-center px-5 py-10">
+      <div className="mb-8 flex items-center gap-2">
         <span className="flex size-10 items-center justify-center rounded-lg bg-primary font-heading text-lg font-bold text-primary-fg">
           F
         </span>
         <span className="font-heading text-2xl font-bold">Flow</span>
-      </Link>
-      <h1 className="text-3xl font-bold tracking-tight">{mode === "in" ? "Accedi" : "Registrati"}</h1>
+      </div>
+      <h1 className="text-3xl font-bold tracking-tight">{mode === "in" ? "Accedi per continuare" : "Crea il tuo account"}</h1>
       <p className="mt-2 text-sm text-muted">
-        Crea un account per salvare playlist, preferiti e importare le tue liste da Spotify.
+        Serve un account per usare Flow: playlist, preferiti e ascolto restano sul tuo profilo.
       </p>
 
       {!authEnabled ? (
@@ -62,7 +67,7 @@ function Login() {
               <button
                 key={p.providerId}
                 type="button"
-                onClick={() => void signIn(p.providerId, { callbackURL: "/library", errorCallbackURL: "/login" })}
+                onClick={() => void signIn(p.providerId, { callbackURL: dest, errorCallbackURL: "/login" })}
                 className="flex h-12 w-full items-center justify-center rounded-full bg-fg text-sm font-bold text-bg hover:opacity-90"
               >
                 Continua con {p.label}

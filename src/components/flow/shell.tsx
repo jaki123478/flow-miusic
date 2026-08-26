@@ -1,6 +1,8 @@
 import { useEffect, type ReactNode } from "react";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, Navigate, useRouterState } from "@tanstack/react-router";
 import { Compass, Heart, House, Library, Plus, Radio, Search, Settings, Trophy } from "lucide-react";
+import { authEnabled } from "@/lib/auth/client";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
@@ -125,7 +127,15 @@ function LibraryRail() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const nextPath = useRouterState({
+    select: (s) => {
+      const n = (s.location.search as { next?: string }).next;
+      return typeof n === "string" && n.startsWith("/") && !n.startsWith("//") ? n : "/";
+    },
+  });
+  const { user, isPending } = useCurrentUserState();
   const hydrate = useFlowStore((s) => s.hydrate);
+  const isLogin = pathname === "/login";
 
   useEffect(() => {
     hydrate();
@@ -200,6 +210,28 @@ export function AppShell({ children }: { children: ReactNode }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  if (authEnabled) {
+    if (isPending) {
+      return (
+        <div className="grid h-dvh place-items-center bg-bg text-fg">
+          <div className="flex flex-col items-center gap-4">
+            <FlowMark className="size-14" />
+            <div className="h-2 w-28 animate-pulse rounded-full bg-elevated" />
+          </div>
+        </div>
+      );
+    }
+    if (!user && !isLogin) {
+      return <Navigate to="/login" search={{ next: pathname === "/" ? undefined : pathname }} />;
+    }
+    if (user && isLogin) {
+      return <Navigate to={nextPath} />;
+    }
+    if (isLogin) {
+      return <div className="h-dvh overflow-y-auto bg-bg text-fg">{children}</div>;
+    }
+  }
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
