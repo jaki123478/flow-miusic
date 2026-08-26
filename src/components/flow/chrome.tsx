@@ -1,4 +1,8 @@
 import { useEffect, useState } from "react";
+import { Link } from "@tanstack/react-router";
+import { signOut } from "@/lib/auth/client";
+import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { loadLibrary, saveLibrary } from "@/lib/music/cloud";
 import { useFlowStore } from "@/stores/flow-store";
 
 export function HelpOverlay() {
@@ -96,4 +100,91 @@ export function InstallHint() {
       </button>
     </div>
   );
+}
+
+export function AuthChip() {
+  const { user, isPending } = useCurrentUserState();
+  const [signingOut, setSigningOut] = useState(false);
+  if (isPending) return <div className="size-8 shrink-0 animate-pulse rounded-full bg-elevated" />;
+  if (!user) {
+    return (
+      <Link to="/login" className="rounded-full bg-fg px-4 py-1.5 text-sm font-bold text-bg">
+        Accedi
+      </Link>
+    );
+  }
+  const label = user.displayName ?? user.primaryEmail ?? "Account";
+  return (
+    <div className="flex items-center gap-2">
+      {user.profileImageUrl ? (
+        <img src={user.profileImageUrl} alt="" className="size-8 rounded-full object-cover" />
+      ) : (
+        <span className="grid size-8 place-items-center rounded-full bg-primary text-sm font-bold text-primary-fg">
+          {label.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className="hidden max-w-[8rem] truncate text-sm font-medium md:inline">{label}</span>
+      <button
+        type="button"
+        disabled={signingOut}
+        onClick={() => {
+          setSigningOut(true);
+          void signOut().catch(() => setSigningOut(false));
+        }}
+        className="text-xs font-medium text-muted hover:text-fg"
+      >
+        {signingOut ? "…" : "Esci"}
+      </button>
+    </div>
+  );
+}
+
+export function CloudSync() {
+  const { user, isPending } = useCurrentUserState();
+
+  useEffect(() => {
+    if (isPending || !user) return;
+    let cancelled = false;
+    let timer = 0;
+    loadLibrary()
+      .then((data) => {
+        if (cancelled) return;
+        const local = useFlowStore.getState();
+        const remoteHas =
+          data && (data.liked.length > 0 || data.playlists.length > 0 || data.recents.length > 0);
+        if (remoteHas && data) local.importCloud(data);
+        else {
+          void saveLibrary({ data: local.dumpCloud() }).catch(() => {});
+          useFlowStore.setState({ cloudReady: true });
+        }
+      })
+      .catch(() => {
+        useFlowStore.setState({ cloudReady: true });
+      });
+
+    const unsub = useFlowStore.subscribe((s, prev) => {
+      if (!s.cloudReady) return;
+      if (
+        s.liked === prev.liked &&
+        s.recents === prev.recents &&
+        s.playlists === prev.playlists &&
+        s.settings === prev.settings &&
+        s.volume === prev.volume
+      ) {
+        return;
+      }
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        void saveLibrary({ data: useFlowStore.getState().dumpCloud() }).catch(() => {});
+      }, 900);
+    });
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      unsub();
+    };
+  }, [user?.id, isPending]);
+
+  return null;
 }

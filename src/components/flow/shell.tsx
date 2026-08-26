@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
 import { ActionSheet, TrackArt } from "./tracks";
-import { HelpOverlay, InstallHint } from "./chrome";
+import { HelpOverlay, InstallHint, AuthChip, CloudSync } from "./chrome";
 import { ToastHost } from "./toast";
 
 const NAV = [
@@ -204,6 +204,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
       <InstallHint />
+      <CloudSync />
       <AudioEngine />
       <div className="flex min-h-0 flex-1 gap-2 p-0 md:p-2 md:pb-0">
         <aside className="hidden w-72 shrink-0 flex-col gap-2 md:flex">
@@ -241,7 +242,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <FlowMark className="size-8" />
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex items-center gap-2">
+              <AuthChip />
               <Link to="/settings" className="rounded-full p-2 text-muted" aria-label="Impostazioni">
                 <Settings className="size-5" />
               </Link>
@@ -272,6 +274,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Settings className="size-4" />
               Impostazioni
             </Link>
+            <div className="pl-2">
+              <AuthChip />
+            </div>
           </div>
           <main
             className={cn(

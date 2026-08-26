@@ -74,6 +74,7 @@ interface FlowState {
   notice: string | null;
   listenMs: number;
   showHelp: boolean;
+  cloudReady: boolean;
 
   playTrack: (track: Track, queue?: Track[]) => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
@@ -116,6 +117,22 @@ interface FlowState {
   notify: (msg: string) => void;
   addListenMs: (ms: number) => void;
   setShowHelp: (v: boolean) => void;
+  importCloud: (data: {
+    liked: Track[];
+    recents: Track[];
+    playlists: Playlist[];
+    settings?: Partial<FlowSettings>;
+    volume?: number;
+    listenMs?: number;
+  }) => void;
+  dumpCloud: () => {
+    liked: Track[];
+    recents: Track[];
+    playlists: Playlist[];
+    settings: FlowSettings;
+    volume: number;
+    listenMs: number;
+  };
   hydrate: () => void;
 }
 
@@ -158,6 +175,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   notice: null,
   listenMs: 0,
   showHelp: false,
+  cloudReady: false,
 
   hydrate: () => {
     const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
@@ -421,4 +439,32 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({ listenMs });
   },
   setShowHelp: (v) => set({ showHelp: v }),
+  importCloud: (data) => {
+    const liked = (data.liked ?? []).map(sanitizeTrack);
+    const recents = (data.recents ?? []).map(sanitizeTrack);
+    const playlists = data.playlists ?? [];
+    const settings = { ...get().settings, ...(data.settings ?? {}) };
+    const volume = typeof data.volume === "number" ? data.volume : get().volume;
+    const listenMs = typeof data.listenMs === "number" ? data.listenMs : get().listenMs;
+    const trackMap: Record<string, Track> = { ...get().trackMap };
+    for (const t of [...liked, ...recents]) trackMap[t.id] = t;
+    writeJson(LIKED_KEY, liked);
+    writeJson(RECENT_KEY, recents);
+    writeJson(PLAYLISTS_KEY, playlists);
+    writeJson(SETTINGS_KEY, settings);
+    writeJson(VOLUME_KEY, volume);
+    writeJson(STATS_KEY, listenMs);
+    set({ liked, recents, playlists, settings, volume, listenMs, trackMap, cloudReady: true });
+  },
+  dumpCloud: () => {
+    const s = get();
+    return {
+      liked: s.liked,
+      recents: s.recents,
+      playlists: s.playlists,
+      settings: s.settings,
+      volume: s.volume,
+      listenMs: s.listenMs,
+    };
+  },
 }));

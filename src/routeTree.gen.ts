@@ -13,11 +13,13 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChartsRouteImport } from './routes/charts'
 import { Route as ExploreRouteImport } from './routes/explore'
 import { Route as LibraryRouteImport } from './routes/library'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as MixRouteImport } from './routes/mix'
 import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiProxyRouteImport } from './routes/api/proxy'
+import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -37,6 +39,11 @@ const ExploreRoute = ExploreRouteImport.update({
 const LibraryRoute = LibraryRouteImport.update({
   id: '/library',
   path: '/library',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const MixRoute = MixRouteImport.update({
@@ -64,28 +71,37 @@ const ApiProxyRoute = ApiProxyRouteImport.update({
   path: '/api/proxy',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
+  id: '/api/auth/$',
+  path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/charts': typeof ChartsRoute
   '/explore': typeof ExploreRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/charts': typeof ChartsRoute
   '/explore': typeof ExploreRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -93,11 +109,13 @@ export interface FileRoutesById {
   '/charts': typeof ChartsRoute
   '/explore': typeof ExploreRoute
   '/library': typeof LibraryRoute
+  '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -106,33 +124,39 @@ export interface FileRouteTypes {
     | '/charts'
     | '/explore'
     | '/library'
+    | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
     | '/api/proxy'
+    | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/charts'
     | '/explore'
     | '/library'
+    | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
     | '/api/proxy'
+    | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/charts'
     | '/explore'
     | '/library'
+    | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
     | '/api/proxy'
+    | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -140,11 +164,13 @@ export interface RootRouteChildren {
   ChartsRoute: typeof ChartsRoute
   ExploreRoute: typeof ExploreRoute
   LibraryRoute: typeof LibraryRoute
+  LoginRoute: typeof LoginRoute
   MixRoute: typeof MixRoute
   RadioRoute: typeof RadioRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   ApiProxyRoute: typeof ApiProxyRoute
+  ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -175,6 +201,13 @@ declare module '@tanstack/react-router' {
       path: '/library'
       fullPath: '/library'
       preLoaderRoute: typeof LibraryRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/mix': {
@@ -212,6 +245,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiProxyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/auth/$': {
+      id: '/api/auth/$'
+      path: '/api/auth/$'
+      fullPath: '/api/auth/$'
+      preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -220,11 +260,13 @@ const rootRouteChildren: RootRouteChildren = {
   ChartsRoute: ChartsRoute,
   ExploreRoute: ExploreRoute,
   LibraryRoute: LibraryRoute,
+  LoginRoute: LoginRoute,
   MixRoute: MixRoute,
   RadioRoute: RadioRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   ApiProxyRoute: ApiProxyRoute,
+  ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
