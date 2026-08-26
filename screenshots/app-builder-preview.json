@@ -1,0 +1,36 @@
+{
+  "url": "http://127.0.0.1:8080/",
+  "viewports": {
+    "desktop": {
+      "width": 1280,
+      "height": 800,
+      "status": 200,
+      "title": "Flow",
+      "hasCanvas": false,
+      "bodyTextLen": 3929,
+      "bodyTextHash": "aef2aaf66fe45935d9a5a03193bc552458656c59559c341bbbb411cc3e7a66c3",
+      "bodyTextPrefix": "Flow Home Cerca Radio Libreria SCOPRI Generi & mood Classifiche ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview.png"
+    },
+    "mobile": {
+      "width": 390,
+      "height": 844,
+      "status": 200,
+      "title": "Flow",
+      "hasCanvas": false,
+      "bodyTextLen": 3818,
+      "bodyTextHash": "e9d2965d13d6c45a6782af2261d9851c12f87457ed9c82c87ec784a2ab869f2a",
+      "bodyTextPrefix": "Flow Chart Esplora Buonasera Cosa vuoi ascoltare? YouTube Music ",
+      "horizontalOverflow": false,
+      "consoleErrors": [],
+      "pageErrors": [],
+      "screenshot": "/workspace/screenshots/app-builder-preview-mobile.png"
+    }
+  },
+  "brandWarnings": [],
+  "authWarnings": [],
+  "verdictFile": "/workspace/screenshots/app-builder-preview.json"
+}
