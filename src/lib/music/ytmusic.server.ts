@@ -64,7 +64,7 @@ function thumbnailOf(item: Record<string, unknown>, videoId: string): string {
   return FALLBACK_ART;
 }
 
-function artistOf(item: Record<string, unknown>, subtitle: string): string {
+function artistOf(item: Record<string, unknown>, subtitle: string, title: string): string {
   const authors = item.authors as unknown[] | undefined;
   const artists = item.artists as unknown[] | undefined;
   const fromAuthors = (authors || artists || []).map(txt).filter(Boolean);
@@ -72,7 +72,10 @@ function artistOf(item: Record<string, unknown>, subtitle: string): string {
   const parts = subtitle.split("•").map((s) => s.trim()).filter(Boolean);
   const skip = /video|visualizzaz|views|official|album|playlist|puntata/i;
   const guess = parts.find((p) => !skip.test(p) && !/^\d/.test(p) && p.length < 60);
-  return guess || "YouTube Music";
+  if (guess) return guess;
+  const dash = title.match(/^(.{2,48}?)\s+[-–—]\s+/);
+  if (dash) return dash[1].trim();
+  return "Artista";
 }
 
 function isVideoId(id: string): boolean {
@@ -105,7 +108,7 @@ function toTrack(item: unknown): Track | null {
     txt(rec.subtitle) ||
     txt((rec.flex_columns as { title?: unknown }[] | undefined)?.[1]?.title) ||
     "";
-  const artist = artistOf(rec, subtitle);
+  const artist = artistOf(rec, subtitle, title);
 
   return {
     id: `yt_${id}`,

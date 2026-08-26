@@ -30,7 +30,7 @@ function ExplorePage() {
     <div className="flow-enter space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Esplora</h1>
-        <p className="mt-1 text-sm text-muted">Generi e mood da YouTube Music, con testi SimpMusic.</p>
+        <p className="mt-1 text-sm text-muted">Generi, mood e scene da tutto il mondo.</p>
       </header>
 
       <section>
@@ -41,7 +41,7 @@ function ExplorePage() {
               key={m.id}
               to="/mix"
               search={{ mood: m.id }}
-              className="rounded-full bg-elevated px-4 py-2 text-sm font-medium ring-1 ring-border"
+              className="chip rounded-full bg-elevated px-4 py-2 text-sm font-medium ring-1 ring-border"
             >
               {m.label}
             </Link>
@@ -55,7 +55,7 @@ function ExplorePage() {
             key={g.id}
             to="/explore"
             search={{ genre: g.id }}
-            className={`shrink-0 rounded-full px-4 py-2 text-sm font-medium ${
+            className={`chip shrink-0 rounded-full px-4 py-2 text-sm font-medium ${
               g.id === selected.id ? "bg-primary text-primary-fg" : "bg-surface text-fg ring-1 ring-border"
             }`}
           >

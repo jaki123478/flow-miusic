@@ -56,7 +56,7 @@ function RadioPage() {
               key={item.code}
               type="button"
               onClick={() => void navigate({ search: { c: item.code } })}
-              className={`h-11 shrink-0 rounded-full px-4 text-sm font-medium ${
+              className={`chip h-11 shrink-0 rounded-full px-4 text-sm font-medium ${
                 item.code === code ? "bg-primary text-primary-fg" : "bg-surface text-fg ring-1 ring-border"
               }`}
             >

@@ -15,10 +15,10 @@ export const Route = createRootRoute({
         content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       { title: APP_NAME },
-      { name: "theme-color", content: "#08090c" },
+      { name: "theme-color", content: "#000000" },
       {
         name: "description",
-        content: "Musica da YouTube Music, testi SimpMusic, radio live.",
+        content: "Musica, radio live e testi. Ascolta ovunque, anche sul telefono.",
       },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
@@ -31,7 +31,7 @@ export const Route = createRootRoute({
       { rel: "apple-touch-icon", href: "/__grok/icon-180.png" },
       {
         rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap",
+        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap",
       },
     ],
   }),

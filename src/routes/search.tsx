@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Loader2, Mic, Search as SearchIcon, X } from "lucide-react";
 import { searchCatalog, stationToTrack } from "@/lib/music/catalog";
 import type { RadioStation, Track } from "@/lib/music/types";
 import { GENRES } from "@/lib/music/types";
 import { HScroll, SectionHeader, TrackCard, TrackRow } from "@/components/flow/tracks";
-import { Link } from "@tanstack/react-router";
+import { hashHue } from "@/lib/utils";
 
 export const Route = createFileRoute("/search")({
   validateSearch: (search: Record<string, unknown>): { q?: string } => ({
@@ -88,17 +88,17 @@ function SearchPage() {
 
   return (
     <div className="flow-enter space-y-6">
-      <h1 className="text-2xl font-semibold tracking-tight">Cerca</h1>
-      <div className="flex h-12 items-center gap-2 rounded-xl bg-surface px-3 ring-1 ring-border">
-        <SearchIcon className="size-5 text-subtle" />
+      <h1 className="text-3xl font-bold tracking-tight">Cerca</h1>
+      <div className="flex h-12 items-center gap-3 rounded-full bg-fg px-4 text-bg md:max-w-xl">
+        <SearchIcon className="size-5" />
         <input
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
                 void navigate({ search: { q: e.target.value || undefined }, replace: true });
           }}
-          placeholder="Brani, artisti, radio..."
-          className="h-full min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-subtle"
+          placeholder="Cosa vuoi ascoltare?"
+          className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-bg outline-none placeholder:text-bg/50"
           autoCapitalize="off"
           autoCorrect="off"
           enterKeyHint="search"
@@ -110,7 +110,7 @@ function SearchPage() {
               setQ("");
               void navigate({ search: { q: undefined } });
             }}
-            className="flex size-9 items-center justify-center text-muted"
+            className="flex size-9 items-center justify-center text-bg/60"
             aria-label="Pulisci"
           >
             <X className="size-4" />
@@ -119,7 +119,7 @@ function SearchPage() {
           <button
             type="button"
             onClick={voiceSearch}
-            className="flex size-9 items-center justify-center text-muted"
+            className="flex size-9 items-center justify-center text-bg/60"
             aria-label="Ricerca vocale"
           >
             <Mic className="size-4" />
@@ -154,7 +154,7 @@ function SearchPage() {
                       setQ(s);
                       void navigate({ search: { q: s } });
                     }}
-                    className="rounded-full bg-elevated px-3 py-2 text-sm text-fg"
+                    className="chip rounded-full bg-elevated px-3 py-2 text-sm text-fg"
                   >
                     {s}
                   </button>
@@ -163,14 +163,15 @@ function SearchPage() {
             </section>
           ) : null}
           <section>
-            <SectionHeader title="Sfoglia generi" />
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+            <SectionHeader title="Sfoglia tutto" />
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {GENRES.map((g) => (
                 <Link
                   key={g.id}
                   to="/explore"
                   search={{ genre: g.id }}
-                  className="flex h-16 items-end rounded-xl bg-elevated p-3 text-sm font-semibold ring-1 ring-border"
+                  className="relative h-28 overflow-hidden rounded-lg p-3 text-base font-bold"
+                  style={{ backgroundColor: `hsl(${hashHue(g.id)} 62% 38%)` }}
                 >
                   {g.name}
                 </Link>
@@ -184,7 +185,7 @@ function SearchPage() {
 
       {tracks.length > 0 ? (
         <section>
-          <SectionHeader title="YouTube Music" />
+          <SectionHeader title="Brani" />
           {tracks.map((t, i) => (
             <TrackRow key={t.id} track={t} queue={tracks} index={i} />
           ))}

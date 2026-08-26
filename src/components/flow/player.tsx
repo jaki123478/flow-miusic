@@ -2,25 +2,29 @@ import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
   Clock,
+  Gauge,
   Heart,
   ListMusic,
+  ListPlus,
   Mic2,
   Pause,
   Play,
   Radio,
   Repeat,
   Repeat1,
+  RotateCcw,
+  RotateCw,
+  Share2,
   Shuffle,
   SkipBack,
   SkipForward,
   Volume2,
   VolumeX,
-  X,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
-import { cn, formatTime } from "@/lib/utils";
+import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
-import { PlayingBars, TrackArt, TrackRow } from "./tracks";
+import { PlayingBars, shareTrack, TrackArt, TrackRow } from "./tracks";
 
 type YTPlayer = {
   loadVideoById: (id: string) => void;
@@ -92,6 +96,39 @@ function loadYouTubeApi(): Promise<YTNamespace> {
   });
 }
 
+const RATES = [0.75, 1, 1.25, 1.5, 2];
+
+function IconSwap({
+  on,
+  onIcon: OnIcon,
+  offIcon: OffIcon,
+  iconClass,
+}: {
+  on: boolean;
+  onIcon: typeof Pause;
+  offIcon: typeof Play;
+  iconClass?: string;
+}) {
+  return (
+    <span className="relative inline-flex size-7 items-center justify-center">
+      <OnIcon
+        className={cn(
+          "icon-swap absolute",
+          iconClass,
+          on ? "scale-100 opacity-100 blur-none" : "scale-[0.25] opacity-0 blur-[4px]",
+        )}
+      />
+      <OffIcon
+        className={cn(
+          "icon-swap",
+          iconClass,
+          on ? "scale-[0.25] opacity-0 blur-[4px]" : "scale-100 opacity-100 blur-none",
+        )}
+      />
+    </span>
+  );
+}
+
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -109,6 +146,7 @@ export function AudioEngine() {
   const showFullPlayer = useFlowStore((s) => s.showFullPlayer);
   const showQueue = useFlowStore((s) => s.showQueue);
   const showLyrics = useFlowStore((s) => s.showLyrics);
+  const hideVideo = useFlowStore((s) => s.hideVideo);
   const setCurrentTime = useFlowStore((s) => s.setCurrentTime);
   const setDuration = useFlowStore((s) => s.setDuration);
   const onEnded = useFlowStore((s) => s.onEnded);
@@ -118,7 +156,7 @@ export function AudioEngine() {
   const prev = useFlowStore((s) => s.prev);
   const lastSeek = useRef(0);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
-  const hero = isYt && showFullPlayer && !showQueue && !showLyrics;
+  const hero = isYt && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
 
   useEffect(() => {
     if (!isYt || !hostRef.current) return;
@@ -282,7 +320,7 @@ export function AudioEngine() {
     const p = ytRef.current;
     if (!host || !p || !ytReady.current) return;
     p.setSize(host.clientWidth, host.clientHeight);
-  }, [showFullPlayer, isYt]);
+  }, [showFullPlayer, isYt, hideVideo, showQueue, showLyrics]);
 
   useEffect(() => {
     if (!sleepEndsAt) return;
@@ -315,6 +353,8 @@ export function AudioEngine() {
     navigator.mediaSession.setActionHandler("seekto", (d) => {
       if (typeof d.seekTime === "number") useFlowStore.getState().seek(d.seekTime);
     });
+    navigator.mediaSession.setActionHandler("seekforward", () => useFlowStore.getState().skipBy(10));
+    navigator.mediaSession.setActionHandler("seekbackward", () => useFlowStore.getState().skipBy(-10));
   }, [current, isPlaying, resume, pause, prev, next]);
 
   return (
@@ -336,13 +376,15 @@ export function AudioEngine() {
       />
       <div
         className={cn(
-          "overflow-hidden bg-black shadow-2xl ring-1 ring-border",
+          "overflow-hidden bg-bg ring-1 ring-border yt-dock",
           !isYt && "pointer-events-none invisible absolute",
           isYt && hero
-            ? "pointer-events-none fixed top-14 left-1/2 z-40 w-[min(100%-3rem,24rem)] -translate-x-1/2 rounded-2xl aspect-square"
-            : isYt
-              ? "pointer-events-auto fixed right-3 bottom-24 z-[60] size-[200px] rounded-xl md:bottom-8"
-              : "hidden",
+            ? "pointer-events-none fixed top-16 left-1/2 z-40 w-[min(100%-3rem,22rem)] -translate-x-1/2 rounded-xl aspect-square"
+            : isYt && hideVideo
+              ? "pointer-events-none fixed right-2 bottom-2 z-10 size-[200px] rounded-lg opacity-20"
+              : isYt
+                ? "pointer-events-auto fixed right-3 bottom-28 z-[60] size-[200px] rounded-lg md:bottom-[92px]"
+                : "hidden",
         )}
         aria-hidden={!isYt}
       >
@@ -359,54 +401,201 @@ export function MiniPlayer() {
   const duration = useFlowStore((s) => s.duration);
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
+  const prev = useFlowStore((s) => s.prev);
+  const seek = useFlowStore((s) => s.seek);
+  const shuffle = useFlowStore((s) => s.shuffle);
+  const repeat = useFlowStore((s) => s.repeat);
+  const volume = useFlowStore((s) => s.volume);
+  const isMuted = useFlowStore((s) => s.isMuted);
+  const toggleShuffle = useFlowStore((s) => s.toggleShuffle);
+  const cycleRepeat = useFlowStore((s) => s.cycleRepeat);
+  const toggleLike = useFlowStore((s) => s.toggleLike);
+  const liked = useFlowStore((s) => (current ? s.liked.some((t) => t.id === current.id) : false));
   const setShowFullPlayer = useFlowStore((s) => s.setShowFullPlayer);
-  if (!current) return null;
+  const setShowQueue = useFlowStore((s) => s.setShowQueue);
+  const setShowLyrics = useFlowStore((s) => s.setShowLyrics);
+  const setVolume = useFlowStore((s) => s.setVolume);
+  const toggleMute = useFlowStore((s) => s.toggleMute);
+  const showFull = useFlowStore((s) => s.showFullPlayer);
+  const { mounted, open } = useOpenTransition(Boolean(current), 280);
+  if (!mounted || !current) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
 
   return (
-    <div className="pointer-events-auto mx-3 mb-2 overflow-hidden rounded-xl bg-elevated ring-1 ring-border md:mx-4">
-      <div className="flex w-full items-center gap-3 px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setShowFullPlayer(true)}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left"
-        >
-          <span className="size-11 shrink-0 overflow-hidden rounded-md bg-surface">
-            <TrackArt src={current.artwork} alt="" />
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-sm font-medium text-fg">{current.title}</span>
-            <span className="block truncate text-xs text-muted">{current.artist}</span>
-          </span>
-          {isPlaying ? <PlayingBars className="mr-1 hidden sm:flex" /> : null}
-        </button>
-        <button
-          type="button"
-          onClick={togglePlay}
-          className="flex size-11 items-center justify-center rounded-full text-fg"
-          aria-label={isPlaying ? "Pausa" : "Riproduci"}
-        >
-          {isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
-        </button>
-        <button
-          type="button"
-          onClick={next}
-          className="hidden size-11 items-center justify-center rounded-full text-fg sm:flex"
-          aria-label="Successivo"
-        >
-          <SkipForward className="size-5 fill-current" />
-        </button>
-      </div>
-      {!current.isLive ? (
-        <div className="h-0.5 bg-surface">
-          <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
-        </div>
-      ) : (
-        <div className="flex items-center gap-1.5 px-3 pb-1.5 text-[10px] font-medium tracking-wide text-primary uppercase">
-          <span className="size-1.5 rounded-full bg-primary" />
-          Live
-        </div>
+    <div
+      className={cn(
+        "now-bar pointer-events-auto bg-elevated md:bg-bg",
+        (!open || showFull) && "is-away",
       )}
+    >
+      <div className="md:hidden">
+        <div className="mx-2 mb-1 overflow-hidden rounded-lg bg-elevated">
+          <div className="flex items-center gap-2 px-2 py-1.5">
+            <button
+              type="button"
+              onClick={() => setShowFullPlayer(true)}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <span className="size-11 shrink-0 overflow-hidden rounded-md bg-surface">
+                <TrackArt src={current.artwork} alt="" />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium">{current.title}</span>
+                <span className="block truncate text-xs text-muted">{current.artist}</span>
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => toggleLike(current)}
+              className={cn("flex size-11 items-center justify-center", liked ? "text-primary" : "text-fg")}
+              aria-label="Preferito"
+            >
+              <Heart className={cn("heart-icon size-5", liked && "is-on fill-current")} />
+            </button>
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="pressable flex size-11 items-center justify-center text-fg"
+              aria-label={isPlaying ? "Pausa" : "Riproduci"}
+            >
+              <IconSwap on={isPlaying} onIcon={Pause} offIcon={Play} iconClass="size-5 fill-current" />
+            </button>
+          </div>
+          {!current.isLive ? (
+            <div
+              className="h-0.5 w-full bg-subtle/40"
+              aria-hidden
+            >
+              <div className="h-full bg-primary" style={{ width: `${progress}%` }} />
+            </div>
+          ) : (
+            <div className="h-0.5 w-full bg-primary" />
+          )}
+        </div>
+      </div>
+
+      <div className="hidden h-[90px] items-center gap-4 px-4 md:flex">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 items-center gap-3 text-left">
+            <span className="size-14 shrink-0 overflow-hidden rounded bg-surface">
+              <TrackArt src={current.artwork} alt="" />
+            </span>
+            <span className="min-w-0">
+              <span className="block max-w-[14rem] truncate text-sm font-medium">{current.title}</span>
+              <span className="block max-w-[14rem] truncate text-xs text-muted">{current.artist}</span>
+            </span>
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleLike(current)}
+            className={cn("flex size-8 items-center justify-center", liked ? "text-primary" : "text-muted hover:text-fg")}
+            aria-label="Preferito"
+          >
+            <Heart className={cn("heart-icon size-4", liked && "is-on fill-current")} />
+          </button>
+        </div>
+
+        <div className="flex w-[42%] max-w-xl min-w-[22rem] flex-col items-center gap-2">
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={toggleShuffle}
+              className={cn("pressable flex size-8 items-center justify-center", shuffle ? "text-primary" : "text-muted hover:text-fg")}
+              aria-label="Shuffle"
+            >
+              <Shuffle className="size-4" />
+            </button>
+            <button type="button" onClick={prev} className="pressable flex size-8 items-center justify-center text-muted hover:text-fg" aria-label="Precedente">
+              <SkipBack className="size-5 fill-current" />
+            </button>
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="play-fab flex size-10 items-center justify-center rounded-full bg-fg text-bg"
+              aria-label={isPlaying ? "Pausa" : "Riproduci"}
+            >
+              <IconSwap on={isPlaying} onIcon={Pause} offIcon={Play} iconClass="size-4 fill-current" />
+            </button>
+            <button type="button" onClick={next} className="pressable flex size-8 items-center justify-center text-muted hover:text-fg" aria-label="Successivo">
+              <SkipForward className="size-5 fill-current" />
+            </button>
+            <button
+              type="button"
+              onClick={cycleRepeat}
+              className={cn("pressable flex size-8 items-center justify-center", repeat !== "off" ? "text-primary" : "text-muted hover:text-fg")}
+              aria-label="Ripeti"
+            >
+              <RepeatIcon className="size-4" />
+            </button>
+          </div>
+          {current.isLive ? (
+            <p className="flex items-center gap-1.5 text-xs font-medium text-primary">
+              <span className="live-dot size-1.5 rounded-full bg-primary" />
+              In diretta
+            </p>
+          ) : (
+            <div className="flex w-full items-center gap-2">
+              <span className="w-10 text-right text-[11px] tabular-nums text-subtle">{formatTime(currentTime)}</span>
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                step={0.25}
+                value={Math.min(currentTime, duration || 1)}
+                onChange={(e) => seek(Number(e.target.value))}
+                className="seek flex-1"
+                aria-label="Posizione"
+                style={{
+                  background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)`,
+                }}
+              />
+              <span className="w-10 text-[11px] tabular-nums text-subtle">{formatTime(duration)}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-1 items-center justify-end gap-1">
+          <button
+            type="button"
+            onClick={() => {
+              setShowFullPlayer(true);
+              setShowLyrics(true);
+            }}
+            className="pressable flex size-8 items-center justify-center text-muted hover:text-fg"
+            aria-label="Testi"
+          >
+            <Mic2 className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setShowFullPlayer(true);
+              setShowQueue(true);
+            }}
+            className="pressable flex size-8 items-center justify-center text-muted hover:text-fg"
+            aria-label="Coda"
+          >
+            <ListMusic className="size-4" />
+          </button>
+          <button type="button" onClick={toggleMute} className="pressable flex size-8 items-center justify-center text-muted hover:text-fg" aria-label="Volume">
+            {isMuted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.01}
+            value={isMuted ? 0 : volume}
+            onChange={(e) => setVolume(Number(e.target.value))}
+            className="seek w-24"
+            aria-label="Volume"
+            style={{
+              background: `linear-gradient(to right, var(--color-fg) ${(isMuted ? 0 : volume) * 100}%, var(--color-elevated) ${(isMuted ? 0 : volume) * 100}%)`,
+            }}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -421,14 +610,19 @@ export function FullPlayer() {
   const volume = useFlowStore((s) => s.volume);
   const isMuted = useFlowStore((s) => s.isMuted);
   const queue = useFlowStore((s) => s.queue);
+  const queueIndex = useFlowStore((s) => s.queueIndex);
   const showQueue = useFlowStore((s) => s.showQueue);
   const showLyrics = useFlowStore((s) => s.showLyrics);
   const sleepEndsAt = useFlowStore((s) => s.sleepEndsAt);
+  const playbackRate = useFlowStore((s) => s.playbackRate);
+  const hideVideo = useFlowStore((s) => s.hideVideo);
   const show = useFlowStore((s) => s.showFullPlayer);
+  const playlists = useFlowStore((s) => s.playlists);
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
   const seek = useFlowStore((s) => s.seek);
+  const skipBy = useFlowStore((s) => s.skipBy);
   const toggleShuffle = useFlowStore((s) => s.toggleShuffle);
   const cycleRepeat = useFlowStore((s) => s.cycleRepeat);
   const toggleLike = useFlowStore((s) => s.toggleLike);
@@ -439,9 +633,20 @@ export function FullPlayer() {
   const setVolume = useFlowStore((s) => s.setVolume);
   const toggleMute = useFlowStore((s) => s.toggleMute);
   const setSleep = useFlowStore((s) => s.setSleep);
+  const setPlaybackRate = useFlowStore((s) => s.setPlaybackRate);
+  const setHideVideo = useFlowStore((s) => s.setHideVideo);
+  const clearQueue = useFlowStore((s) => s.clearQueue);
+  const addToPlaylist = useFlowStore((s) => s.addToPlaylist);
+  const createPlaylist = useFlowStore((s) => s.createPlaylist);
 
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
+  const [showSleep, setShowSleep] = useState(false);
+  const [showRate, setShowRate] = useState(false);
+  const [showPl, setShowPl] = useState(false);
+  const [plTitle, setPlTitle] = useState("");
+  const [leftSleep, setLeftSleep] = useState(0);
   const lyricsRef = useRef<HTMLDivElement | null>(null);
+  const { mounted, open } = useOpenTransition(show, 260);
 
   useEffect(() => {
     if (!current || current.isLive) {
@@ -467,22 +672,47 @@ export function FullPlayer() {
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
   }, [lyricIndex, showLyrics]);
 
-  if (!show || !current) return null;
+  useEffect(() => {
+    if (!sleepEndsAt) {
+      setLeftSleep(0);
+      return;
+    }
+    const tick = () => setLeftSleep(Math.max(0, sleepEndsAt - Date.now()));
+    tick();
+    const t = window.setInterval(tick, 1000);
+    return () => window.clearInterval(t);
+  }, [sleepEndsAt]);
+
+  if (!mounted || !current) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
   const ytPlaying = current.source === "ytmusic";
+  const upcoming = queue.slice(queueIndex + 1);
 
   return (
     <div
       className={cn(
-        "fixed inset-0 z-50 flex flex-col pt-[env(safe-area-inset-top)]",
+        "player-full fixed inset-0 z-50 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)]",
         ytPlaying && !showQueue && !showLyrics ? "bg-transparent" : "bg-bg",
+        open ? "is-open" : "is-closing",
       )}
       role="dialog"
       aria-modal="true"
       aria-label="Player"
     >
-      <div className="relative z-[70] flex items-center justify-between bg-bg px-3 py-2">
+      {!(ytPlaying && !showQueue && !showLyrics) ? (
+        <div className="pointer-events-none absolute inset-0 overflow-hidden opacity-35">
+          <img
+            src={current.artwork}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="size-full scale-125 object-cover blur-3xl"
+          />
+          <div className="absolute inset-0 bg-bg/80" />
+        </div>
+      ) : null}
+
+      <div className="relative z-[70] flex items-center justify-between bg-bg/90 px-2 py-1 backdrop-blur-md">
         <button
           type="button"
           onClick={() => {
@@ -495,7 +725,9 @@ export function FullPlayer() {
         >
           <ChevronDown className="size-6" />
         </button>
-        <p className="text-xs font-medium tracking-wide text-muted uppercase">In riproduzione</p>
+        <p className="text-xs font-medium tracking-wide text-muted uppercase">
+          {showQueue ? "Coda" : showLyrics ? "Testi" : "In riproduzione"}
+        </p>
         <button
           type="button"
           onClick={() => setShowQueue(!showQueue)}
@@ -506,49 +738,86 @@ export function FullPlayer() {
         </button>
       </div>
 
-      {showQueue ? (
-        <div className="flex-1 overflow-y-auto px-3 pb-8">
+      <div className="relative z-10 min-h-0 flex-1">
+        <div className={cn("player-panel absolute inset-0 overflow-y-auto px-3 pb-8", showQueue ? "is-on" : "is-off")}>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Coda</h2>
-            <button type="button" onClick={() => setShowQueue(false)} className="text-muted">
-              <X className="size-5" />
+            <h2 className="text-base font-semibold">In arrivo · {upcoming.length}</h2>
+            <button type="button" onClick={clearQueue} className="text-xs font-medium text-muted">
+              Svuota
             </button>
           </div>
           {queue.map((t, i) => (
             <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
           ))}
         </div>
-      ) : showLyrics ? (
-        <div ref={lyricsRef} className="flex-1 overflow-y-auto px-6 pb-8">
+        <div
+          ref={lyricsRef}
+          className={cn("player-panel absolute inset-0 overflow-y-auto px-6 pb-8", showLyrics ? "is-on" : "is-off")}
+        >
           {lyrics.length === 0 ? (
             <p className="pt-16 text-center text-sm text-muted">Testi non disponibili per questo brano.</p>
           ) : (
             lyrics.map((line, i) => (
-              <p
+              <button
                 key={`${line.timeMs}-${i}`}
+                type="button"
                 data-i={i}
+                onClick={() => seek(line.timeMs / 1000)}
                 className={cn(
-                  "py-2 text-center text-lg leading-snug transition-colors duration-150",
+                  "block w-full py-2 text-center text-lg leading-snug transition-colors duration-150",
                   i === lyricIndex ? "font-semibold text-fg" : "text-subtle",
                 )}
               >
                 {line.text}
-              </p>
+              </button>
             ))
           )}
         </div>
-      ) : (
-        <div className="flex flex-1 flex-col px-6 pb-4">
+        <div
+          className={cn(
+            "player-panel absolute inset-0 flex flex-col overflow-hidden",
+            !showQueue && !showLyrics ? "is-on" : "is-off",
+          )}
+        >
           <div
             className={cn(
-              "mx-auto mt-2 aspect-square w-full max-w-sm overflow-hidden rounded-2xl shadow-2xl",
-              ytPlaying ? "bg-transparent" : "bg-elevated",
+              "player-stagger player-stagger-1 mx-auto mt-2 aspect-square w-[min(100%-3rem,22rem)] overflow-hidden rounded-xl shadow-2xl",
+              ytPlaying && !hideVideo ? "bg-transparent" : "bg-elevated",
             )}
           >
-            {ytPlaying ? null : <TrackArt src={current.artwork} alt={current.title} />}
+            {ytPlaying && !hideVideo ? (
+              <div className="flex size-full items-end justify-end p-3">
+                <button
+                  type="button"
+                  onClick={() => setHideVideo(true)}
+                  className="relative z-[80] rounded-full bg-bg/80 px-3 py-1 text-xs text-fg"
+                >
+                  Nascondi video
+                </button>
+              </div>
+            ) : (
+              <TrackArt src={current.artwork} alt={current.title} />
+            )}
           </div>
-          <div className="-mx-6 mt-0 flex-1 bg-bg px-6 pt-6">
-          <div className="flex items-start gap-3">
+
+          <div className="-mx-0 mt-0 flex-1 bg-bg px-6 pt-4 pb-4">
+
+          {isPlaying ? (
+            <div className="mx-auto mt-4 flex h-8 items-end gap-1">
+              {Array.from({ length: 16 }).map((_, i) => (
+                <span
+                  key={i}
+                  className="eq-bar w-1 rounded-full bg-primary/80"
+                  style={{
+                    height: `${28 + ((i * 17 + Math.floor(currentTime * 10)) % 72)}%`,
+                    animationDelay: `${(i % 5) * 0.12}s`,
+                  }}
+                />
+              ))}
+            </div>
+          ) : null}
+
+          <div className="player-stagger player-stagger-2 mt-5 flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-semibold tracking-tight text-fg">{current.title}</h1>
               <p className="mt-1 truncate text-sm text-muted">{current.artist}</p>
@@ -556,8 +825,10 @@ export function FullPlayer() {
                 <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-primary">
                   <Radio className="size-3.5" /> In diretta
                 </p>
-              ) : ytPlaying ? (
-                <p className="mt-1 text-xs text-subtle">YouTube Music · testi SimpMusic</p>
+              ) : hideVideo && ytPlaying ? (
+                <button type="button" onClick={() => setHideVideo(false)} className="mt-1 text-xs text-muted">
+                  Mostra video
+                </button>
               ) : null}
             </div>
             <button
@@ -571,7 +842,7 @@ export function FullPlayer() {
           </div>
 
           {!current.isLive ? (
-            <div className="mt-6">
+            <div className="mt-5">
               <input
                 type="range"
                 min={0}
@@ -579,7 +850,7 @@ export function FullPlayer() {
                 step={0.25}
                 value={Math.min(currentTime, duration || 30)}
                 onChange={(e) => seek(Number(e.target.value))}
-                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-elevated accent-primary"
+                className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-elevated"
                 aria-label="Posizione"
                 style={{
                   background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)`,
@@ -596,28 +867,44 @@ export function FullPlayer() {
             </div>
           )}
 
-          <div className="mt-4 flex items-center justify-between">
+          <div className="player-stagger player-stagger-3 mt-3 flex items-center justify-between">
             <button
               type="button"
               onClick={toggleShuffle}
               className={cn("flex size-11 items-center justify-center", shuffle ? "text-primary" : "text-muted")}
-              aria-label="Shuffle"
+              aria-label="Casuale"
             >
               <Shuffle className="size-5" />
             </button>
-            <button type="button" onClick={prev} className="flex size-14 items-center justify-center text-fg" aria-label="Precedente">
+            <button
+              type="button"
+              onClick={() => skipBy(-10)}
+              className="pressable flex size-11 items-center justify-center text-fg"
+              aria-label="Indietro 10 secondi"
+            >
+              <RotateCcw className="size-5" />
+            </button>
+            <button type="button" onClick={prev} className="pressable flex size-12 items-center justify-center text-fg" aria-label="Precedente">
               <SkipBack className="size-7 fill-current" />
             </button>
             <button
               type="button"
               onClick={togglePlay}
-              className="flex size-16 items-center justify-center rounded-full bg-fg text-bg"
+              className="pressable flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg"
               aria-label={isPlaying ? "Pausa" : "Riproduci"}
             >
-              {isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="ml-0.5 size-7 fill-current" />}
+              <IconSwap on={isPlaying} onIcon={Pause} offIcon={Play} iconClass="size-7 fill-current" />
             </button>
-            <button type="button" onClick={next} className="flex size-14 items-center justify-center text-fg" aria-label="Successivo">
+            <button type="button" onClick={next} className="pressable flex size-12 items-center justify-center text-fg" aria-label="Successivo">
               <SkipForward className="size-7 fill-current" />
+            </button>
+            <button
+              type="button"
+              onClick={() => skipBy(10)}
+              className="pressable flex size-11 items-center justify-center text-fg"
+              aria-label="Avanti 10 secondi"
+            >
+              <RotateCw className="size-5" />
             </button>
             <button
               type="button"
@@ -629,7 +916,7 @@ export function FullPlayer() {
             </button>
           </div>
 
-          <div className="mt-5 hidden items-center gap-3 md:flex">
+          <div className="mt-4 flex items-center gap-3">
             <button type="button" onClick={toggleMute} className="text-muted" aria-label="Volume">
               {isMuted || volume === 0 ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
             </button>
@@ -640,17 +927,16 @@ export function FullPlayer() {
               step={0.01}
               value={isMuted ? 0 : volume}
               onChange={(e) => setVolume(Number(e.target.value))}
-              className="h-1 w-full appearance-none rounded-full bg-elevated accent-primary"
+              className="h-1 w-full appearance-none rounded-full bg-elevated"
+              aria-label="Volume"
             />
+            <span className="w-8 text-right text-xs tabular-nums text-subtle">{Math.round((isMuted ? 0 : volume) * 100)}</span>
           </div>
 
-          <div className="mt-auto flex items-center justify-between pb-[env(safe-area-inset-bottom)] pt-4">
+          <div className="player-stagger player-stagger-4 mt-auto flex flex-wrap items-center justify-between gap-2 pb-[env(safe-area-inset-bottom)] pt-4">
             <button
               type="button"
-              onClick={() => {
-                setShowLyrics(!showLyrics);
-                setShowQueue(false);
-              }}
+              onClick={() => setShowLyrics(!showLyrics)}
               className={cn(
                 "flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium",
                 showLyrics ? "text-primary" : "text-muted",
@@ -659,26 +945,139 @@ export function FullPlayer() {
               <Mic2 className="size-4" />
               Testi
             </button>
-            <div className="flex items-center gap-1">
-              {[15, 30, 45].map((m) => (
+            <button
+              type="button"
+              onClick={() => setShowPl((v) => !v)}
+              className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted"
+            >
+              <ListPlus className="size-4" />
+              Playlist
+            </button>
+            <button
+              type="button"
+              onClick={() => void shareTrack(current)}
+              className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted"
+            >
+              <Share2 className="size-4" />
+              Condividi
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowRate((v) => !v);
+                setShowSleep(false);
+              }}
+              className="flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted"
+            >
+              <Gauge className="size-4" />
+              {playbackRate}x
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowSleep((v) => !v);
+                setShowRate(false);
+              }}
+              className={cn(
+                "flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium",
+                sleepEndsAt ? "text-primary" : "text-muted",
+              )}
+            >
+              <Clock className="size-4" />
+              {sleepEndsAt ? formatTime(leftSleep / 1000) : "Timer"}
+            </button>
+          </div>
+
+          {showRate ? (
+            <div className="flex justify-center gap-2 pb-3">
+              {RATES.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => {
+                    setPlaybackRate(r);
+                    setShowRate(false);
+                  }}
+                  className={cn(
+                    "rounded-full px-3 py-1.5 text-xs font-medium",
+                    playbackRate === r ? "bg-primary text-primary-fg" : "bg-surface text-fg",
+                  )}
+                >
+                  {r}x
+                </button>
+              ))}
+            </div>
+          ) : null}
+
+          {showSleep ? (
+            <div className="flex justify-center gap-2 pb-3">
+              {[15, 30, 45, 60].map((m) => (
                 <button
                   key={m}
                   type="button"
-                  onClick={() => setSleep(sleepEndsAt ? null : m)}
-                  className={cn(
-                    "rounded-full px-2.5 py-1.5 text-[11px] font-medium",
-                    sleepEndsAt ? "text-primary" : "text-muted",
-                  )}
+                  onClick={() => {
+                    setSleep(m);
+                    setShowSleep(false);
+                  }}
+                  className="rounded-full bg-surface px-3 py-1.5 text-xs font-medium text-fg"
                 >
-                  {m}m
+                  {m} min
                 </button>
               ))}
-              <Clock className="ml-1 size-3.5 text-subtle" />
+              <button
+                type="button"
+                onClick={() => {
+                  setSleep(null);
+                  setShowSleep(false);
+                }}
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-muted"
+              >
+                Off
+              </button>
             </div>
-          </div>
+          ) : null}
+
+          {showPl ? (
+            <div className="mb-2 max-h-40 overflow-y-auto rounded-lg bg-elevated p-2 ring-1 ring-border">
+              <form
+                className="mb-1 flex gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!plTitle.trim()) return;
+                  createPlaylist(plTitle);
+                  setPlTitle("");
+                }}
+              >
+                <input
+                  value={plTitle}
+                  onChange={(e) => setPlTitle(e.target.value)}
+                  placeholder="Nuova playlist"
+                  className="h-10 min-w-0 flex-1 rounded-md bg-surface px-3 text-sm outline-none"
+                />
+                <button type="submit" className="text-xs font-medium text-primary">
+                  Crea
+                </button>
+              </form>
+              {playlists.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => {
+                    addToPlaylist(p.id, current);
+                    setShowPl(false);
+                  }}
+                  className="flex h-10 w-full items-center justify-between rounded-md px-2 text-sm hover:bg-surface"
+                >
+                  <span>{p.title}</span>
+                  <span className="text-xs text-subtle">{p.trackIds.length}</span>
+                </button>
+              ))}
+              {playlists.length === 0 ? <p className="px-2 py-3 text-xs text-muted">Crea una playlist per salvare il brano.</p> : null}
+            </div>
+          ) : null}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

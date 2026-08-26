@@ -1,15 +1,16 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Heart, House, Radio, Search } from "lucide-react";
+import { Compass, Heart, House, Library, Plus, Radio, Search, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
+import { ActionSheet, TrackArt } from "./tracks";
 
 const NAV = [
   { to: "/", label: "Home", icon: House },
   { to: "/search", label: "Cerca", icon: Search },
   { to: "/radio", label: "Radio", icon: Radio },
-  { to: "/library", label: "Libreria", icon: Heart },
+  { to: "/library", label: "Libreria", icon: Library },
 ] as const;
 
 function FlowMark({ className }: { className?: string }) {
@@ -25,6 +26,97 @@ function FlowMark({ className }: { className?: string }) {
   );
 }
 
+function isTypingTarget(el: EventTarget | null) {
+  if (!(el instanceof HTMLElement)) return false;
+  const tag = el.tagName;
+  return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+}
+
+function LibraryRail() {
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const playlists = useFlowStore((s) => s.playlists);
+  const liked = useFlowStore((s) => s.liked);
+  const recents = useFlowStore((s) => s.recents);
+  const trackMap = useFlowStore((s) => s.trackMap);
+  const createPlaylist = useFlowStore((s) => s.createPlaylist);
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col rounded-lg bg-surface">
+      <div className="flex items-center justify-between px-4 py-3">
+        <Link
+          to="/library"
+          className={cn(
+            "nav-link flex items-center gap-2 text-sm font-semibold",
+            pathname.startsWith("/library") ? "is-active text-fg" : "text-muted hover:text-fg",
+          )}
+        >
+          <Library className="size-5" />
+          La tua libreria
+        </Link>
+        <button
+          type="button"
+          onClick={() => createPlaylist("Nuova playlist")}
+          className="pressable flex size-8 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg"
+          aria-label="Crea playlist"
+        >
+          <Plus className="size-4" />
+        </button>
+      </div>
+      <div className="flex gap-2 px-3 pb-2">
+        <Link to="/library" className="chip rounded-full bg-elevated px-3 py-1 text-xs font-medium">
+          Playlist
+        </Link>
+        <Link to="/radio" className="chip rounded-full bg-elevated px-3 py-1 text-xs font-medium">
+          Radio
+        </Link>
+      </div>
+      <div className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-2 pb-3">
+        <Link
+          to="/library"
+          className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-elevated"
+        >
+          <span className="liked-wash flex size-12 items-center justify-center rounded-md text-fg">
+            <Heart className="size-5 fill-current" />
+          </span>
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">Brani che ti piacciono</span>
+            <span className="text-xs text-muted">Playlist · {liked.length} brani</span>
+          </span>
+        </Link>
+        {recents[0] ? (
+          <Link to="/library" className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-elevated">
+            <span className="size-12 overflow-hidden rounded-md bg-elevated">
+              <TrackArt src={recents[0].artwork} alt="" />
+            </span>
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-medium">Ascoltati di recente</span>
+              <span className="text-xs text-muted">{recents.length} brani</span>
+            </span>
+          </Link>
+        ) : null}
+        {playlists.map((p) => {
+          const cover = p.trackIds.map((id) => trackMap[id]).find(Boolean);
+          return (
+            <Link
+              key={p.id}
+              to="/library"
+              className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-elevated"
+            >
+              <span className="size-12 overflow-hidden rounded-md bg-elevated">
+                {cover ? <TrackArt src={cover.artwork} alt="" /> : <span className="block size-full bg-elevated" />}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{p.title}</span>
+                <span className="text-xs text-muted">Playlist · {p.trackIds.length} brani</span>
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const hasTrack = useFlowStore((s) => Boolean(s.current));
@@ -34,77 +126,134 @@ export function AppShell({ children }: { children: ReactNode }) {
     hydrate();
   }, [hydrate]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (isTypingTarget(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      const s = useFlowStore.getState();
+      if (e.code === "Space") {
+        e.preventDefault();
+        s.togglePlay();
+        return;
+      }
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        if (e.shiftKey) s.next();
+        else s.skipBy(10);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        if (e.shiftKey) s.prev();
+        else s.skipBy(-10);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        s.setVolume(Math.min(1, s.volume + 0.05));
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        s.setVolume(Math.max(0, s.volume - 0.05));
+        return;
+      }
+      if (e.key === "m" || e.key === "M") s.toggleMute();
+      if (e.key === "l" || e.key === "L") {
+        if (s.current) {
+          s.setShowFullPlayer(true);
+          s.setShowLyrics(!s.showLyrics);
+        }
+      }
+      if (e.key === "f" || e.key === "F") s.setShowFullPlayer(!s.showFullPlayer);
+      if (e.key === "s" || e.key === "S") s.toggleShuffle();
+      if (e.key === "r" || e.key === "R") s.cycleRepeat();
+      if (e.key === "Escape") {
+        if (s.actionTrack) s.setActionTrack(null);
+        else if (s.showFullPlayer) s.setShowFullPlayer(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <div className="min-h-dvh bg-bg text-fg">
+    <div className="flex h-dvh flex-col bg-bg text-fg">
       <AudioEngine />
-      <aside className="fixed top-0 bottom-0 left-0 z-30 hidden w-56 flex-col border-r border-border bg-bg pt-6 md:flex">
-        <Link to="/" className="mb-8 flex items-center gap-2.5 px-5">
-          <FlowMark className="size-8" />
-          <span className="text-lg font-semibold tracking-tight">Flow</span>
-        </Link>
-        <nav className="flex flex-col gap-1 px-3">
-          {NAV.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "flex h-11 items-center gap-3 rounded-lg px-3 text-sm font-medium transition-colors duration-150",
-                  active ? "bg-elevated text-fg" : "text-muted hover:bg-surface hover:text-fg",
-                )}
-              >
-                <Icon className="size-5" />
-                {item.label}
+      <div className="flex min-h-0 flex-1 gap-2 p-0 md:p-2 md:pb-0">
+        <aside className="hidden w-72 shrink-0 flex-col gap-2 md:flex">
+          <div className="rounded-lg bg-surface px-3 py-2">
+            <Link to="/" className="mb-2 flex items-center gap-2.5 px-2 py-2">
+              <FlowMark className="size-8" />
+              <span className="font-heading text-lg font-semibold tracking-tight">Flow</span>
+            </Link>
+            <nav className="flex flex-col">
+              {NAV.slice(0, 2).map((item) => {
+                const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+                const Icon = item.icon;
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    className={cn(
+                      "nav-link flex h-11 items-center gap-4 rounded-md px-3 text-base font-bold",
+                      active ? "is-active text-fg" : "text-muted hover:text-fg",
+                    )}
+                  >
+                    <Icon className="size-6" />
+                    {item.label}
+                  </Link>
+                );
+              })}
+            </nav>
+          </div>
+          <LibraryRail />
+        </aside>
+
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="flex items-center gap-3 px-4 py-3 md:hidden pt-[max(0.75rem,env(safe-area-inset-top))]">
+            <Link to="/" className="flex items-center gap-2">
+              <FlowMark className="size-8" />
+              <span className="font-heading text-base font-semibold">Flow</span>
+            </Link>
+            <div className="ml-auto flex items-center gap-1">
+              <Link to="/charts" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
+                Chart
               </Link>
-            );
-          })}
-        </nav>
-        <div className="mt-8 px-5">
-          <p className="text-[11px] font-medium tracking-wide text-subtle uppercase">Scopri</p>
-          <Link to="/explore" className="mt-2 block py-2 text-sm text-muted hover:text-fg">
-            Generi & mood
-          </Link>
-          <Link to="/charts" className="block py-2 text-sm text-muted hover:text-fg">
-            Classifiche
-          </Link>
-          <Link to="/mix" className="block py-2 text-sm text-muted hover:text-fg">
-            Mix intelligente
-          </Link>
-        </div>
-      </aside>
-
-      <header className="sticky top-0 z-20 flex items-center gap-3 border-b border-border bg-bg/90 px-4 py-3 backdrop-blur-md md:hidden pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <Link to="/" className="flex items-center gap-2">
-          <FlowMark className="size-8" />
-          <span className="text-base font-semibold">Flow</span>
-        </Link>
-        <div className="ml-auto flex items-center gap-1">
-          <Link
-            to="/charts"
-            className="rounded-full px-3 py-2 text-xs font-medium text-muted"
+              <Link to="/explore" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
+                Esplora
+              </Link>
+            </div>
+          </header>
+          <div className="hidden items-center gap-2 px-6 py-3 md:flex">
+            <Link to="/charts" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              <Trophy className="size-4" />
+              Classifiche
+            </Link>
+            <Link to="/explore" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              <Compass className="size-4" />
+              Esplora
+            </Link>
+            <Link to="/mix" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              Mix
+            </Link>
+            <Link to="/radio" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              Radio
+            </Link>
+          </div>
+          <main
+            className={cn(
+              "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-6 md:rounded-lg md:px-6 md:pt-4",
+              hasTrack ? "pb-36 md:pb-6" : "pb-24 md:pb-6",
+            )}
           >
-            Chart
-          </Link>
-          <Link to="/explore" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
-            Esplora
-          </Link>
+            {children}
+          </main>
         </div>
-      </header>
+      </div>
 
-      <main
-        className={cn(
-          "mx-auto w-full max-w-5xl px-4 pt-4 sm:px-6 md:ml-56 md:pt-8",
-          hasTrack ? "pb-40 md:pb-28" : "pb-28 md:pb-16",
-        )}
-      >
-        {children}
-      </main>
-
-      <div className="pointer-events-none fixed right-0 bottom-0 left-0 z-40 md:left-56">
+      <div className="relative z-40 shrink-0">
         <MiniPlayer />
-        <nav className="pointer-events-auto flex border-t border-border bg-bg/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md md:hidden">
+        <nav className="flex border-t border-border bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
           {NAV.map((item) => {
             const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
             const Icon = item.icon;
@@ -113,11 +262,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  "flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
-                  active ? "text-primary" : "text-muted",
+                  "nav-link flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
+                  active ? "is-active text-fg" : "text-muted",
                 )}
               >
-                <Icon className="size-5" />
+                <Icon className="size-6" />
                 {item.label}
               </Link>
             );
@@ -126,6 +275,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       <FullPlayer />
+      <ActionSheet />
     </div>
   );
 }

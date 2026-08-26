@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
@@ -24,4 +25,24 @@ export function hashHue(input: string): number {
   let h = 0;
   for (let i = 0; i < input.length; i++) h = (h * 31 + input.charCodeAt(i)) | 0;
   return Math.abs(h) % 360;
+}
+
+export function useOpenTransition(show: boolean, ms = 280) {
+  const [mounted, setMounted] = useState(show);
+  const [open, setOpen] = useState(show);
+  useEffect(() => {
+    if (show) {
+      setMounted(true);
+      const id = window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => setOpen(true));
+      });
+      return () => window.cancelAnimationFrame(id);
+    }
+    setOpen(false);
+    const reduced =
+      typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const t = window.setTimeout(() => setMounted(false), reduced ? 0 : ms);
+    return () => window.clearTimeout(t);
+  }, [show, ms]);
+  return { mounted, open };
 }

@@ -31,7 +31,7 @@ function ChartsPage() {
     <div className="flow-enter space-y-6">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Classifiche</h1>
-        <p className="mt-1 text-sm text-muted">Hits da YouTube Music, aggiornate in tempo reale.</p>
+        <p className="mt-1 text-sm text-muted">Le hit del momento, aggiornate in tempo reale.</p>
       </header>
 
       <div className="scrollbar-none -mx-4 flex gap-2 overflow-x-auto px-4 sm:-mx-6 sm:px-6">
@@ -40,7 +40,7 @@ function ChartsPage() {
             key={c.id}
             type="button"
             onClick={() => void navigate({ search: { id: c.id } })}
-            className={`h-11 shrink-0 rounded-full px-4 text-sm font-medium ${
+            className={`chip h-11 shrink-0 rounded-full px-4 text-sm font-medium ${
               c.id === chart.id ? "bg-primary text-primary-fg" : "bg-surface text-fg ring-1 ring-border"
             }`}
           >

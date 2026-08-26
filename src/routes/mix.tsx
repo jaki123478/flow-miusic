@@ -56,7 +56,7 @@ function MixPage() {
             key={m.id}
             type="button"
             onClick={() => void run(m.prompt, m.label)}
-            className={`h-11 rounded-full px-4 text-sm font-medium ${
+            className={`chip h-11 rounded-full px-4 text-sm font-medium ${
               selected?.id === m.id ? "bg-primary text-primary-fg" : "bg-surface text-fg ring-1 ring-border"
             }`}
           >

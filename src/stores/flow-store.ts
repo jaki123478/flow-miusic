@@ -42,18 +42,22 @@ interface FlowState {
   showFullPlayer: boolean;
   showQueue: boolean;
   showLyrics: boolean;
+  hideVideo: boolean;
   liked: Track[];
   recents: Track[];
   playlists: Playlist[];
   trackMap: Record<string, Track>;
+  actionTrack: Track | null;
 
   playTrack: (track: Track, queue?: Track[]) => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
+  playNext: (track: Track) => void;
   togglePlay: () => void;
   pause: () => void;
   resume: () => void;
   next: () => void;
   prev: () => void;
+  skipBy: (delta: number) => void;
   seek: (time: number) => void;
   onEnded: () => void;
   setCurrentTime: (time: number) => void;
@@ -67,18 +71,30 @@ interface FlowState {
   setShowFullPlayer: (v: boolean) => void;
   setShowQueue: (v: boolean) => void;
   setShowLyrics: (v: boolean) => void;
+  setHideVideo: (v: boolean) => void;
   addToQueue: (track: Track) => void;
   removeFromQueue: (index: number) => void;
+  clearQueue: () => void;
   toggleLike: (track: Track) => void;
   isLiked: (id: string) => boolean;
   createPlaylist: (title: string) => void;
   addToPlaylist: (playlistId: string, track: Track) => void;
+  removeFromPlaylist: (playlistId: string, trackId: string) => void;
   removePlaylist: (id: string) => void;
+  clearRecents: () => void;
+  setActionTrack: (track: Track | null) => void;
   hydrate: () => void;
 }
 
 function remember(track: Track, recents: Track[]): Track[] {
   return [track, ...recents.filter((t) => t.id !== track.id)].slice(0, 80);
+}
+
+function sanitizeTrack(track: Track): Track {
+  if (track.artist && track.artist !== "YouTube Music" && track.artist !== "SimpMusic") return track;
+  const dash = track.title.match(/^(.{2,48}?)\s+[-–—]\s+(.+)$/);
+  if (dash) return { ...track, artist: dash[1].trim(), title: dash[2].trim() };
+  return { ...track, artist: track.artist === "YouTube Music" ? "Artista" : track.artist };
 }
 
 export const useFlowStore = create<FlowState>((set, get) => ({
@@ -98,14 +114,16 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   showFullPlayer: false,
   showQueue: false,
   showLyrics: false,
+  hideVideo: false,
   liked: [],
   recents: [],
   playlists: [],
   trackMap: {},
+  actionTrack: null,
 
   hydrate: () => {
-    const liked = readJson<Track[]>(LIKED_KEY, []);
-    const recents = readJson<Track[]>(RECENT_KEY, []);
+    const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
+    const recents = readJson<Track[]>(RECENT_KEY, []).map(sanitizeTrack);
     const playlists = readJson<Playlist[]>(PLAYLISTS_KEY, []);
     const volume = readJson<number>(VOLUME_KEY, 0.9);
     const trackMap: Record<string, Track> = {};
@@ -125,13 +143,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         recents,
+        hideVideo: true,
       });
       return;
     }
     const existing = get().queue;
     const found = existing.findIndex((t) => t.id === track.id);
     if (found >= 0) {
-      set({ current: track, queueIndex: found, isPlaying: true, currentTime: 0, recents });
+      set({ current: track, queueIndex: found, isPlaying: true, currentTime: 0, recents, hideVideo: true });
     } else {
       set({
         current: track,
@@ -140,6 +159,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         recents,
+        hideVideo: true,
       });
     }
   },
@@ -148,6 +168,17 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     if (!tracks.length) return;
     const i = Math.min(Math.max(0, startIndex), tracks.length - 1);
     get().playTrack(tracks[i], tracks);
+  },
+
+  playNext: (track) => {
+    const { queue, queueIndex, current } = get();
+    if (!current) {
+      get().playTrack(track);
+      return;
+    }
+    const next = [...queue];
+    next.splice(queueIndex + 1, 0, track);
+    set({ queue: next, trackMap: { ...get().trackMap, [track.id]: track } });
   },
 
   togglePlay: () => {
@@ -180,7 +211,14 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const track = queue[nextIndex];
     const recents = remember(track, get().recents);
     writeJson(RECENT_KEY, recents);
-    set({ current: track, queueIndex: nextIndex, currentTime: 0, isPlaying: true, recents, seekVersion: get().seekVersion + 1 });
+    set({
+      current: track,
+      queueIndex: nextIndex,
+      currentTime: 0,
+      isPlaying: true,
+      recents,
+      seekVersion: get().seekVersion + 1,
+    });
   },
 
   onEnded: () => {
@@ -194,13 +232,21 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   prev: () => {
     const { queue, queueIndex, currentTime } = get();
     if (currentTime > 3) {
-      set({ currentTime: 0 });
+      set({ currentTime: 0, seekVersion: get().seekVersion + 1 });
       return;
     }
     const prevIndex = queueIndex <= 0 ? 0 : queueIndex - 1;
     const track = queue[prevIndex];
     if (!track) return;
-    set({ current: track, queueIndex: prevIndex, currentTime: 0, isPlaying: true });
+    set({ current: track, queueIndex: prevIndex, currentTime: 0, isPlaying: true, seekVersion: get().seekVersion + 1 });
+  },
+
+  skipBy: (delta) => {
+    const { current, currentTime, duration } = get();
+    if (!current || current.isLive) return;
+    const max = duration > 0 ? duration : currentTime + Math.abs(delta);
+    const time = Math.max(0, Math.min(max, currentTime + delta));
+    set({ currentTime: time, seekVersion: get().seekVersion + 1 });
   },
 
   seek: (time) => set({ currentTime: Math.max(0, time), seekVersion: get().seekVersion + 1 }),
@@ -222,15 +268,20 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   setSleep: (minutes) =>
     set({ sleepEndsAt: minutes == null ? null : Date.now() + minutes * 60_000 }),
   setShowFullPlayer: (v) => set({ showFullPlayer: v, showQueue: v ? get().showQueue : false }),
-  setShowQueue: (v) => set({ showQueue: v }),
-  setShowLyrics: (v) => set({ showLyrics: v }),
+  setShowQueue: (v) => set({ showQueue: v, showLyrics: v ? false : get().showLyrics }),
+  setShowLyrics: (v) => set({ showLyrics: v, showQueue: v ? false : get().showQueue }),
+  setHideVideo: (v) => set({ hideVideo: v }),
 
-  addToQueue: (track) => set({ queue: [...get().queue, track] }),
+  addToQueue: (track) => set({ queue: [...get().queue, track], trackMap: { ...get().trackMap, [track.id]: track } }),
   removeFromQueue: (index) => {
     const queue = get().queue.filter((_, i) => i !== index);
     let queueIndex = get().queueIndex;
     if (index < queueIndex) queueIndex -= 1;
-    set({ queue, queueIndex: Math.max(0, Math.min(queueIndex, queue.length - 1)) });
+    set({ queue, queueIndex: Math.max(0, Math.min(queueIndex, Math.max(0, queue.length - 1))) });
+  },
+  clearQueue: () => {
+    const current = get().current;
+    set({ queue: current ? [current] : [], queueIndex: 0 });
   },
 
   toggleLike: (track) => {
@@ -261,9 +312,21 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists, trackMap: { ...get().trackMap, [track.id]: track } });
   },
+  removeFromPlaylist: (playlistId, trackId) => {
+    const playlists = get().playlists.map((p) =>
+      p.id === playlistId ? { ...p, trackIds: p.trackIds.filter((id) => id !== trackId) } : p,
+    );
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists });
+  },
   removePlaylist: (id) => {
     const playlists = get().playlists.filter((p) => p.id !== id);
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists });
   },
+  clearRecents: () => {
+    writeJson(RECENT_KEY, []);
+    set({ recents: [] });
+  },
+  setActionTrack: (track) => set({ actionTrack: track }),
 }));
