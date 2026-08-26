@@ -104,7 +104,8 @@ interface FlowState {
   clearQueue: () => void;
   toggleLike: (track: Track) => void;
   isLiked: (id: string) => boolean;
-  createPlaylist: (title: string) => void;
+  createPlaylist: (title: string) => string | null;
+  createPlaylistWithTracks: (title: string, tracks: Track[]) => string | null;
   addToPlaylist: (playlistId: string, track: Track) => void;
   removeFromPlaylist: (playlistId: string, trackId: string) => void;
   removePlaylist: (id: string) => void;
@@ -358,14 +359,27 @@ export const useFlowStore = create<FlowState>((set, get) => ({
 
   createPlaylist: (title) => {
     const clean = title.trim();
-    if (!clean) return;
-    const playlists = [
-      { id: `pl_${Date.now()}`, title: clean, createdAt: Date.now(), trackIds: [] },
-      ...get().playlists,
-    ];
+    if (!clean) return null;
+    const id = `pl_${Date.now()}`;
+    const playlists = [{ id, title: clean, createdAt: Date.now(), trackIds: [] }, ...get().playlists];
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists });
     get().notify("Playlist creata");
+    return id;
+  },
+  createPlaylistWithTracks: (title, tracks) => {
+    const clean = title.trim() || "Playlist importata";
+    const id = `pl_${Date.now()}`;
+    const trackMap = { ...get().trackMap };
+    for (const t of tracks) trackMap[t.id] = t;
+    const playlists = [
+      { id, title: clean, createdAt: Date.now(), trackIds: tracks.map((t) => t.id) },
+      ...get().playlists,
+    ];
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists, trackMap });
+    get().notify(`${tracks.length} brani importati`);
+    return id;
   },
   addToPlaylist: (playlistId, track) => {
     const playlists = get().playlists.map((p) =>

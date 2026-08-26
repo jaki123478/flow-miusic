@@ -1,6 +1,8 @@
 import { useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Copy, Heart, Play, Plus, Trash2 } from "lucide-react";
+import { SignedOut } from "@/lib/auth/gates";
+import { importSpotify } from "@/lib/music/spotify.server";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 import type { Track } from "@/lib/music/types";
@@ -16,6 +18,7 @@ function LibraryPage() {
   const trackMap = useFlowStore((s) => s.trackMap);
   const playQueue = useFlowStore((s) => s.playQueue);
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
+  const createPlaylistWithTracks = useFlowStore((s) => s.createPlaylistWithTracks);
   const removePlaylist = useFlowStore((s) => s.removePlaylist);
   const renamePlaylist = useFlowStore((s) => s.renamePlaylist);
   const duplicatePlaylist = useFlowStore((s) => s.duplicatePlaylist);
@@ -23,6 +26,9 @@ function LibraryPage() {
   const [tab, setTab] = useState<Tab>("liked");
   const [title, setTitle] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [spotUrl, setSpotUrl] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState<string | null>(null);
 
   const openTracks: Track[] = useMemo(() => {
     if (!openId) return [];
@@ -41,6 +47,14 @@ function LibraryPage() {
     <div className="flow-enter space-y-6">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">La tua libreria</h1>
+        <SignedOut>
+          <p className="mt-2 text-sm text-muted">
+            <Link to="/login" search={{ mode: "up" }} className="font-semibold text-primary">
+              Registrati
+            </Link>{" "}
+            per salvare playlist e preferiti sul tuo account.
+          </p>
+        </SignedOut>
       </header>
 
       <div className="flex gap-2">
@@ -135,6 +149,51 @@ function LibraryPage() {
             >
               <Plus className="size-5" />
             </button>
+          </form>
+          <form
+            className="space-y-2 rounded-lg bg-surface p-3 ring-1 ring-border"
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (!spotUrl.trim() || importing) return;
+              setImporting(true);
+              setImportMsg(null);
+              void importSpotify({ data: { url: spotUrl } })
+                .then((res) => {
+                  if (res.error || !res.tracks.length) {
+                    setImportMsg(res.error || "Nessun brano importato");
+                    return;
+                  }
+                  const id = createPlaylistWithTracks(res.title, res.tracks);
+                  setSpotUrl("");
+                  setImportMsg(
+                    res.missing
+                      ? `Importate ${res.tracks.length} tracce (${res.missing} non trovate)`
+                      : `Importate ${res.tracks.length} tracce`,
+                  );
+                  if (id) setOpenId(id);
+                })
+                .catch(() => setImportMsg("Import non riuscito"))
+                .finally(() => setImporting(false));
+            }}
+          >
+            <p className="text-sm font-medium">Importa da Spotify</p>
+            <p className="text-xs text-muted">Incolla il link di una playlist o album pubblico. I brani vengono cercati in Flow.</p>
+            <div className="flex gap-2">
+              <input
+                value={spotUrl}
+                onChange={(e) => setSpotUrl(e.target.value)}
+                placeholder="https://open.spotify.com/playlist/…"
+                className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-sm outline-none ring-1 ring-border"
+              />
+              <button
+                type="submit"
+                disabled={importing}
+                className="h-11 rounded-full bg-fg px-4 text-sm font-bold text-bg disabled:opacity-60"
+              >
+                {importing ? "Importo…" : "Importa"}
+              </button>
+            </div>
+            {importMsg ? <p className="text-xs text-muted">{importMsg}</p> : null}
           </form>
           {playlists.length === 0 ? (
             <Empty text="Crea una playlist e aggiungi brani dal menu di ogni traccia." />

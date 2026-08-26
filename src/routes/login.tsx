@@ -2,10 +2,16 @@ import { useState, type FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { GROK_PROVIDERS, authClient, authEnabled, signIn } from "@/lib/auth/client";
 
-export const Route = createFileRoute("/login")({ component: Login });
+export const Route = createFileRoute("/login")({
+  validateSearch: (search: Record<string, unknown>): { mode?: "in" | "up" } => ({
+    mode: search.mode === "up" ? "up" : search.mode === "in" ? "in" : undefined,
+  }),
+  component: Login,
+});
 
 function Login() {
-  const [mode, setMode] = useState<"in" | "up">("in");
+  const { mode: start } = Route.useSearch();
+  const [mode, setMode] = useState<"in" | "up">(start === "up" ? "up" : "in");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -26,7 +32,7 @@ function Login() {
         setError(res.error.message || "Accesso non riuscito");
         return;
       }
-      window.location.assign("/");
+      window.location.assign("/library");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Accesso non riuscito");
     } finally {
@@ -42,8 +48,10 @@ function Login() {
         </span>
         <span className="font-heading text-2xl font-bold">Flow</span>
       </Link>
-      <h1 className="text-3xl font-bold tracking-tight">{mode === "in" ? "Accedi" : "Crea un account"}</h1>
-      <p className="mt-2 text-sm text-muted">La tua libreria, i preferiti e le playlist restano sul tuo profilo.</p>
+      <h1 className="text-3xl font-bold tracking-tight">{mode === "in" ? "Accedi" : "Registrati"}</h1>
+      <p className="mt-2 text-sm text-muted">
+        Crea un account per salvare playlist, preferiti e importare le tue liste da Spotify.
+      </p>
 
       {!authEnabled ? (
         <p className="mt-6 text-sm text-muted">Accesso non disponibile in questo momento.</p>
@@ -54,7 +62,7 @@ function Login() {
               <button
                 key={p.providerId}
                 type="button"
-                onClick={() => void signIn(p.providerId, { callbackURL: "/", errorCallbackURL: "/login" })}
+                onClick={() => void signIn(p.providerId, { callbackURL: "/library", errorCallbackURL: "/login" })}
                 className="flex h-12 w-full items-center justify-center rounded-full bg-fg text-sm font-bold text-bg hover:opacity-90"
               >
                 Continua con {p.label}
@@ -91,7 +99,7 @@ function Login() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
+              placeholder="Password (min. 8 caratteri)"
               autoComplete={mode === "up" ? "new-password" : "current-password"}
               minLength={8}
               required
@@ -103,7 +111,7 @@ function Login() {
               disabled={busy}
               className="h-12 w-full rounded-full bg-primary text-sm font-bold text-primary-fg disabled:opacity-60"
             >
-              {busy ? "Attendi…" : mode === "in" ? "Accedi" : "Registrati"}
+              {busy ? "Attendi…" : mode === "in" ? "Accedi" : "Crea account"}
             </button>
           </form>
 
@@ -115,7 +123,7 @@ function Login() {
             }}
             className="mt-5 text-sm text-muted hover:text-fg"
           >
-            {mode === "in" ? "Non hai un account? Registrati" : "Hai già un account? Accedi"}
+            {mode === "in" ? "Non hai un account? Registrati gratis" : "Hai già un account? Accedi"}
           </button>
         </>
       )}
