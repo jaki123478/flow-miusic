@@ -101,6 +101,18 @@ function Home() {
               onPlay={() => daily.length && playQueue(daily, 0)}
             />
             <CollectionCard
+              title="Scopri"
+              subtitle="Mix dai tuoi artisti"
+              artwork={liked[1]?.artwork || recents[1]?.artwork}
+              onPlay={() => void navigate({ to: "/discover" })}
+            />
+            <CollectionCard
+              title="Novità"
+              subtitle="Uscite fresche"
+              artwork={independent[0]?.artwork || trending[0]?.artwork}
+              onPlay={() => void navigate({ to: "/fresh" })}
+            />
+            <CollectionCard
               title="Brani che ti piacciono"
               subtitle={`${liked.length} brani`}
               artwork={liked[0]?.artwork}

@@ -733,6 +733,8 @@ export function FullPlayer() {
   const setSleep = useFlowStore((s) => s.setSleep);
   const setPlaybackRate = useFlowStore((s) => s.setPlaybackRate);
   const setHideVideo = useFlowStore((s) => s.setHideVideo);
+  const moveQueue = useFlowStore((s) => s.moveQueue);
+  const stationOn = useFlowStore((s) => s.stationOn);
   const clearQueue = useFlowStore((s) => s.clearQueue);
   const addToPlaylist = useFlowStore((s) => s.addToPlaylist);
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
@@ -840,13 +842,44 @@ export function FullPlayer() {
       <div className="relative z-10 min-h-0 flex-1">
         <div className={cn("player-panel absolute inset-0 overflow-y-auto px-3 pb-8", showQueue ? "is-on" : "is-off")}>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-base font-semibold">In arrivo · {upcoming.length}</h2>
+            <h2 className="text-base font-semibold">
+              In arrivo · {upcoming.length}
+              {stationOn ? <span className="ml-2 text-xs font-medium text-primary">Radio</span> : null}
+            </h2>
             <button type="button" onClick={clearQueue} className="text-xs font-medium text-muted">
               Svuota
             </button>
           </div>
           {queue.map((t, i) => (
-            <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
+            <div
+              key={`${t.id}-${i}`}
+              draggable
+              onDragStart={(e) => {
+                e.dataTransfer.setData("text/plain", String(i));
+                e.dataTransfer.effectAllowed = "move";
+              }}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                const from = Number(e.dataTransfer.getData("text/plain"));
+                if (Number.isFinite(from) && from !== i) moveQueue(from, i);
+              }}
+              className="flex items-center gap-1"
+            >
+              <button
+                type="button"
+                className="flex size-8 shrink-0 cursor-grab items-center justify-center text-subtle"
+                aria-label="Sposta"
+                onClick={() => {
+                  if (i > 0) moveQueue(i, i - 1);
+                }}
+              >
+                <span className="text-xs">☰</span>
+              </button>
+              <div className="min-w-0 flex-1">
+                <TrackRow track={t} queue={queue} index={i} showIndex />
+              </div>
+            </div>
           ))}
         </div>
         <div

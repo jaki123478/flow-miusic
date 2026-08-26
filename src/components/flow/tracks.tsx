@@ -14,6 +14,7 @@ import {
   X,
 } from "lucide-react";
 import { FALLBACK_ART, type Track } from "@/lib/music/types";
+import { getRelatedTracks } from "@/lib/music/catalog";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -54,17 +55,18 @@ export function PlayingBars({ className }: { className?: string }) {
 }
 
 export async function shareTrack(track: Track) {
+  const url = `${window.location.origin}/t/${track.videoId || track.id}`;
   const text = `${track.title} — ${track.artist}`;
   try {
     if (navigator.share) {
-      await navigator.share({ title: track.title, text, url: window.location.origin });
+      await navigator.share({ title: track.title, text, url });
       return;
     }
   } catch {
     return;
   }
   try {
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(`${text} ${url}`);
   } catch {
     /* ignore */
   }
@@ -305,6 +307,11 @@ export function ActionSheet() {
   const liked = useFlowStore((s) => (track ? s.liked.some((t) => t.id === track.id) : false));
   const playlists = useFlowStore((s) => s.playlists);
   const addToPlaylist = useFlowStore((s) => s.addToPlaylist);
+  const startStation = useFlowStore((s) => s.startStation);
+  const toggleFollowArtist = useFlowStore((s) => s.toggleFollowArtist);
+  const following = useFlowStore((s) =>
+    s.actionTrack ? s.followedArtists.includes(s.actionTrack.artist) : false,
+  );
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
   const [picking, setPicking] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -412,7 +419,17 @@ export function ActionSheet() {
               label="Radio da questo brano"
               onClick={() => {
                 close();
-                void navigate({ to: "/mix", search: { mood: undefined, q: `${view.artist} ${view.title}` } });
+                void getRelatedTracks({
+                  data: { artist: view.artist, title: view.title, excludeId: view.id },
+                }).then((tracks) => startStation(view, tracks));
+              }}
+            />
+            <SheetBtn
+              icon={Search}
+              label={following ? "Non seguire artista" : "Segui artista"}
+              onClick={() => {
+                toggleFollowArtist(view.artist);
+                close();
               }}
             />
           </div>

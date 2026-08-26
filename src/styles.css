@@ -504,3 +504,18 @@
     filter: none;
   }
 }
+
+html.theme-light {
+  --color-bg: #ffffff;
+  --color-surface: #f6f6f6;
+  --color-elevated: #ececec;
+  --color-highlight: #e8e8e8;
+  --color-fg: #121212;
+  --color-muted: #5e5e5e;
+  --color-subtle: #8a8a8a;
+  --color-primary: #1aa34a;
+  --color-primary-fg: #ffffff;
+  --color-border: rgb(0 0 0 / 0.08);
+  --color-danger: #c4453c;
+  color-scheme: light;
+}

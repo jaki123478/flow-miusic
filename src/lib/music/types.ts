@@ -33,6 +33,9 @@ export interface Playlist {
   title: string;
   createdAt: number;
   trackIds: string[];
+  folder?: string;
+  publicId?: string;
+  collab?: boolean;
 }
 
 export type RepeatMode = "off" | "all" | "one";

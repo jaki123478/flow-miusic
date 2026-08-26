@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Copy, Heart, Play, Plus, Trash2 } from "lucide-react";
 import { SignedOut } from "@/lib/auth/gates";
-import { importSpotify } from "@/lib/music/spotify.server";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { importSpotify } from "@/lib/music/import-playlists";
+import { publishPlaylist } from "@/lib/music/share";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 import type { Track } from "@/lib/music/types";
@@ -22,7 +24,10 @@ function LibraryPage() {
   const removePlaylist = useFlowStore((s) => s.removePlaylist);
   const renamePlaylist = useFlowStore((s) => s.renamePlaylist);
   const duplicatePlaylist = useFlowStore((s) => s.duplicatePlaylist);
+  const setPlaylistFolder = useFlowStore((s) => s.setPlaylistFolder);
+  const setPlaylistPublic = useFlowStore((s) => s.setPlaylistPublic);
   const clearRecents = useFlowStore((s) => s.clearRecents);
+  const user = useCurrentUser();
   const [tab, setTab] = useState<Tab>("liked");
   const [title, setTitle] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -47,6 +52,17 @@ function LibraryPage() {
     <div className="flow-enter space-y-6">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">La tua libreria</h1>
+        <div className="mt-2 flex flex-wrap gap-3 text-sm">
+          <Link to="/stats" className="text-muted hover:text-fg">
+            Stats
+          </Link>
+          <Link to="/friends" className="text-muted hover:text-fg">
+            Amici
+          </Link>
+          <Link to="/fresh" className="text-muted hover:text-fg">
+            Novità
+          </Link>
+        </div>
         <SignedOut>
           <p className="mt-2 text-sm text-muted">
             <Link to="/login" search={{ mode: "up" }} className="font-semibold text-primary">
@@ -176,13 +192,15 @@ function LibraryPage() {
                 .finally(() => setImporting(false));
             }}
           >
-            <p className="text-sm font-medium">Importa da Spotify</p>
-            <p className="text-xs text-muted">Incolla il link di una playlist o album pubblico. I brani vengono cercati in Flow.</p>
+            <p className="text-sm font-medium">Importa playlist</p>
+            <p className="text-xs text-muted">
+              Link Spotify, YouTube, Apple Music, oppure una lista «Artista – Titolo» (anche CSV).
+            </p>
             <div className="flex gap-2">
               <input
                 value={spotUrl}
                 onChange={(e) => setSpotUrl(e.target.value)}
-                placeholder="https://open.spotify.com/playlist/…"
+                placeholder="https://open.spotify.com/playlist/…  o  https://youtube.com/playlist?list="
                 className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-sm outline-none ring-1 ring-border"
               />
               <button
@@ -202,7 +220,11 @@ function LibraryPage() {
               <div key={p.id} className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 ring-1 ring-border">
                 <button type="button" onClick={() => setOpenId(p.id)} className="min-w-0 flex-1 text-left">
                   <p className="truncate text-sm font-medium">{p.title}</p>
-                  <p className="text-xs text-muted">{p.trackIds.length} brani</p>
+                  <p className="text-xs text-muted">
+                    {p.trackIds.length} brani
+                    {p.folder ? ` · ${p.folder}` : ""}
+                    {p.publicId ? " · pubblica" : ""}
+                  </p>
                 </button>
                 <button
                   type="button"
@@ -251,6 +273,16 @@ function LibraryPage() {
           <button type="button" onClick={() => setOpenId(null)} className="mb-3 text-sm text-muted hover:text-fg">
             Torna alle playlist
           </button>
+          {openId ? (
+            <PlaylistTools
+              id={openId}
+              tracks={openTracks}
+              userName={user?.displayName ?? user?.primaryEmail ?? "Utente"}
+              signedIn={Boolean(user)}
+              setPlaylistFolder={setPlaylistFolder}
+              setPlaylistPublic={setPlaylistPublic}
+            />
+          ) : null}
           {openTracks.length === 0 ? (
             <Empty text="Playlist vuota. Aggiungi brani dal menu di una traccia." />
           ) : (
@@ -269,4 +301,98 @@ function LibraryPage() {
 
 function Empty({ text }: { text: string }) {
   return <p className="rounded-xl bg-surface px-4 py-10 text-center text-sm text-muted ring-1 ring-border">{text}</p>;
+}
+
+function download(name: string, body: string) {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
+  a.download = name;
+  a.click();
+}
+
+function PlaylistTools({
+  id,
+  tracks,
+  userName,
+  signedIn,
+  setPlaylistFolder,
+  setPlaylistPublic,
+}: {
+  id: string;
+  tracks: Track[];
+  userName: string;
+  signedIn: boolean;
+  setPlaylistFolder: (id: string, folder: string) => void;
+  setPlaylistPublic: (id: string, publicId: string, collab: boolean) => void;
+}) {
+  const pl = useFlowStore((s) => s.playlists.find((p) => p.id === id));
+  const notify = useFlowStore((s) => s.notify);
+  if (!pl) return null;
+  return (
+    <div className="mb-4 flex flex-wrap gap-2">
+      <button
+        type="button"
+        onClick={() => {
+          const folder = window.prompt("Cartella", pl.folder || "") || "";
+          setPlaylistFolder(id, folder);
+        }}
+        className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+      >
+        Cartella
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          const m3u = ["#EXTM3U", ...tracks.map((t) => `#EXTINF:${t.duration},${t.artist} - ${t.title}\nhttps://www.youtube.com/watch?v=${t.videoId || t.id}`)].join(
+            "\n",
+          );
+          download(`${pl.title}.m3u`, m3u);
+        }}
+        className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+      >
+        Esporta M3U
+      </button>
+      <button
+        type="button"
+        onClick={() => download(`${pl.title}.json`, JSON.stringify(tracks, null, 2))}
+        className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+      >
+        Esporta JSON
+      </button>
+      {signedIn ? (
+        <button
+          type="button"
+          onClick={() => {
+            const collab = window.confirm("Vuoi renderla anche collaborativa (chi ha il link può aggiungere brani)?");
+            void publishPlaylist({
+              data: {
+                title: pl.title,
+                tracks,
+                collab,
+                ownerName: userName,
+                id: pl.publicId,
+              },
+            }).then((res) => {
+              setPlaylistPublic(id, res.id, collab);
+              const url = `${window.location.origin}/p/${res.id}`;
+              void navigator.clipboard?.writeText(url);
+              notify("Playlist pubblica — link copiato");
+            });
+          }}
+          className="h-9 rounded-full bg-primary px-3 text-xs font-bold text-primary-fg"
+        >
+          {pl.publicId ? "Aggiorna pubblica" : "Rendi pubblica"}
+        </button>
+      ) : (
+        <Link to="/login" search={{ mode: "up" }} className="h-9 rounded-full bg-elevated px-3 text-xs font-medium leading-9">
+          Accedi per pubblicare
+        </Link>
+      )}
+      {pl.publicId ? (
+        <Link to="/p/$id" params={{ id: pl.publicId }} className="h-9 rounded-full px-3 text-xs font-medium leading-9 text-primary">
+          Apri link
+        </Link>
+      ) : null}
+    </div>
+  );
 }

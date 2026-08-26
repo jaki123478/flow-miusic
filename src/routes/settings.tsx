@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useFlowStore, DEFAULT_SETTINGS, type FlowSettings } from "@/stores/flow-store";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -46,8 +46,56 @@ function SettingsPage() {
     <div className="flow-enter mx-auto max-w-xl space-y-8 pb-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Impostazioni</h1>
-        <p className="mt-1 text-sm text-muted">Riproduzione, privacy e qualità.</p>
+        <p className="mt-1 text-sm text-muted">Riproduzione, aspetto, lingua e privacy.</p>
       </header>
+
+      <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
+        <p className="text-sm font-medium">Tema</p>
+        <div className="flex gap-2">
+          {(["dark", "light"] as const).map((theme) => (
+            <button
+              key={theme}
+              type="button"
+              onClick={() => set({ theme })}
+              className={`h-9 rounded-full px-4 text-sm font-medium ${
+                settings.theme === theme ? "bg-primary text-primary-fg" : "bg-elevated"
+              }`}
+            >
+              {theme === "dark" ? "Scuro" : "Chiaro"}
+            </button>
+          ))}
+        </div>
+        <p className="pt-2 text-sm font-medium">Lingua</p>
+        <div className="flex gap-2">
+          {(["it", "en"] as const).map((locale) => (
+            <button
+              key={locale}
+              type="button"
+              onClick={() => set({ locale })}
+              className={`h-9 rounded-full px-4 text-sm font-medium ${
+                settings.locale === locale ? "bg-primary text-primary-fg" : "bg-elevated"
+              }`}
+            >
+              {locale === "it" ? "Italiano" : "English"}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="flex flex-wrap gap-2">
+        <Link to="/stats" className="rounded-full bg-elevated px-4 py-2 text-sm font-medium">
+          Stats
+        </Link>
+        <Link to="/discover" className="rounded-full bg-elevated px-4 py-2 text-sm font-medium">
+          Scopri
+        </Link>
+        <Link to="/fresh" className="rounded-full bg-elevated px-4 py-2 text-sm font-medium">
+          Novità
+        </Link>
+        <Link to="/friends" className="rounded-full bg-elevated px-4 py-2 text-sm font-medium">
+          Amici
+        </Link>
+      </section>
 
       <section>
         <h2 className="mb-2 text-sm font-bold text-muted">Ascolto</h2>

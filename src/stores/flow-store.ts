@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Playlist, RepeatMode, Track } from "@/lib/music/types";
+import type { Locale } from "@/lib/i18n";
 
 export type FlowSettings = {
   crossfade: number;
@@ -9,6 +10,8 @@ export type FlowSettings = {
   remainingTime: boolean;
   eqBass: number;
   eqTreble: number;
+  theme: "dark" | "light";
+  locale: Locale;
 };
 
 export const DEFAULT_SETTINGS: FlowSettings = {
@@ -19,6 +22,8 @@ export const DEFAULT_SETTINGS: FlowSettings = {
   remainingTime: false,
   eqBass: 0,
   eqTreble: 0,
+  theme: "dark",
+  locale: "it",
 };
 
 const LIKED_KEY = "flow_liked_tracks";
@@ -27,6 +32,8 @@ const PLAYLISTS_KEY = "flow_playlists";
 const VOLUME_KEY = "flow_volume";
 const SETTINGS_KEY = "flow_settings";
 const STATS_KEY = "flow_stats";
+const PLAYS_KEY = "flow_plays";
+const ARTISTS_KEY = "flow_artists";
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -75,6 +82,9 @@ interface FlowState {
   listenMs: number;
   showHelp: boolean;
   cloudReady: boolean;
+  stationOn: boolean;
+  plays: Record<string, number>;
+  followedArtists: string[];
 
   playTrack: (track: Track, queue?: Track[]) => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
@@ -100,8 +110,14 @@ interface FlowState {
   setShowLyrics: (v: boolean) => void;
   setHideVideo: (v: boolean) => void;
   addToQueue: (track: Track) => void;
+  appendQueue: (tracks: Track[]) => void;
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
+  startStation: (seed: Track, more: Track[]) => void;
+  setPlaylistFolder: (id: string, folder: string) => void;
+  setPlaylistPublic: (id: string, publicId: string, collab: boolean) => void;
+  toggleFollowArtist: (name: string) => void;
+  bumpPlay: (artist: string) => void;
   toggleLike: (track: Track) => void;
   isLiked: (id: string) => boolean;
   createPlaylist: (title: string) => string | null;
@@ -177,6 +193,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   listenMs: 0,
   showHelp: false,
   cloudReady: false,
+  stationOn: false,
+  plays: {},
+  followedArtists: [],
 
   hydrate: () => {
     const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
@@ -185,12 +204,15 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const volume = readJson<number>(VOLUME_KEY, 0.9);
     const settings = { ...DEFAULT_SETTINGS, ...readJson<Partial<FlowSettings>>(SETTINGS_KEY, {}) };
     const listenMs = readJson<number>(STATS_KEY, 0);
+    const plays = readJson<Record<string, number>>(PLAYS_KEY, {});
+    const followedArtists = readJson<string[]>(ARTISTS_KEY, []);
     const trackMap: Record<string, Track> = {};
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
-    set({ liked, recents, playlists, volume, trackMap, settings, listenMs });
+    set({ liked, recents, playlists, volume, trackMap, settings, listenMs, plays, followedArtists });
   },
 
   playTrack: (track, queue) => {
+    get().bumpPlay(track.artist);
     const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
     if (queue && queue.length) {
@@ -203,6 +225,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         currentTime: 0,
         recents,
         hideVideo: true,
+        stationOn: false,
       });
       return;
     }
@@ -336,6 +359,33 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({ queue: [...get().queue, track], trackMap: { ...get().trackMap, [track.id]: track } });
     get().notify("Aggiunto in coda");
   },
+  appendQueue: (tracks) => {
+    const ids = new Set(get().queue.map((t) => t.id));
+    const extra = tracks.filter((t) => !ids.has(t.id));
+    if (!extra.length) return;
+    set({ queue: [...get().queue, ...extra] });
+  },
+  startStation: (seed, more) => {
+    const queue = [seed, ...more.filter((t) => t.id !== seed.id)];
+    get().playTrack(seed, queue);
+    set({ stationOn: true, showFullPlayer: true });
+    get().notify("Radio avviata");
+  },
+  bumpPlay: (artist) => {
+    if (!artist || get().settings.privateSession) return;
+    const plays = { ...get().plays, [artist]: (get().plays[artist] || 0) + 1 };
+    writeJson(PLAYS_KEY, plays);
+    set({ plays });
+  },
+  toggleFollowArtist: (name) => {
+    const n = name.trim();
+    if (!n) return;
+    const has = get().followedArtists.includes(n);
+    const followedArtists = has ? get().followedArtists.filter((a) => a !== n) : [n, ...get().followedArtists];
+    writeJson(ARTISTS_KEY, followedArtists);
+    set({ followedArtists });
+    get().notify(has ? "Non segui più l'artista" : "Artista seguito");
+  },
   removeFromQueue: (index) => {
     const queue = get().queue.filter((_, i) => i !== index);
     let queueIndex = get().queueIndex;
@@ -421,6 +471,16 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists });
     get().notify("Playlist duplicata");
+  },
+  setPlaylistFolder: (id, folder) => {
+    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, folder: folder.trim() || undefined } : p));
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists });
+  },
+  setPlaylistPublic: (id, publicId, collab) => {
+    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, publicId, collab } : p));
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists });
   },
   moveQueue: (from, to) => {
     const queue = [...get().queue];

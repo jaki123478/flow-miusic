@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
 import { ActionSheet, TrackArt } from "./tracks";
-import { HelpOverlay, InstallHint, AuthChip, CloudSync } from "./chrome";
+import { HelpOverlay, InstallHint, AuthChip, CloudSync, Prefs, StationEngine } from "./chrome";
 import { ToastHost } from "./toast";
 
 const NAV = [
@@ -205,6 +205,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="flex h-dvh flex-col bg-bg text-fg">
       <InstallHint />
       <CloudSync />
+      <Prefs />
+      <StationEngine />
       <AudioEngine />
       <div className="flex min-h-0 flex-1 gap-2 p-0 md:p-2 md:pb-0">
         <aside className="hidden w-72 shrink-0 flex-col gap-2 md:flex">
@@ -263,6 +265,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <Link to="/explore" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               <Compass className="size-4" />
               Esplora
+            </Link>
+            <Link to="/discover" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              Scopri
+            </Link>
+            <Link to="/fresh" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              Novità
             </Link>
             <Link to="/mix" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               Mix

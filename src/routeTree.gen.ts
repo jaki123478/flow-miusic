@@ -11,14 +11,21 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ChartsRouteImport } from './routes/charts'
+import { Route as DiscoverRouteImport } from './routes/discover'
 import { Route as ExploreRouteImport } from './routes/explore'
+import { Route as FreshRouteImport } from './routes/fresh'
+import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as LibraryRouteImport } from './routes/library'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as MixRouteImport } from './routes/mix'
 import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SettingsRouteImport } from './routes/settings'
+import { Route as StatsRouteImport } from './routes/stats'
 import { Route as ApiProxyRouteImport } from './routes/api/proxy'
+import { Route as PIdRouteImport } from './routes/p.$id'
+import { Route as TIdRouteImport } from './routes/t.$id'
+import { Route as UIdRouteImport } from './routes/u.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -31,9 +38,24 @@ const ChartsRoute = ChartsRouteImport.update({
   path: '/charts',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DiscoverRoute = DiscoverRouteImport.update({
+  id: '/discover',
+  path: '/discover',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ExploreRoute = ExploreRouteImport.update({
   id: '/explore',
   path: '/explore',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FreshRoute = FreshRouteImport.update({
+  id: '/fresh',
+  path: '/fresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FriendsRoute = FriendsRouteImport.update({
+  id: '/friends',
+  path: '/friends',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LibraryRoute = LibraryRouteImport.update({
@@ -66,9 +88,29 @@ const SettingsRoute = SettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => rootRouteImport,
 } as any)
+const StatsRoute = StatsRouteImport.update({
+  id: '/stats',
+  path: '/stats',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProxyRoute = ApiProxyRouteImport.update({
   id: '/api/proxy',
   path: '/api/proxy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PIdRoute = PIdRouteImport.update({
+  id: '/p/$id',
+  path: '/p/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TIdRoute = TIdRouteImport.update({
+  id: '/t/$id',
+  path: '/t/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const UIdRoute = UIdRouteImport.update({
+  id: '/u/$id',
+  path: '/u/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
@@ -80,41 +122,62 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/charts': typeof ChartsRoute
+  '/discover': typeof DiscoverRoute
   '/explore': typeof ExploreRoute
+  '/fresh': typeof FreshRoute
+  '/friends': typeof FriendsRoute
   '/library': typeof LibraryRoute
   '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/stats': typeof StatsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/p/$id': typeof PIdRoute
+  '/t/$id': typeof TIdRoute
+  '/u/$id': typeof UIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/charts': typeof ChartsRoute
+  '/discover': typeof DiscoverRoute
   '/explore': typeof ExploreRoute
+  '/fresh': typeof FreshRoute
+  '/friends': typeof FriendsRoute
   '/library': typeof LibraryRoute
   '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/stats': typeof StatsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/p/$id': typeof PIdRoute
+  '/t/$id': typeof TIdRoute
+  '/u/$id': typeof UIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/charts': typeof ChartsRoute
+  '/discover': typeof DiscoverRoute
   '/explore': typeof ExploreRoute
+  '/fresh': typeof FreshRoute
+  '/friends': typeof FriendsRoute
   '/library': typeof LibraryRoute
   '/login': typeof LoginRoute
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
+  '/stats': typeof StatsRoute
   '/api/proxy': typeof ApiProxyRoute
+  '/p/$id': typeof PIdRoute
+  '/t/$id': typeof TIdRoute
+  '/u/$id': typeof UIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRouteTypes {
@@ -122,54 +185,82 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/charts'
+    | '/discover'
     | '/explore'
+    | '/fresh'
+    | '/friends'
     | '/library'
     | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
+    | '/stats'
     | '/api/proxy'
+    | '/p/$id'
+    | '/t/$id'
+    | '/u/$id'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/charts'
+    | '/discover'
     | '/explore'
+    | '/fresh'
+    | '/friends'
     | '/library'
     | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
+    | '/stats'
     | '/api/proxy'
+    | '/p/$id'
+    | '/t/$id'
+    | '/u/$id'
     | '/api/auth/$'
   id:
     | '__root__'
     | '/'
     | '/charts'
+    | '/discover'
     | '/explore'
+    | '/fresh'
+    | '/friends'
     | '/library'
     | '/login'
     | '/mix'
     | '/radio'
     | '/search'
     | '/settings'
+    | '/stats'
     | '/api/proxy'
+    | '/p/$id'
+    | '/t/$id'
+    | '/u/$id'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ChartsRoute: typeof ChartsRoute
+  DiscoverRoute: typeof DiscoverRoute
   ExploreRoute: typeof ExploreRoute
+  FreshRoute: typeof FreshRoute
+  FriendsRoute: typeof FriendsRoute
   LibraryRoute: typeof LibraryRoute
   LoginRoute: typeof LoginRoute
   MixRoute: typeof MixRoute
   RadioRoute: typeof RadioRoute
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
+  StatsRoute: typeof StatsRoute
   ApiProxyRoute: typeof ApiProxyRoute
+  PIdRoute: typeof PIdRoute
+  TIdRoute: typeof TIdRoute
+  UIdRoute: typeof UIdRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -189,11 +280,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ChartsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/discover': {
+      id: '/discover'
+      path: '/discover'
+      fullPath: '/discover'
+      preLoaderRoute: typeof DiscoverRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/explore': {
       id: '/explore'
       path: '/explore'
       fullPath: '/explore'
       preLoaderRoute: typeof ExploreRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/fresh': {
+      id: '/fresh'
+      path: '/fresh'
+      fullPath: '/fresh'
+      preLoaderRoute: typeof FreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/friends': {
+      id: '/friends'
+      path: '/friends'
+      fullPath: '/friends'
+      preLoaderRoute: typeof FriendsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/library': {
@@ -238,11 +350,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SettingsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/stats': {
+      id: '/stats'
+      path: '/stats'
+      fullPath: '/stats'
+      preLoaderRoute: typeof StatsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/proxy': {
       id: '/api/proxy'
       path: '/api/proxy'
       fullPath: '/api/proxy'
       preLoaderRoute: typeof ApiProxyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/p/$id': {
+      id: '/p/$id'
+      path: '/p/$id'
+      fullPath: '/p/$id'
+      preLoaderRoute: typeof PIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/t/$id': {
+      id: '/t/$id'
+      path: '/t/$id'
+      fullPath: '/t/$id'
+      preLoaderRoute: typeof TIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/u/$id': {
+      id: '/u/$id'
+      path: '/u/$id'
+      fullPath: '/u/$id'
+      preLoaderRoute: typeof UIdRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/auth/$': {
@@ -258,14 +398,21 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ChartsRoute: ChartsRoute,
+  DiscoverRoute: DiscoverRoute,
   ExploreRoute: ExploreRoute,
+  FreshRoute: FreshRoute,
+  FriendsRoute: FriendsRoute,
   LibraryRoute: LibraryRoute,
   LoginRoute: LoginRoute,
   MixRoute: MixRoute,
   RadioRoute: RadioRoute,
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
+  StatsRoute: StatsRoute,
   ApiProxyRoute: ApiProxyRoute,
+  PIdRoute: PIdRoute,
+  TIdRoute: TIdRoute,
+  UIdRoute: UIdRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

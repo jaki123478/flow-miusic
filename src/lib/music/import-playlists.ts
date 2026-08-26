@@ -70,7 +70,74 @@ export const importSpotify = createServerFn({ method: "POST" })
   .validator((d: { url: string }) => d)
   .handler(async ({ data }) => {
     const raw = (data.url || "").trim();
-    if (!raw) return { title: "", tracks: [] as Track[], missing: 0, error: "Incolla un link Spotify." };
+    if (!raw) return { title: "", tracks: [] as Track[], missing: 0, error: "Incolla un link o una lista." };
+
+    const ytList = raw.match(/[?&]list=([A-Za-z0-9_-]+)/);
+    const ytWatch = raw.match(/(?:youtu\.be\/|v=)([A-Za-z0-9_-]{11})/);
+    if (ytList || (ytWatch && /youtube|youtu\.be/i.test(raw))) {
+      const yt = await import("./ytmusic.server");
+      if (ytList) {
+        const tracks = await yt.getPlaylistTracks(ytList[1], 50).catch(() => [] as Track[]);
+        return {
+          title: "Playlist YouTube",
+          tracks,
+          missing: 0,
+          error: tracks.length ? null : "Playlist YouTube non trovata.",
+        };
+      }
+      const tracks = await yt.searchYtMusic(ytWatch![1], 4).catch(() => [] as Track[]);
+      const hit = tracks.find((t) => t.videoId === ytWatch![1]) || tracks[0];
+      return {
+        title: hit?.title || "YouTube",
+        tracks: hit ? [hit] : [],
+        missing: 0,
+        error: hit ? null : "Video non trovato.",
+      };
+    }
+
+    if (/music\.apple\.com/i.test(raw)) {
+      try {
+        const res = await fetch(raw, {
+          headers: { "User-Agent": "Mozilla/5.0", Accept: "text/html" },
+          signal: AbortSignal.timeout(10000),
+        });
+        const html = await res.text();
+        const title = html.match(/<title>([^<]+)<\/title>/i)?.[1]?.replace(/\s+[-–].*$/, "").trim() || "Apple Music";
+        const names = [...html.matchAll(/"name"\s*:\s*"([^"]{2,80})"/g)].map((m) => m[1]);
+        const artists = [...html.matchAll(/"artistName"\s*:\s*"([^"]{2,80})"/g)].map((m) => m[1]);
+        const seedsA: Seed[] = [];
+        for (let i = 0; i < Math.min(40, names.length); i++) {
+          if (/playlist|album|apple music/i.test(names[i])) continue;
+          seedsA.push({ title: names[i], artist: artists[i] || "" });
+        }
+        const uniqueSeeds = seedsA.filter((s, i, a) => a.findIndex((x) => x.title === s.title) === i).slice(0, 40);
+        if (uniqueSeeds.length) {
+          const yt = await import("./ytmusic.server");
+          const tracks: Track[] = [];
+          const seen = new Set<string>();
+          for (let i = 0; i < uniqueSeeds.length; i += 5) {
+            const chunk = uniqueSeeds.slice(i, i + 5);
+            const found = await Promise.all(
+              chunk.map((s) => yt.searchYtMusic([s.artist, s.title].filter(Boolean).join(" "), 2).catch(() => [] as Track[])),
+            );
+            for (const hits of found) {
+              const hit = hits[0];
+              if (!hit || seen.has(hit.id)) continue;
+              seen.add(hit.id);
+              tracks.push(hit);
+            }
+          }
+          return {
+            title,
+            tracks,
+            missing: Math.max(0, uniqueSeeds.length - tracks.length),
+            error: tracks.length ? null : "Nessun brano Apple Music trovato.",
+          };
+        }
+      } catch {
+        /* fall through to generic parser */
+      }
+    }
 
     let title = "Playlist importata";
     let seeds: Seed[] = [];

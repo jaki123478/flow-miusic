@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { loadLibrary, saveLibrary } from "@/lib/music/cloud";
+import { getRelatedTracks } from "@/lib/music/catalog";
+import { useT } from "@/lib/i18n";
 import { useFlowStore } from "@/stores/flow-store";
 
 export function HelpOverlay() {
@@ -105,11 +107,12 @@ export function InstallHint() {
 export function AuthChip() {
   const { user, isPending } = useCurrentUserState();
   const [signingOut, setSigningOut] = useState(false);
+  const t = useT();
   if (isPending) return <div className="size-8 shrink-0 animate-pulse rounded-full bg-elevated" />;
   if (!user) {
     return (
       <Link to="/login" className="rounded-full bg-fg px-4 py-1.5 text-sm font-bold text-bg">
-        Accedi
+        {t("login")}
       </Link>
     );
   }
@@ -133,7 +136,7 @@ export function AuthChip() {
         }}
         className="text-xs font-medium text-muted hover:text-fg"
       >
-        {signingOut ? "…" : "Esci"}
+        {signingOut ? "…" : t("logout")}
       </button>
     </div>
   );
@@ -185,6 +188,42 @@ export function CloudSync() {
       unsub();
     };
   }, [user?.id, isPending]);
+
+  return null;
+}
+
+export function Prefs() {
+  const theme = useFlowStore((s) => s.settings.theme);
+  const locale = useFlowStore((s) => s.settings.locale);
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.toggle("theme-light", theme === "light");
+    root.lang = locale;
+    root.style.colorScheme = theme;
+  }, [theme, locale]);
+  return null;
+}
+
+export function StationEngine() {
+  const stationOn = useFlowStore((s) => s.stationOn);
+  const current = useFlowStore((s) => s.current);
+  const queue = useFlowStore((s) => s.queue);
+  const queueIndex = useFlowStore((s) => s.queueIndex);
+  const appendQueue = useFlowStore((s) => s.appendQueue);
+
+  useEffect(() => {
+    if (!stationOn || !current) return;
+    if (queue.length - queueIndex > 3) return;
+    let cancelled = false;
+    void getRelatedTracks({
+      data: { artist: current.artist, title: current.title, excludeId: current.id },
+    }).then((tracks) => {
+      if (!cancelled && tracks.length) appendQueue(tracks);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stationOn, current?.id, queueIndex, queue.length]);
 
   return null;
 }
