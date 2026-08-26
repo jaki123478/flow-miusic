@@ -98,10 +98,12 @@ function SearchPage() {
                 void navigate({ search: { q: e.target.value || undefined }, replace: true });
           }}
           placeholder="Cosa vuoi ascoltare?"
-          className="h-full min-w-0 flex-1 bg-transparent text-sm font-medium text-bg outline-none placeholder:text-bg/50"
+          className="h-full min-w-0 flex-1 bg-transparent text-base font-medium text-bg outline-none placeholder:text-bg/50"
           autoCapitalize="off"
           autoCorrect="off"
+          autoComplete="off"
           enterKeyHint="search"
+          inputMode="search"
         />
         {q ? (
           <button

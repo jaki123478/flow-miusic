@@ -35,14 +35,19 @@
     color-scheme: dark;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
   }
 
   html,
   body,
   #app {
-    min-height: 100%;
+    height: 100%;
+    height: 100dvh;
+    max-height: 100dvh;
     background: var(--color-bg);
     color: var(--color-fg);
+    overflow: hidden;
   }
 
   body {
@@ -50,6 +55,7 @@
     overflow-x: hidden;
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
+    overscroll-behavior: none;
   }
 
   button:not(:disabled),
@@ -76,8 +82,10 @@
   }
 
   input,
-  textarea {
+  textarea,
+  select {
     font: inherit;
+    font-size: 16px;
   }
 
   input[type="range"] {
@@ -88,6 +96,7 @@
 .scrollbar-none {
   scrollbar-width: none;
   -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
 }
 .scrollbar-none::-webkit-scrollbar {
   display: none;

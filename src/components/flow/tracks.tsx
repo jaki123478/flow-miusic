@@ -359,7 +359,7 @@ export function ActionSheet() {
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
                 placeholder="Nuova playlist"
-                className="h-11 min-w-0 flex-1 rounded-lg bg-surface px-3 text-sm outline-none ring-1 ring-border"
+                className="h-11 min-w-0 flex-1 rounded-lg bg-surface px-3 text-base outline-none ring-1 ring-border"
               />
               <button type="submit" className="h-11 rounded-lg bg-primary px-3 text-sm font-medium text-primary-fg">
                 Crea

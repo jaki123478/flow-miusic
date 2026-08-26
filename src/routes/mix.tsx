@@ -76,7 +76,7 @@ function MixPage() {
           value={custom}
           onChange={(e) => setCustom(e.target.value)}
           placeholder="Es. road trip notturno, pioggia, anni 80..."
-          className="h-12 min-w-0 flex-1 rounded-xl bg-surface px-4 text-sm ring-1 ring-border outline-none placeholder:text-subtle"
+          className="h-12 min-w-0 flex-1 rounded-xl bg-surface px-4 text-base ring-1 ring-border outline-none placeholder:text-subtle"
         />
         <button
           type="submit"

@@ -183,11 +183,22 @@ export function AudioEngine() {
           events: {
             onReady: (e) => {
               ytReady.current = true;
+              const host = hostRef.current;
+              const iframe = host?.querySelector("iframe") ?? (host instanceof HTMLIFrameElement ? host : null);
+              if (iframe) {
+                iframe.setAttribute("playsinline", "1");
+                iframe.setAttribute("webkit-playsinline", "1");
+                iframe.setAttribute(
+                  "allow",
+                  "autoplay; encrypted-media; picture-in-picture; fullscreen; accelerometer",
+                );
+              }
               e.target.setVolume(isMuted ? 0 : Math.round(volume * 100));
               const id = useFlowStore.getState().current?.videoId;
               if (id) {
                 ytVideo.current = id;
                 e.target.loadVideoById(id);
+                if (useFlowStore.getState().isPlaying) e.target.playVideo();
               }
             },
             onStateChange: (e) => {
@@ -339,23 +350,55 @@ export function AudioEngine() {
 
   useEffect(() => {
     if (!current || typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: current.title,
-      artist: current.artist,
-      album: current.album || "Flow",
-      artwork: current.artwork ? [{ src: current.artwork, sizes: "512x512", type: "image/jpeg" }] : [],
-    });
-    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
-    navigator.mediaSession.setActionHandler("play", () => resume());
-    navigator.mediaSession.setActionHandler("pause", () => pause());
-    navigator.mediaSession.setActionHandler("previoustrack", () => prev());
-    navigator.mediaSession.setActionHandler("nexttrack", () => next());
-    navigator.mediaSession.setActionHandler("seekto", (d) => {
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: current.title,
+        artist: current.artist,
+        album: current.album || "Flow",
+        artwork: current.artwork ? [{ src: current.artwork, sizes: "512x512", type: "image/jpeg" }] : [],
+      });
+      navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    } catch {
+      /* older iOS */
+    }
+    const bind = (action: MediaSessionAction, handler: MediaSessionActionHandler) => {
+      try {
+        navigator.mediaSession.setActionHandler(action, handler);
+      } catch {
+        /* iOS may reject some actions */
+      }
+    };
+    bind("play", () => resume());
+    bind("pause", () => pause());
+    bind("previoustrack", () => prev());
+    bind("nexttrack", () => next());
+    bind("seekto", (d) => {
       if (typeof d.seekTime === "number") useFlowStore.getState().seek(d.seekTime);
     });
-    navigator.mediaSession.setActionHandler("seekforward", () => useFlowStore.getState().skipBy(10));
-    navigator.mediaSession.setActionHandler("seekbackward", () => useFlowStore.getState().skipBy(-10));
+    bind("seekforward", () => useFlowStore.getState().skipBy(10));
+    bind("seekbackward", () => useFlowStore.getState().skipBy(-10));
   }, [current, isPlaying, resume, pause, prev, next]);
+
+  useEffect(() => {
+    const unlock = () => {
+      const el = audioRef.current;
+      if (!el) return;
+      void el
+        .play()
+        .then(() => {
+          if (!useFlowStore.getState().isPlaying) el.pause();
+        })
+        .catch(() => {
+          /* gesture consumed */
+        });
+    };
+    window.addEventListener("touchstart", unlock, { once: true, passive: true });
+    window.addEventListener("pointerdown", unlock, { once: true, passive: true });
+    return () => {
+      window.removeEventListener("touchstart", unlock);
+      window.removeEventListener("pointerdown", unlock);
+    };
+  }, []);
 
   return (
     <>
@@ -364,6 +407,7 @@ export function AudioEngine() {
         className="hidden"
         playsInline
         preload="metadata"
+        controls={false}
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onDurationChange={(e) => {
           const d = e.currentTarget.duration;
@@ -379,11 +423,11 @@ export function AudioEngine() {
           "overflow-hidden bg-bg ring-1 ring-border yt-dock",
           !isYt && "pointer-events-none invisible absolute",
           isYt && hero
-            ? "pointer-events-none fixed top-16 left-1/2 z-40 w-[min(100%-3rem,22rem)] -translate-x-1/2 rounded-xl aspect-square"
+            ? "pointer-events-none fixed top-[calc(4.5rem+env(safe-area-inset-top))] left-1/2 z-40 w-[min(100%-2rem,22rem)] -translate-x-1/2 rounded-xl aspect-square"
             : isYt && hideVideo
-              ? "pointer-events-none fixed right-2 bottom-2 z-10 size-[200px] rounded-lg opacity-20"
+              ? "pointer-events-none fixed right-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 size-[120px] rounded-lg opacity-20 md:size-[200px]"
               : isYt
-                ? "pointer-events-auto fixed right-3 bottom-28 z-[60] size-[200px] rounded-lg md:bottom-[92px]"
+                ? "pointer-events-auto fixed right-3 z-[60] size-[132px] rounded-lg bottom-[calc(7.25rem+env(safe-area-inset-bottom))] md:bottom-[92px] md:size-[200px]"
                 : "hidden",
         )}
         aria-hidden={!isYt}
@@ -692,7 +736,7 @@ export function FullPlayer() {
   return (
     <div
       className={cn(
-        "player-full fixed inset-0 z-50 flex flex-col overflow-hidden pt-[env(safe-area-inset-top)]",
+        "player-full fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden pt-[env(safe-area-inset-top)]",
         ytPlaying && !showQueue && !showLyrics ? "bg-transparent" : "bg-bg",
         open ? "is-open" : "is-closing",
       )}

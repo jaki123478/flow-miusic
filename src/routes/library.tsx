@@ -124,7 +124,7 @@ function LibraryPage() {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Nuova playlist"
-              className="h-12 min-w-0 flex-1 rounded-lg bg-surface px-4 text-sm ring-1 ring-border outline-none placeholder:text-subtle"
+              className="h-12 min-w-0 flex-1 rounded-lg bg-surface px-4 text-base ring-1 ring-border outline-none placeholder:text-subtle"
             />
             <button
               type="submit"

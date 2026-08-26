@@ -119,7 +119,6 @@ function LibraryRail() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const hasTrack = useFlowStore((s) => Boolean(s.current));
   const hydrate = useFlowStore((s) => s.hydrate);
 
   useEffect(() => {
@@ -242,8 +241,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <main
             className={cn(
-              "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 pb-6 sm:px-6 md:rounded-lg md:px-6 md:pt-4",
-              hasTrack ? "pb-36 md:pb-6" : "pb-24 md:pb-6",
+              "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 sm:px-6 md:rounded-lg md:px-6 md:pt-4",
             )}
           >
             {children}
@@ -253,7 +251,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="relative z-40 shrink-0">
         <MiniPlayer />
-        <nav className="flex border-t border-border bg-bg pb-[env(safe-area-inset-bottom)] md:hidden">
+        <nav className="flex border-t border-border bg-bg pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] md:hidden">
           {NAV.map((item) => {
             const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
             const Icon = item.icon;
