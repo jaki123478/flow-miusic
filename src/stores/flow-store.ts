@@ -1,10 +1,32 @@
 import { create } from "zustand";
 import type { Playlist, RepeatMode, Track } from "@/lib/music/types";
 
+export type FlowSettings = {
+  crossfade: number;
+  normalize: boolean;
+  hideExplicit: boolean;
+  privateSession: boolean;
+  remainingTime: boolean;
+  eqBass: number;
+  eqTreble: number;
+};
+
+export const DEFAULT_SETTINGS: FlowSettings = {
+  crossfade: 4,
+  normalize: true,
+  hideExplicit: false,
+  privateSession: false,
+  remainingTime: false,
+  eqBass: 0,
+  eqTreble: 0,
+};
+
 const LIKED_KEY = "flow_liked_tracks";
 const RECENT_KEY = "flow_recent_tracks";
 const PLAYLISTS_KEY = "flow_playlists";
 const VOLUME_KEY = "flow_volume";
+const SETTINGS_KEY = "flow_settings";
+const STATS_KEY = "flow_stats";
 
 function readJson<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
@@ -48,6 +70,10 @@ interface FlowState {
   playlists: Playlist[];
   trackMap: Record<string, Track>;
   actionTrack: Track | null;
+  settings: FlowSettings;
+  notice: string | null;
+  listenMs: number;
+  showHelp: boolean;
 
   playTrack: (track: Track, queue?: Track[]) => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
@@ -81,12 +107,20 @@ interface FlowState {
   addToPlaylist: (playlistId: string, track: Track) => void;
   removeFromPlaylist: (playlistId: string, trackId: string) => void;
   removePlaylist: (id: string) => void;
+  renamePlaylist: (id: string, title: string) => void;
+  duplicatePlaylist: (id: string) => void;
+  moveQueue: (from: number, to: number) => void;
   clearRecents: () => void;
   setActionTrack: (track: Track | null) => void;
+  patchSettings: (partial: Partial<FlowSettings>) => void;
+  notify: (msg: string) => void;
+  addListenMs: (ms: number) => void;
+  setShowHelp: (v: boolean) => void;
   hydrate: () => void;
 }
 
-function remember(track: Track, recents: Track[]): Track[] {
+function remember(track: Track, recents: Track[], privateSession: boolean): Track[] {
+  if (privateSession) return recents;
   return [track, ...recents.filter((t) => t.id !== track.id)].slice(0, 80);
 }
 
@@ -120,19 +154,25 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   playlists: [],
   trackMap: {},
   actionTrack: null,
+  settings: DEFAULT_SETTINGS,
+  notice: null,
+  listenMs: 0,
+  showHelp: false,
 
   hydrate: () => {
     const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
     const recents = readJson<Track[]>(RECENT_KEY, []).map(sanitizeTrack);
     const playlists = readJson<Playlist[]>(PLAYLISTS_KEY, []);
     const volume = readJson<number>(VOLUME_KEY, 0.9);
+    const settings = { ...DEFAULT_SETTINGS, ...readJson<Partial<FlowSettings>>(SETTINGS_KEY, {}) };
+    const listenMs = readJson<number>(STATS_KEY, 0);
     const trackMap: Record<string, Track> = {};
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
-    set({ liked, recents, playlists, volume, trackMap });
+    set({ liked, recents, playlists, volume, trackMap, settings, listenMs });
   },
 
   playTrack: (track, queue) => {
-    const recents = remember(track, get().recents);
+    const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
     if (queue && queue.length) {
       const idx = Math.max(0, queue.findIndex((t) => t.id === track.id));
@@ -179,6 +219,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const next = [...queue];
     next.splice(queueIndex + 1, 0, track);
     set({ queue: next, trackMap: { ...get().trackMap, [track.id]: track } });
+    get().notify("In riproduzione dopo");
   },
 
   togglePlay: () => {
@@ -209,7 +250,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       }
     }
     const track = queue[nextIndex];
-    const recents = remember(track, get().recents);
+    const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
     set({
       current: track,
@@ -272,7 +313,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   setShowLyrics: (v) => set({ showLyrics: v, showQueue: v ? false : get().showQueue }),
   setHideVideo: (v) => set({ hideVideo: v }),
 
-  addToQueue: (track) => set({ queue: [...get().queue, track], trackMap: { ...get().trackMap, [track.id]: track } }),
+  addToQueue: (track) => {
+    set({ queue: [...get().queue, track], trackMap: { ...get().trackMap, [track.id]: track } });
+    get().notify("Aggiunto in coda");
+  },
   removeFromQueue: (index) => {
     const queue = get().queue.filter((_, i) => i !== index);
     let queueIndex = get().queueIndex;
@@ -290,6 +334,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const next = exists ? liked.filter((t) => t.id !== track.id) : [track, ...liked];
     writeJson(LIKED_KEY, next);
     set({ liked: next, trackMap: { ...get().trackMap, [track.id]: track } });
+    get().notify(exists ? "Rimosso dai preferiti" : "Aggiunto ai preferiti");
   },
   isLiked: (id) => get().liked.some((t) => t.id === id),
 
@@ -302,6 +347,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     ];
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists });
+    get().notify("Playlist creata");
   },
   addToPlaylist: (playlistId, track) => {
     const playlists = get().playlists.map((p) =>
@@ -311,6 +357,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     );
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists, trackMap: { ...get().trackMap, [track.id]: track } });
+    get().notify("Salvato in playlist");
   },
   removeFromPlaylist: (playlistId, trackId) => {
     const playlists = get().playlists.map((p) =>
@@ -323,10 +370,55 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const playlists = get().playlists.filter((p) => p.id !== id);
     writeJson(PLAYLISTS_KEY, playlists);
     set({ playlists });
+    get().notify("Playlist eliminata");
+  },
+  renamePlaylist: (id, title) => {
+    const clean = title.trim();
+    if (!clean) return;
+    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, title: clean } : p));
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists });
+  },
+  duplicatePlaylist: (id) => {
+    const src = get().playlists.find((p) => p.id === id);
+    if (!src) return;
+    const playlists = [
+      { ...src, id: `pl_${Date.now()}`, title: `${src.title} (copia)`, createdAt: Date.now() },
+      ...get().playlists,
+    ];
+    writeJson(PLAYLISTS_KEY, playlists);
+    set({ playlists });
+    get().notify("Playlist duplicata");
+  },
+  moveQueue: (from, to) => {
+    const queue = [...get().queue];
+    if (from < 0 || to < 0 || from >= queue.length || to >= queue.length) return;
+    const [item] = queue.splice(from, 1);
+    queue.splice(to, 0, item);
+    const currentId = get().current?.id;
+    const queueIndex = currentId ? Math.max(0, queue.findIndex((t) => t.id === currentId)) : get().queueIndex;
+    set({ queue, queueIndex });
   },
   clearRecents: () => {
     writeJson(RECENT_KEY, []);
     set({ recents: [] });
   },
   setActionTrack: (track) => set({ actionTrack: track }),
+  patchSettings: (partial) => {
+    const settings = { ...get().settings, ...partial };
+    writeJson(SETTINGS_KEY, settings);
+    set({ settings });
+  },
+  notify: (msg) => {
+    set({ notice: msg });
+    window.setTimeout(() => {
+      if (get().notice === msg) set({ notice: null });
+    }, 2400);
+  },
+  addListenMs: (ms) => {
+    const listenMs = get().listenMs + ms;
+    writeJson(STATS_KEY, listenMs);
+    set({ listenMs });
+  },
+  setShowHelp: (v) => set({ showHelp: v }),
 }));

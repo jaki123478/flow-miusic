@@ -7,14 +7,15 @@ import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 
 export const Route = createFileRoute("/mix")({
-  validateSearch: (search: Record<string, unknown>): { mood?: string } => ({
+  validateSearch: (search: Record<string, unknown>): { mood?: string; q?: string } => ({
     mood: typeof search.mood === "string" ? search.mood : undefined,
+    q: typeof search.q === "string" ? search.q : undefined,
   }),
   component: MixPage,
 });
 
 function MixPage() {
-  const { mood: moodId } = Route.useSearch();
+  const { mood: moodId, q: seed } = Route.useSearch();
   const [custom, setCustom] = useState("");
   const [loading, setLoading] = useState(false);
   const [blurb, setBlurb] = useState("");
@@ -36,7 +37,8 @@ function MixPage() {
 
   useEffect(() => {
     if (selected) void run(selected.prompt, selected.label);
-  }, [selected?.id]);
+    else if (seed) void run(seed, seed);
+  }, [selected?.id, seed]);
 
   return (
     <div className="flow-enter space-y-6">

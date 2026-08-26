@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { useNavigate } from "@tanstack/react-router";
 import {
   Heart,
   ListMusic,
@@ -7,6 +8,7 @@ import {
   Pause,
   Play,
   Radio,
+  Search,
   Share2,
   SkipForward,
   X,
@@ -55,7 +57,7 @@ export async function shareTrack(track: Track) {
   const text = `${track.title} — ${track.artist}`;
   try {
     if (navigator.share) {
-      await navigator.share({ title: track.title, text });
+      await navigator.share({ title: track.title, text, url: window.location.origin });
       return;
     }
   } catch {
@@ -293,6 +295,7 @@ export function QuickTile({ track, queue }: { track: Track; queue: Track[] }) {
 }
 
 export function ActionSheet() {
+  const navigate = useNavigate();
   const track = useFlowStore((s) => s.actionTrack);
   const setActionTrack = useFlowStore((s) => s.setActionTrack);
   const playTrack = useFlowStore((s) => s.playTrack);
@@ -396,6 +399,22 @@ export function ActionSheet() {
             />
             <SheetBtn icon={ListPlus} label="Aggiungi a playlist" onClick={() => setPicking(true)} />
             <SheetBtn icon={Share2} label="Condividi" onClick={() => { void shareTrack(view); close(); }} />
+            <SheetBtn
+              icon={Search}
+              label="Cerca artista"
+              onClick={() => {
+                close();
+                void navigate({ to: "/search", search: { q: view.artist } });
+              }}
+            />
+            <SheetBtn
+              icon={Radio}
+              label="Radio da questo brano"
+              onClick={() => {
+                close();
+                void navigate({ to: "/mix", search: { mood: undefined, q: `${view.artist} ${view.title}` } });
+              }}
+            />
           </div>
         )}
       </div>

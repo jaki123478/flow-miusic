@@ -1,10 +1,12 @@
 import { useEffect, type ReactNode } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
-import { Compass, Heart, House, Library, Plus, Radio, Search, Trophy } from "lucide-react";
+import { Compass, Heart, House, Library, Plus, Radio, Search, Settings, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
 import { ActionSheet, TrackArt } from "./tracks";
+import { HelpOverlay, InstallHint } from "./chrome";
+import { ToastHost } from "./toast";
 
 const NAV = [
   { to: "/", label: "Home", icon: House },
@@ -112,6 +114,10 @@ function LibraryRail() {
             </Link>
           );
         })}
+        <Link to="/settings" className="mt-2 flex items-center gap-3 rounded-md px-2 py-2 text-muted hover:bg-elevated hover:text-fg">
+          <Settings className="size-5" />
+          <span className="text-sm font-medium">Impostazioni</span>
+        </Link>
       </div>
     </div>
   );
@@ -124,6 +130,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
+
+  useEffect(() => {
+    const t = window.setInterval(() => {
+      const s = useFlowStore.getState();
+      if (s.isPlaying && s.current) s.addListenMs(5000);
+    }, 5000);
+    return () => window.clearInterval(t);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -166,6 +180,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       if (e.key === "f" || e.key === "F") s.setShowFullPlayer(!s.showFullPlayer);
       if (e.key === "s" || e.key === "S") s.toggleShuffle();
       if (e.key === "r" || e.key === "R") s.cycleRepeat();
+      if (e.key === "q" || e.key === "Q") {
+        if (s.current) {
+          s.setShowFullPlayer(true);
+          s.setShowQueue(!s.showQueue);
+        }
+        return;
+      }
+      if (e.key === "?" || (e.shiftKey && e.key === "/")) {
+        e.preventDefault();
+        s.setShowHelp(!s.showHelp);
+        return;
+      }
       if (e.key === "Escape") {
         if (s.actionTrack) s.setActionTrack(null);
         else if (s.showFullPlayer) s.setShowFullPlayer(false);
@@ -177,6 +203,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
+      <InstallHint />
       <AudioEngine />
       <div className="flex min-h-0 flex-1 gap-2 p-0 md:p-2 md:pb-0">
         <aside className="hidden w-72 shrink-0 flex-col gap-2 md:flex">
@@ -215,6 +242,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
             <div className="ml-auto flex items-center gap-1">
+              <Link to="/settings" className="rounded-full p-2 text-muted" aria-label="Impostazioni">
+                <Settings className="size-5" />
+              </Link>
               <Link to="/charts" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
                 Chart
               </Link>
@@ -237,6 +267,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <Link to="/radio" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               Radio
+            </Link>
+            <Link to="/settings" className="nav-link ml-auto flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
+              <Settings className="size-4" />
+              Impostazioni
             </Link>
           </div>
           <main
@@ -274,6 +308,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <FullPlayer />
       <ActionSheet />
+      <ToastHost />
+      <HelpOverlay />
     </div>
   );
 }

@@ -16,6 +16,7 @@ import { Route as LibraryRouteImport } from './routes/library'
 import { Route as MixRouteImport } from './routes/mix'
 import { Route as RadioRouteImport } from './routes/radio'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as ApiProxyRouteImport } from './routes/api/proxy'
 
 const IndexRoute = IndexRouteImport.update({
@@ -53,6 +54,11 @@ const SearchRoute = SearchRouteImport.update({
   path: '/search',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiProxyRoute = ApiProxyRouteImport.update({
   id: '/api/proxy',
   path: '/api/proxy',
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/mix': typeof MixRoute
   '/radio': typeof RadioRoute
   '/search': typeof SearchRoute
+  '/settings': typeof SettingsRoute
   '/api/proxy': typeof ApiProxyRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/mix'
     | '/radio'
     | '/search'
+    | '/settings'
     | '/api/proxy'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/mix'
     | '/radio'
     | '/search'
+    | '/settings'
     | '/api/proxy'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/mix'
     | '/radio'
     | '/search'
+    | '/settings'
     | '/api/proxy'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   MixRoute: typeof MixRoute
   RadioRoute: typeof RadioRoute
   SearchRoute: typeof SearchRoute
+  SettingsRoute: typeof SettingsRoute
   ApiProxyRoute: typeof ApiProxyRoute
 }
 
@@ -185,6 +198,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SearchRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/proxy': {
       id: '/api/proxy'
       path: '/api/proxy'
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   MixRoute: MixRoute,
   RadioRoute: RadioRoute,
   SearchRoute: SearchRoute,
+  SettingsRoute: SettingsRoute,
   ApiProxyRoute: ApiProxyRoute,
 }
 export const routeTree = rootRouteImport

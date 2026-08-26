@@ -158,6 +158,12 @@ export function AudioEngine() {
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
   const lastSeek = useRef(0);
+  const eqRef = useRef<{
+    ctx: AudioContext;
+    bass: BiquadFilterNode;
+    treble: BiquadFilterNode;
+  } | null>(null);
+  const settings = useFlowStore((s) => s.settings);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
   const hero = isYt && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
 
@@ -282,11 +288,18 @@ export function AudioEngine() {
 
   useEffect(() => {
     const p = ytRef.current;
+    let gain = isMuted ? 0 : volume;
+    if (settings.normalize) gain *= 0.9;
+    if (!isYt && settings.crossfade > 0 && duration > 0) {
+      const left = duration - currentTime;
+      if (left >= 0 && left < settings.crossfade) gain *= left / settings.crossfade;
+    }
+    gain = Math.min(1, Math.max(0, gain));
     if (p && ytReady.current) {
       if (isMuted) p.mute();
       else {
         p.unMute();
-        p.setVolume(Math.round(volume * 100));
+        p.setVolume(Math.round(gain * 100));
       }
       try {
         p.setPlaybackRate(current?.isLive ? 1 : playbackRate);
@@ -296,10 +309,39 @@ export function AudioEngine() {
     }
     const audio = audioRef.current;
     if (audio) {
-      audio.volume = isMuted ? 0 : volume;
+      audio.volume = gain;
       audio.playbackRate = current?.isLive ? 1 : playbackRate;
     }
-  }, [volume, isMuted, playbackRate, current?.isLive]);
+  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, currentTime, duration, isYt]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || eqRef.current) return;
+    try {
+      const ctx = new AudioContext();
+      const src = ctx.createMediaElementSource(audio);
+      const bass = ctx.createBiquadFilter();
+      bass.type = "lowshelf";
+      bass.frequency.value = 180;
+      const treble = ctx.createBiquadFilter();
+      treble.type = "highshelf";
+      treble.frequency.value = 4500;
+      src.connect(bass);
+      bass.connect(treble);
+      treble.connect(ctx.destination);
+      eqRef.current = { ctx, bass, treble };
+    } catch {
+      /* Web Audio not available */
+    }
+  }, []);
+
+  useEffect(() => {
+    const eq = eqRef.current;
+    if (!eq) return;
+    eq.bass.gain.value = settings.eqBass;
+    eq.treble.gain.value = settings.eqTreble;
+    void eq.ctx.resume();
+  }, [settings.eqBass, settings.eqTreble]);
 
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
@@ -694,6 +736,7 @@ export function FullPlayer() {
   const clearQueue = useFlowStore((s) => s.clearQueue);
   const addToPlaylist = useFlowStore((s) => s.addToPlaylist);
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
+  const remainingTime = useFlowStore((s) => s.settings.remainingTime);
 
   const [lyrics, setLyrics] = useState<LyricLine[]>([]);
   const [showSleep, setShowSleep] = useState(false);
@@ -913,7 +956,7 @@ export function FullPlayer() {
                 }}
               />
               <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle">
-                <span>{formatTime(currentTime)}</span>
+                <span>{remainingTime && duration > 0 ? `-${formatTime(Math.max(0, duration - currentTime))}` : formatTime(currentTime)}</span>
                 <span>{formatTime(duration)}</span>
               </div>
             </div>

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
-import { Heart, Play, Plus, Trash2 } from "lucide-react";
+import { Copy, Heart, Play, Plus, Trash2 } from "lucide-react";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 import type { Track } from "@/lib/music/types";
@@ -17,6 +17,8 @@ function LibraryPage() {
   const playQueue = useFlowStore((s) => s.playQueue);
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
   const removePlaylist = useFlowStore((s) => s.removePlaylist);
+  const renamePlaylist = useFlowStore((s) => s.renamePlaylist);
+  const duplicatePlaylist = useFlowStore((s) => s.duplicatePlaylist);
   const clearRecents = useFlowStore((s) => s.clearRecents);
   const [tab, setTab] = useState<Tab>("liked");
   const [title, setTitle] = useState("");
@@ -152,6 +154,24 @@ function LibraryPage() {
                   className="rounded-full px-3 py-2 text-xs font-medium text-muted"
                 >
                   Play
+                </button>
+                <button
+                  type="button"
+                  onClick={() => duplicatePlaylist(p.id)}
+                  className="flex size-11 items-center justify-center text-subtle"
+                  aria-label="Duplica"
+                >
+                  <Copy className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = window.prompt("Nome playlist", p.title);
+                    if (next) renamePlaylist(p.id, next);
+                  }}
+                  className="rounded-full px-2 py-2 text-xs font-medium text-muted"
+                >
+                  Rinomina
                 </button>
                 <button
                   type="button"
