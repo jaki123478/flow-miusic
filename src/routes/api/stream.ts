@@ -7,14 +7,25 @@ async function resolveUrl(id: string, force = false): Promise<string | null> {
   const hit = cache.get(id);
   if (!force && hit && hit.exp > Date.now()) return hit.url;
   const url = await getAudioUrl(id);
-  if (url) cache.set(id, { url, exp: Date.now() + 15 * 60_000 });
+  if (url) cache.set(id, { url, exp: Date.now() + 12 * 60_000 });
   else cache.delete(id);
   return url;
 }
 
 async function handleStream(request: Request): Promise<Response> {
-  const id = new URL(request.url).searchParams.get("v") || "";
+  const parsed = new URL(request.url);
+  const id = parsed.searchParams.get("v") || "";
   if (!/^[\w-]{11}$/.test(id)) return new Response("Bad request", { status: 400 });
+
+  if (parsed.searchParams.get("src")) {
+    let target = await resolveUrl(id, false);
+    if (!target) target = await resolveUrl(id, true);
+    if (!target) return Response.json({ url: null }, { status: 404 });
+    return Response.json(
+      { url: target },
+      { headers: { "Cache-Control": "private, max-age=60", "Access-Control-Allow-Origin": "*" } },
+    );
+  }
 
   const play = async (force: boolean) => {
     const target = await resolveUrl(id, force);
