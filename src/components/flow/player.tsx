@@ -20,6 +20,7 @@ import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import { cachedAudioUrl, loadLocalAudio } from "@/lib/music/offline-audio";
+import { resolveDirectUrl } from "@/lib/music/play-src";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -137,14 +138,11 @@ export function AudioEngine() {
 
     if (current.videoId && !cachedAudioUrl(current.videoId)) {
       const id = current.videoId;
-      void fetch(`/api/play?v=${id}`, { cache: "no-store", headers: { Accept: "application/json" } })
-        .then((r) => r.json())
-        .then((j: { url?: string | null }) => {
-          if (cancelled || !j?.url) return;
-          if (useFlowStore.getState().current?.videoId !== id) return;
-          applySrc(audio, j.url, useFlowStore.getState().isPlaying);
-        })
-        .catch(() => {});
+      void resolveDirectUrl(id).then((url) => {
+        if (cancelled || !url) return;
+        if (useFlowStore.getState().current?.videoId !== id) return;
+        applySrc(audio, url, useFlowStore.getState().isPlaying);
+      });
     }
 
     return () => {
