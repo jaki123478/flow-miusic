@@ -34,8 +34,13 @@ export function bindAudioFocus(handlers: { onLost: () => void; onGained: () => v
   const session = getSession();
   const onState = () => {
     const state = session?.state || (lost ? "interrupted" : "active");
+    const locked = typeof document !== "undefined" && document.hidden;
     if (state === "interrupted" || state === "inactive") {
       if (lost) return;
+      if (locked) {
+        claimAudioFocus();
+        return;
+      }
       lost = true;
       handlers.onLost();
       return;
@@ -46,15 +51,8 @@ export function bindAudioFocus(handlers: { onLost: () => void; onGained: () => v
     }
   };
   session?.addEventListener("statechange", onState);
-
-  const onBlur = () => {
-    /* lock screen is not a focus loss */
-  };
-  window.addEventListener("blur", onBlur);
-
   return () => {
     session?.removeEventListener("statechange", onState);
-    window.removeEventListener("blur", onBlur);
   };
 }
 
