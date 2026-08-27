@@ -254,38 +254,64 @@ export function AudioEngine() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    let cancelled = false;
+
+    const applySrc = (src: string) => {
+      if (cancelled || !src) return;
+      if (audio.dataset.src === src) return;
+      audio.dataset.src = src;
+      delete audio.dataset.retried;
+      audio.setAttribute("referrerpolicy", "no-referrer");
+      audio.setAttribute("playsinline", "true");
+      audio.setAttribute("webkit-playsinline", "true");
+      audio.src = src;
+      audio.load();
+      if (useFlowStore.getState().isPlaying) {
+        void audio.play().catch(() => {
+          window.setTimeout(() => {
+            void audio.play().catch(() => {
+              if (isYt && !document.hidden) setYtNative(false);
+              else if (!isYt) pause();
+            });
+          }, 800);
+        });
+      }
+    };
+
     if (isYt && !ytNative) {
       audio.pause();
       audio.removeAttribute("src");
       delete audio.dataset.src;
       return;
     }
-    const src =
-      isYt && current?.videoId ? `/api/stream?v=${current.videoId}` : current?.streamUrl || "";
+
+    if (isYt && current?.videoId) {
+      void fetch(`/api/stream?v=${current.videoId}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data: { url?: string } | null) => {
+          if (cancelled) return;
+          if (data?.url) applySrc(data.url);
+          else if (!document.hidden) setYtNative(false);
+        })
+        .catch(() => {
+          if (!cancelled && !document.hidden) setYtNative(false);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const src = current?.streamUrl || "";
     if (!src) {
       audio.pause();
       audio.removeAttribute("src");
       delete audio.dataset.src;
       return;
     }
-    if (audio.dataset.src === src) return;
-    audio.dataset.src = src;
-    audio.src = src;
-    audio.setAttribute("playsinline", "true");
-    audio.setAttribute("webkit-playsinline", "true");
-    audio.load();
-    if (useFlowStore.getState().isPlaying) {
-      const tryPlay = () =>
-        audio.play().catch(() => {
-          window.setTimeout(() => {
-            void audio.play().catch(() => {
-              if (isYt) setYtNative(false);
-              else pause();
-            });
-          }, 600);
-        });
-      void tryPlay();
-    }
+    applySrc(src);
+    return () => {
+      cancelled = true;
+    };
   }, [current?.id, current?.streamUrl, current?.videoId, isYt, ytNative]);
 
   useEffect(() => {
@@ -310,7 +336,7 @@ export function AudioEngine() {
     const p = ytRef.current;
     let gain = isMuted ? 0 : volume;
     if (settings.normalize) gain *= 0.9;
-    if (!isYt && settings.crossfade > 0 && duration > 0) {
+    if (!prefersNativeYtAudio() && !isYt && settings.crossfade > 0 && duration > 0) {
       const left = duration - currentTime;
       if (left >= 0 && left < settings.crossfade) gain *= left / settings.crossfade;
     }
@@ -332,7 +358,7 @@ export function AudioEngine() {
       audio.volume = gain;
       audio.playbackRate = current?.isLive ? 1 : playbackRate;
     }
-  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, currentTime, duration, isYt, ytNative]);
+  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, isYt, ytNative, duration]);
 
   useEffect(() => {
     if (prefersNativeYtAudio()) return;
@@ -422,7 +448,11 @@ export function AudioEngine() {
     if (!current || typeof navigator === "undefined") return;
     pushLockScreen(current, isPlaying, currentTime, current.isLive ? 0 : duration, current.isLive ? 1 : playbackRate);
     bindLockScreenActions({
-      play: () => resume(),
+      play: () => {
+        resume();
+        void audioRef.current?.play().catch(() => {});
+        if (!ytNative && ytRef.current && ytReady.current) ytRef.current.playVideo();
+      },
       pause: () => pause(),
       prev: () => prev(),
       next: () => next(),
@@ -523,11 +553,28 @@ export function AudioEngine() {
           }, 350);
         }}
         onError={() => {
+          const audio = audioRef.current;
+          const cur = useFlowStore.getState().current;
+          if (cur?.source === "ytmusic" && ytNative && cur.videoId && audio && audio.dataset.retried !== "1") {
+            audio.dataset.retried = "1";
+            void fetch(`/api/stream?v=${cur.videoId}`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((data: { url?: string } | null) => {
+                if (!data?.url || !audioRef.current) return;
+                audioRef.current.src = data.url;
+                audioRef.current.dataset.src = data.url;
+                audioRef.current.load();
+                if (useFlowStore.getState().isPlaying) void audioRef.current.play().catch(() => {});
+              })
+              .catch(() => {});
+            return;
+          }
+          if (document.hidden) return;
           if (isYt && ytNative) {
             setYtNative(false);
             return;
           }
-          if (current && current.source !== "ytmusic") onEnded();
+          if (cur && cur.source !== "ytmusic") onEnded();
         }}
       />
       <audio

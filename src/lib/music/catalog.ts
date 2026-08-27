@@ -87,7 +87,9 @@ export function stationToTrack(station: RadioStation): Track {
     artist: [station.city, station.country].filter(Boolean).join(" · ") || "Radio",
     artwork: station.artwork || FALLBACK_ART,
     duration: 0,
-    streamUrl: `/api/proxy?u=${encodeURIComponent(station.streamUrl)}`,
+    streamUrl: station.streamUrl.startsWith("https:")
+      ? station.streamUrl
+      : `/api/proxy?u=${encodeURIComponent(station.streamUrl)}`,
     source: "radio",
     isLive: true,
   };
