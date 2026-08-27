@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { androidBackgroundTips } from "@/lib/music/android-bg";
+import { androidBackgroundTips, detectOem, oemBatteryIntents } from "@/lib/music/android-bg";
 import { isAndroid, isAppleMobile } from "@/lib/music/lock-screen";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -13,16 +13,6 @@ function openHref(href: string) {
   a.remove();
 }
 
-function openChromeBattery() {
-  openHref(
-    "intent://com.android.chrome/#Intent;scheme=package;action=android.settings.APPLICATION_DETAILS_SETTINGS;end",
-  );
-}
-
-function openBatteryList() {
-  openHref("intent:#Intent;action=android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;end");
-}
-
 export function ChromeBackgroundCard() {
   const notify = useFlowStore((s) => s.notify);
   const [standalone, setStandalone] = useState(false);
@@ -30,6 +20,21 @@ export function ChromeBackgroundCard() {
   const [install, setInstall] = useState<{ prompt: () => Promise<unknown> } | null>(null);
   const android = isAndroid();
   const apple = isAppleMobile();
+  const oem = android ? detectOem() : "other";
+  const oemLabel =
+    oem === "samsung"
+      ? "Samsung"
+      : oem === "motorola"
+        ? "Motorola"
+        : oem === "pixel"
+          ? "Pixel"
+          : oem === "xiaomi"
+            ? "Xiaomi"
+            : oem === "huawei"
+              ? "Huawei"
+              : oem === "oppo"
+                ? "Oppo / OnePlus"
+                : "Android";
 
   useEffect(() => {
     setStandalone(
@@ -64,8 +69,9 @@ export function ChromeBackgroundCard() {
       /* ignore */
     }
     if (android) {
-      notify("In Batteria scegli Nessuna limitazione, poi torna a Flow");
-      window.setTimeout(() => openChromeBattery(), 250);
+      notify(`Apri Batteria e metti Nessuna limitazione (${oemLabel})`);
+      const first = oemBatteryIntents()[0];
+      if (first) window.setTimeout(() => openHref(first.href), 200);
     } else {
       notify("Notifiche attivate");
     }
@@ -73,9 +79,9 @@ export function ChromeBackgroundCard() {
 
   return (
     <section className="space-y-3 rounded-lg bg-surface px-4 py-4">
-      <p className="text-sm font-medium">Audio in background Android</p>
+      <p className="text-sm font-medium">Audio a schermo spento · {android ? oemLabel : apple ? "iPhone" : "Desktop"}</p>
       <p className="text-xs text-muted">
-        Chrome non è Spotify: senza queste 4 cose ferma l’audio a schermo spento.
+        Flow suona da una copia locale del brano. Samsung, Motorola e Pixel fermano Chrome se la batteria è ottimizzata.
       </p>
       {android ? (
         <>
@@ -83,42 +89,31 @@ export function ChromeBackgroundCard() {
             {androidBackgroundTips().map((s) => (
               <li key={s}>{s}</li>
             ))}
-            <li>Audio focus: una chiamata o Maps mette in pausa Flow e lo riprende dopo, senza rubare l’audio.</li>
           </ol>
           <div className="flex flex-wrap gap-2 pt-1">
-            <button
-              type="button"
-              onClick={() => void activate()}
-              className="h-10 rounded-full bg-primary px-4 text-sm font-bold text-primary-fg"
-            >
-              Apri batteria Chrome
+            <button type="button" onClick={() => void activate()} className="h-10 rounded-full bg-primary px-4 text-sm font-bold text-primary-fg">
+              Apri batteria
             </button>
-            <button
-              type="button"
-              onClick={openBatteryList}
-              className="h-10 rounded-full bg-elevated px-4 text-sm font-medium"
-            >
-              App non ottimizzate
-            </button>
+            {oemBatteryIntents().map((item) => (
+              <button key={item.label} type="button" onClick={() => openHref(item.href)} className="h-10 rounded-full bg-elevated px-4 text-sm font-medium">
+                {item.label}
+              </button>
+            ))}
             {install && !standalone ? (
-              <button
-                type="button"
-                onClick={() => void install.prompt()}
-                className="h-10 rounded-full bg-elevated px-4 text-sm font-medium"
-              >
+              <button type="button" onClick={() => void install.prompt()} className="h-10 rounded-full bg-elevated px-4 text-sm font-medium">
                 Installa app
               </button>
             ) : null}
           </div>
         </>
       ) : apple ? (
-        <p className="text-sm text-muted">Su iPhone: Condividi → Aggiungi a Home. Non c’è un permesso batteria come su Android.</p>
+        <p className="text-sm text-muted">Su iPhone: Condividi → Aggiungi a Home. Poi avvia Flow dalla icona, non da Safari.</p>
       ) : (
-        <p className="text-sm text-muted">Questi permessi servono su telefono Android con Chrome.</p>
+        <p className="text-sm text-muted">Queste voci servono sui telefoni Android.</p>
       )}
       <p className="text-xs text-subtle">
-        Notifiche: {sound === "granted" ? "ok" : sound === "denied" ? "bloccate in Chrome" : "non ancora"}
-        {standalone ? " · App installata" : android ? " · Ancora in Chrome" : ""}
+        Notifiche: {sound === "granted" ? "ok" : sound === "denied" ? "bloccate" : "non ancora"}
+        {standalone ? " · App installata" : android ? " · Ancora nel browser" : ""}
       </p>
     </section>
   );
