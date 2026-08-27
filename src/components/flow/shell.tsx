@@ -221,26 +221,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  if (authEnabled) {
-    if (isPending) {
-      return (
-        <div className="grid h-dvh place-items-center bg-bg text-fg">
-          <div className="flex flex-col items-center gap-4">
-            <FlowMark className="size-14" />
-            <div className="h-2 w-28 animate-pulse rounded-full bg-elevated" />
-          </div>
-        </div>
-      );
-    }
-    if (!user && !isLogin) {
-      return <Navigate to="/login" search={{ next: pathname === "/" ? undefined : pathname }} />;
-    }
-    if (user && isLogin) {
+  if (isLogin) {
+    if (authEnabled && user && !isPending) {
       return <Navigate to={nextPath} />;
     }
-    if (isLogin) {
-      return <div className="h-dvh overflow-y-auto bg-bg text-fg">{children}</div>;
-    }
+    return <div className="h-dvh overflow-y-auto bg-bg text-fg">{children}</div>;
   }
 
   return (

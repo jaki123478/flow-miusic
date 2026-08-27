@@ -55,7 +55,7 @@ function Login() {
       </div>
       <h1 className="text-3xl font-bold tracking-tight">{mode === "in" ? "Accedi per continuare" : "Crea il tuo account"}</h1>
       <p className="mt-2 text-sm text-muted">
-        Serve un account per usare Flow: playlist, preferiti e ascolto restano sul tuo profilo.
+        Playlist e preferiti sul tuo profilo. Puoi anche ascoltare senza account.
       </p>
 
       {!authEnabled ? (
@@ -132,6 +132,9 @@ function Login() {
           </button>
         </>
       )}
+      <a href="/" className="mt-8 text-center text-sm text-muted hover:text-fg">
+        Continua senza account
+      </a>
     </div>
   );
 }

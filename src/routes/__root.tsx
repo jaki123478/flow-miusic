@@ -7,6 +7,27 @@ import appCss from "../styles.css?url";
 const APP_NAME = "Flow";
 
 export const Route = createRootRoute({
+  errorComponent: ({ error }) => (
+    <html lang="it">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+        <title>Flow</title>
+      </head>
+      <body className="antialiased">
+        <div className="grid min-h-dvh place-items-center bg-bg px-6 text-fg">
+          <div className="max-w-sm text-center">
+            <p className="font-heading text-2xl font-bold">Flow</p>
+            <p className="mt-2 text-sm text-muted">Qualcosa è andato storto. Ricarica e riprova.</p>
+            <a href="/" className="mt-6 inline-flex h-11 items-center rounded-full bg-primary px-5 text-sm font-bold text-primary-fg">
+              Torna alla home
+            </a>
+            {error?.message ? <p className="mt-4 text-xs text-subtle">{error.message}</p> : null}
+          </div>
+        </div>
+      </body>
+    </html>
+  ),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
