@@ -2,6 +2,7 @@ import type { Track } from "./types";
 import { isAndroid } from "./lock-screen";
 
 let lastTag = "";
+let primed = false;
 
 export type AndroidOem = "samsung" | "motorola" | "pixel" | "xiaomi" | "huawei" | "oppo" | "other";
 
@@ -19,7 +20,50 @@ export function detectOem(): AndroidOem {
   return "other";
 }
 
+function openHref(href: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function alreadyAsked() {
+  try {
+    return localStorage.getItem("flow_bg_default") === "1";
+  } catch {
+    return true;
+  }
+}
+
+function markAsked() {
+  try {
+    localStorage.setItem("flow_bg_default", "1");
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Parte da solo al primo play: notifiche + dialogo batteria Android. */
+export function enableAndroidBackgroundDefaults() {
+  if (!isAndroid() || primed) return;
+  primed = true;
+  if ("Notification" in window && Notification.permission === "default") {
+    void Notification.requestPermission().catch(() => {});
+  }
+  if (alreadyAsked()) return;
+  markAsked();
+  window.setTimeout(() => {
+    openHref(
+      "intent://com.android.chrome/#Intent;scheme=package;action=android.settings.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS;end",
+    );
+  }, 400);
+}
+
 export function showAndroidNowPlaying(track: Track) {
+  enableAndroidBackgroundDefaults();
   if (!isAndroid() || typeof Notification === "undefined") return;
   if (Notification.permission !== "granted") return;
   try {
@@ -52,57 +96,42 @@ export function androidBackgroundTips(): string[] {
       ...common,
       "Samsung: Impostazioni → Batteria e device care → Batteria → Limiti in background → togli Chrome e Flow dal sonno.",
       "Samsung: App → Chrome → Batteria → Senza limiti. Disattiva “Metti in sospensione le app non utilizzate”.",
-      "Samsung Internet: stesse voci Batteria / sonno app, oppure usa Chrome.",
     ];
   }
   if (oem === "motorola") {
     return [
       ...common,
-      "Motorola: Impostazioni → Batteria → Utilizzo batteria delle app → Chrome → Non ottimizzata.",
-      "Motorola: Impostazioni → App → Chrome → Batteria → Nessuna limitazione.",
+      "Motorola: Impostazioni → App → Chrome → Batteria → Non ottimizzata.",
     ];
   }
   if (oem === "pixel") {
     return [
       ...common,
-      "Pixel: Impostazioni → App → Chrome → Batteria → Non ottimizzata / Nessuna limitazione.",
-      "Pixel: Batteria adattiva può restare accesa; non mettere Chrome in Limitata.",
-    ];
-  }
-  if (oem === "xiaomi") {
-    return [
-      ...common,
-      "Xiaomi: Impostazioni → App → Gestisci app → Chrome → Risparmio batteria → Nessuna restrizione.",
-      "Xiaomi: Autostart ON per Chrome. Blocca Chrome nel menu recenti (lucchetto).",
+      "Pixel: Impostazioni → App → Chrome → Batteria → Non ottimizzata.",
     ];
   }
   return [
     ...common,
-    "Impostazioni → App → Chrome → Batteria → Nessuna limitazione / Non ottimizzata.",
-    "Disattiva risparmio energetico mentre ascolti.",
+    "Impostazioni → App → Chrome → Batteria → Nessuna limitazione.",
   ];
 }
 
 export function oemBatteryIntents(): { label: string; href: string }[] {
   const oem = detectOem();
-  const chromeDetails =
-    "intent://com.android.chrome/#Intent;scheme=package;action=android.settings.APPLICATION_DETAILS_SETTINGS;end";
-  const ignoreOpt =
-    "intent:#Intent;action=android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;end";
   const items = [
-    { label: "Scheda Chrome", href: chromeDetails },
-    { label: "App non ottimizzate", href: ignoreOpt },
+    {
+      label: "Scheda Chrome",
+      href: "intent://com.android.chrome/#Intent;scheme=package;action=android.settings.APPLICATION_DETAILS_SETTINGS;end",
+    },
+    {
+      label: "App non ottimizzate",
+      href: "intent:#Intent;action=android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;end",
+    },
   ];
   if (oem === "samsung") {
     items.push({
       label: "Device Care Samsung",
       href: "intent:#Intent;component=com.samsung.android.lool/com.samsung.android.sm.ui.battery.BatteryActivity;end",
-    });
-  }
-  if (oem === "motorola") {
-    items.push({
-      label: "Batteria Motorola",
-      href: "intent:#Intent;action=android.settings.BATTERY_SAVER_SETTINGS;end",
     });
   }
   return items;
