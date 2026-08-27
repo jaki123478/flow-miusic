@@ -2,6 +2,26 @@ import { useEffect, useState } from "react";
 import { isAndroid, isAppleMobile } from "@/lib/music/lock-screen";
 import { useFlowStore } from "@/stores/flow-store";
 
+function openHref(href: string) {
+  const a = document.createElement("a");
+  a.href = href;
+  a.rel = "noopener";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+}
+
+function openChromeBattery() {
+  openHref(
+    "intent://com.android.chrome/#Intent;scheme=package;action=android.settings.APPLICATION_DETAILS_SETTINGS;end",
+  );
+}
+
+function openBatteryList() {
+  openHref("intent:#Intent;action=android.settings.IGNORE_BATTERY_OPTIMIZATION_SETTINGS;end");
+}
+
 export function ChromeBackgroundCard() {
   const notify = useFlowStore((s) => s.notify);
   const [standalone, setStandalone] = useState(false);
@@ -42,59 +62,67 @@ export function ChromeBackgroundCard() {
     } catch {
       /* ignore */
     }
-    notify("Consenti le altre voci in Impostazioni Android se Chrome ferma ancora l’audio");
+    if (android) {
+      notify("In Batteria scegli Nessuna limitazione, poi torna a Flow");
+      window.setTimeout(() => openChromeBattery(), 250);
+    } else {
+      notify("Notifiche attivate");
+    }
   };
-
-  const steps = android
-    ? [
-        "Tocca Attiva: consenti le notifiche (comandi a schermo spento).",
-        standalone
-          ? "Flow è già installato come app."
-          : "Chrome ⋮ → Installa app / Aggiungi a schermata Home, poi apri Flow da lì.",
-        "Android → App → Chrome (e Flow) → Batteria → Nessuna limitazione.",
-        "Android → App → Chrome → Notifiche → attive.",
-        "Chrome ⋮ → Impostazioni → Impostazioni sito → Suono → Consenti.",
-        "Spegni lo schermo pure. Non chiudere Flow dallo switcher.",
-      ]
-    : apple
-      ? [
-          "Condividi → Aggiungi a Home, apri Flow dall’icona.",
-          "Lo schermo può spegnersi. Non chiudere Flow dallo switcher.",
-        ]
-      : ["Tieni la scheda aperta: Chrome deve restare in esecuzione."];
 
   return (
     <section className="space-y-3 rounded-lg bg-surface px-4 py-4">
-      <p className="text-sm font-medium">Audio in background (Chrome)</p>
+      <p className="text-sm font-medium">Permessi batteria Chrome</p>
       <p className="text-xs text-muted">
-        Chrome su Android ferma la musica se la scheda è ottimizzata. Configura questi punti.
+        Android non lascia cambiare la batteria dal sito. Apri le impostazioni e metti Chrome (e Flow) su
+        nessuna limitazione, altrimenti a schermo spento taglia l’audio.
       </p>
-      <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted">
-        {steps.map((s) => (
-          <li key={s}>{s}</li>
-        ))}
-      </ol>
-      <div className="flex flex-wrap gap-2 pt-1">
-        <button
-          type="button"
-          onClick={() => void activate()}
-          className="h-10 rounded-full bg-primary px-4 text-sm font-bold text-primary-fg"
-        >
-          Attiva audio in background
-        </button>
-        {install && !standalone ? (
-          <button
-            type="button"
-            onClick={() => void install.prompt()}
-            className="h-10 rounded-full bg-elevated px-4 text-sm font-medium"
-          >
-            Installa app
-          </button>
-        ) : null}
-      </div>
+      {android ? (
+        <>
+          <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted">
+            <li>Tocca Info Chrome → Batteria → Nessuna limitazione.</li>
+            <li>Poi App non ottimizzate → Chrome e Flow → Non ottimizzare.</li>
+            <li>
+              {standalone
+                ? "Flow è già sulla Home."
+                : "Chrome ⋮ → Installa app, riapri Flow dall’icona."}
+            </li>
+            <li>Non chiudere Flow dallo switcher. Lo schermo può spegnersi.</li>
+          </ol>
+          <div className="flex flex-wrap gap-2 pt-1">
+            <button
+              type="button"
+              onClick={() => void activate()}
+              className="h-10 rounded-full bg-primary px-4 text-sm font-bold text-primary-fg"
+            >
+              Apri batteria Chrome
+            </button>
+            <button
+              type="button"
+              onClick={openBatteryList}
+              className="h-10 rounded-full bg-elevated px-4 text-sm font-medium"
+            >
+              App non ottimizzate
+            </button>
+            {install && !standalone ? (
+              <button
+                type="button"
+                onClick={() => void install.prompt()}
+                className="h-10 rounded-full bg-elevated px-4 text-sm font-medium"
+              >
+                Installa app
+              </button>
+            ) : null}
+          </div>
+        </>
+      ) : apple ? (
+        <p className="text-sm text-muted">Su iPhone: Condividi → Aggiungi a Home. Non c’è un permesso batteria come su Android.</p>
+      ) : (
+        <p className="text-sm text-muted">Questi permessi servono su telefono Android con Chrome.</p>
+      )}
       <p className="text-xs text-subtle">
         Notifiche: {sound === "granted" ? "ok" : sound === "denied" ? "bloccate in Chrome" : "non ancora"}
-        {standalone ? " · App installata" : " · Ancora in Chrome"}
+        {standalone ? " · App installata" : android ? " · Ancora in Chrome" : ""}
       </p>
     </section>
   );
