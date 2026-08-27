@@ -3,5 +3,6 @@
   "type": "website",
   "card": "custom",
   "color": "1ED760",
-  "description": "Musica, radio live, playlist e testi. Ascolta ovunque, anche a schermo spento."
+  "image": "/og.svg",
+  "description": "Musica, radio live, playlist e testi. Ascolta ovunque."
 }
