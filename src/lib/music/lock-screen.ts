@@ -5,6 +5,15 @@ export function isAppleMobile() {
   return /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
 }
 
+export function isAndroid() {
+  if (typeof navigator === "undefined") return false;
+  return /Android/i.test(navigator.userAgent);
+}
+
+export function prefersNativeYtAudio() {
+  return isAndroid() || isAppleMobile();
+}
+
 function artUrl(src: string) {
   if (!src || src.startsWith("data:") || src.startsWith("blob:")) return src;
   if (src.startsWith("/")) return `${window.location.origin}${src}`;

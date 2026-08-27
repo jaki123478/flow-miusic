@@ -22,7 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
-import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
+import { bindLockScreenActions, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { PlayingBars, shareTrack, TrackArt, TrackRow } from "./tracks";
@@ -165,10 +165,11 @@ export function AudioEngine() {
   } | null>(null);
   const settings = useFlowStore((s) => s.settings);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
-  const hero = isYt && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
+  const [ytNative, setYtNative] = useState(() => prefersNativeYtAudio());
+  const hero = isYt && !ytNative && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
 
   useEffect(() => {
-    if (!isYt || !hostRef.current) return;
+    if (!isYt || ytNative || !hostRef.current) return;
     let cancelled = false;
     loadYouTubeApi()
       .then((YT) => {
@@ -236,55 +237,65 @@ export function AudioEngine() {
     return () => {
       cancelled = true;
     };
-  }, [isYt]);
+  }, [isYt, ytNative]);
 
   useEffect(() => {
     const id = current?.videoId;
-    if (!isYt || !id || !ytReady.current || !ytRef.current) return;
+    if (ytNative || !isYt || !id || !ytReady.current || !ytRef.current) return;
     if (ytVideo.current === id) {
       if (isPlaying) ytRef.current.playVideo();
       return;
     }
     ytVideo.current = id;
     ytRef.current.loadVideoById(id);
-  }, [current?.id, current?.videoId, isYt, isPlaying]);
+  }, [current?.id, current?.videoId, isYt, isPlaying, ytNative]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (isYt) {
-      if (audio) {
-        audio.pause();
-        audio.removeAttribute("src");
-      }
-      return;
-    }
     if (!audio) return;
-    if (!current?.streamUrl) {
+    if (isYt && !ytNative) {
       audio.pause();
       audio.removeAttribute("src");
+      delete audio.dataset.src;
       return;
     }
-    audio.src = current.streamUrl;
-    audio.setAttribute("referrerpolicy", "no-referrer");
-    audio.load();
-    if (isPlaying) {
-      void audio.play().catch(() => pause());
+    const src =
+      isYt && current?.videoId ? `/api/stream?v=${current.videoId}` : current?.streamUrl || "";
+    if (!src) {
+      audio.pause();
+      audio.removeAttribute("src");
+      delete audio.dataset.src;
+      return;
     }
-  }, [current?.id, current?.streamUrl, isYt]);
+    if (audio.dataset.src === src) return;
+    audio.dataset.src = src;
+    audio.src = src;
+    audio.load();
+    if (useFlowStore.getState().isPlaying) {
+      void audio.play().catch(() => {
+        if (isYt) setYtNative(false);
+        else pause();
+      });
+    }
+  }, [current?.id, current?.streamUrl, current?.videoId, isYt, ytNative]);
 
   useEffect(() => {
-    if (isYt) {
+    if (isYt && !ytNative) {
       const p = ytRef.current;
       if (!p || !ytReady.current) return;
       if (isPlaying) p.playVideo();
       else p.pauseVideo();
       return;
     }
+    if (isYt && ytNative && ytRef.current && ytReady.current) {
+      ytRef.current.pauseVideo();
+      ytRef.current.mute();
+    }
     const audio = audioRef.current;
     if (!audio) return;
     if (isPlaying) void audio.play().catch(() => pause());
     else audio.pause();
-  }, [isPlaying, isYt]);
+  }, [isPlaying, isYt, ytNative]);
 
   useEffect(() => {
     const p = ytRef.current;
@@ -347,7 +358,7 @@ export function AudioEngine() {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
     if (current?.isLive) return;
-    if (isYt && ytRef.current && ytReady.current) {
+    if (isYt && !ytNative && ytRef.current && ytReady.current) {
       ytRef.current.seekTo(currentTime, true);
       return;
     }
@@ -359,7 +370,7 @@ export function AudioEngine() {
   }, [seekVersion, currentTime, current?.isLive, isYt]);
 
   useEffect(() => {
-    if (!isYt || !isPlaying) return;
+    if (!isYt || ytNative || !isPlaying) return;
     const t = window.setInterval(() => {
       const p = ytRef.current;
       if (!p || !ytReady.current) return;
@@ -373,7 +384,7 @@ export function AudioEngine() {
       }
     }, 250);
     return () => window.clearInterval(t);
-  }, [isYt, isPlaying, setCurrentTime, setDuration]);
+  }, [isYt, ytNative, isPlaying, setCurrentTime, setDuration]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -415,12 +426,47 @@ export function AudioEngine() {
     const keep = keepAliveRef.current;
     if (!keep) return;
     const apple = isAppleMobile();
-    if (isYt && isPlaying && !apple) {
+    if (isYt && isPlaying && !ytNative && !apple) {
       if (keep.paused) void keep.play().catch(() => {});
     } else if (!keep.paused) {
       keep.pause();
     }
-  }, [isYt, isPlaying]);
+  }, [isYt, isPlaying, ytNative]);
+
+  useEffect(() => {
+    if (!isPlaying || !current) return;
+    let lock: WakeLockSentinel | null = null;
+    const grab = () => {
+      const api = navigator.wakeLock;
+      if (!api) return;
+      void api.request("screen").then((sent) => {
+        lock = sent;
+      }).catch(() => {});
+    };
+    grab();
+    const onVis = () => {
+      if (document.visibilityState === "visible") grab();
+      if (!useFlowStore.getState().isPlaying) return;
+      const audio = audioRef.current;
+      if (audio?.paused && (ytNative || !isYt)) void audio.play().catch(() => {});
+      if (!ytNative && isYt && ytRef.current && ytReady.current) {
+        try {
+          ytRef.current.playVideo();
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("focus", onVis);
+    window.addEventListener("pageshow", onVis);
+    return () => {
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onVis);
+      window.removeEventListener("pageshow", onVis);
+      void lock?.release();
+    };
+  }, [isPlaying, current?.id, isYt, ytNative]);
 
   useEffect(() => {
     const unlock = () => {
@@ -452,13 +498,13 @@ export function AudioEngine() {
         ref={audioRef}
         className="hidden"
         playsInline
-        preload="metadata"
+        preload="auto"
         controls={false}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
           setCurrentTime(t);
           const cur = useFlowStore.getState().current;
-          if (cur && cur.source !== "ytmusic") {
+          if (cur && (cur.source !== "ytmusic" || ytNative)) {
             pushLockScreen(cur, !e.currentTarget.paused, t, e.currentTarget.duration, e.currentTarget.playbackRate);
           }
         }}
@@ -467,7 +513,18 @@ export function AudioEngine() {
           if (Number.isFinite(d)) setDuration(d);
         }}
         onEnded={onEnded}
+        onPause={(e) => {
+          const el = e.currentTarget;
+          window.setTimeout(() => {
+            if (!useFlowStore.getState().isPlaying) return;
+            if (el.paused) void el.play().catch(() => {});
+          }, 350);
+        }}
         onError={() => {
+          if (isYt && ytNative) {
+            setYtNative(false);
+            return;
+          }
           if (current && current.source !== "ytmusic") onEnded();
         }}
       />
@@ -475,8 +532,7 @@ export function AudioEngine() {
       <div
         className={cn(
           "overflow-hidden bg-bg ring-1 ring-border yt-dock",
-          !isYt && "pointer-events-none invisible absolute",
-          isYt && hero
+          !isYt || ytNative ? "pointer-events-none invisible absolute" : hero
             ? "pointer-events-none fixed top-[calc(4.5rem+env(safe-area-inset-top))] left-1/2 z-40 w-[min(100%-2rem,22rem)] -translate-x-1/2 rounded-xl aspect-square"
             : isYt && hideVideo
               ? "pointer-events-none fixed right-2 bottom-[max(0.5rem,env(safe-area-inset-bottom))] z-10 size-[120px] rounded-lg opacity-20 md:size-[200px]"
