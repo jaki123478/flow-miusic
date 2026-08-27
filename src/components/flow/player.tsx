@@ -22,6 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
+import { clearAndroidNowPlaying, showAndroidNowPlaying } from "@/lib/music/android-bg";
 import { bindLockScreenActions, isAndroid, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
 import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
@@ -290,13 +291,16 @@ export function AudioEngine() {
       const id = current.videoId;
       const local = cachedAudioUrl(id);
       if (local) applySrc(local);
-      else applySrc(`/api/stream?v=${id}`);
+      else if (!prefersNativeYtAudio()) applySrc(`/api/stream?v=${id}`);
       void loadLocalAudio(id)
         .then((url) => {
           if (cancelled || !audioRef.current) return;
           if (useFlowStore.getState().current?.videoId !== id) return;
           const el = audioRef.current;
-          if (el.dataset.src === url) return;
+          if (el.dataset.src === url) {
+            if (useFlowStore.getState().isPlaying) void el.play().catch(() => {});
+            return;
+          }
           const t = el.currentTime;
           const should = useFlowStore.getState().isPlaying;
           el.dataset.src = url;
@@ -309,10 +313,14 @@ export function AudioEngine() {
           };
           el.addEventListener("loadedmetadata", onMeta);
         })
-        .catch(() => {});
+        .catch(() => {
+          if (!cancelled && !document.hidden && !prefersNativeYtAudio()) setYtNative(false);
+        });
       const q = useFlowStore.getState();
-      const nxt = q.queue[q.queueIndex + 1];
-      if (nxt?.videoId) prefetchAudio(nxt.videoId);
+      const upcoming = q.queue.slice(q.queueIndex + 1, q.queueIndex + 3);
+      for (const t of upcoming) {
+        if (t.videoId) prefetchAudio(t.videoId);
+      }
       return () => {
         cancelled = true;
       };
@@ -478,6 +486,12 @@ export function AudioEngine() {
       stop: () => pause(),
     });
   }, [current, isPlaying, duration, playbackRate, resume, pause, prev, next]);
+
+  useEffect(() => {
+    if (!isAndroid()) return;
+    if (isPlaying && current) showAndroidNowPlaying(current);
+    else clearAndroidNowPlaying();
+  }, [isPlaying, current?.id, current?.title, current?.artist]);
 
   useEffect(() => {
     const keep = keepAliveRef.current;

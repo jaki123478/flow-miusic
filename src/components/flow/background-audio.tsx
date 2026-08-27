@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { androidBackgroundTips } from "@/lib/music/android-bg";
 import { isAndroid, isAppleMobile } from "@/lib/music/lock-screen";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -72,22 +73,16 @@ export function ChromeBackgroundCard() {
 
   return (
     <section className="space-y-3 rounded-lg bg-surface px-4 py-4">
-      <p className="text-sm font-medium">Permessi batteria Chrome</p>
+      <p className="text-sm font-medium">Audio in background Android</p>
       <p className="text-xs text-muted">
-        Android non lascia cambiare la batteria dal sito. Apri le impostazioni e metti Chrome (e Flow) su
-        nessuna limitazione, altrimenti a schermo spento taglia l’audio.
+        Chrome non è Spotify: senza queste 4 cose ferma l’audio a schermo spento.
       </p>
       {android ? (
         <>
           <ol className="list-decimal space-y-1.5 pl-4 text-sm text-muted">
-            <li>Tocca Info Chrome → Batteria → Nessuna limitazione.</li>
-            <li>Poi App non ottimizzate → Chrome e Flow → Non ottimizzare.</li>
-            <li>
-              {standalone
-                ? "Flow è già sulla Home."
-                : "Chrome ⋮ → Installa app, riapri Flow dall’icona."}
-            </li>
-            <li>Non chiudere Flow dallo switcher. Lo schermo può spegnersi.</li>
+            {androidBackgroundTips().map((s) => (
+              <li key={s}>{s}</li>
+            ))}
           </ol>
           <div className="flex flex-wrap gap-2 pt-1">
             <button
