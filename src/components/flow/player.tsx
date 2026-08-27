@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
 import { bindLockScreenActions, isAndroid, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
+import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { PlayingBars, shareTrack, TrackArt, TrackRow } from "./tracks";
@@ -286,16 +287,32 @@ export function AudioEngine() {
     }
 
     if (isYt && current?.videoId) {
-      void fetch(`/api/stream?v=${current.videoId}`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data: { url?: string } | null) => {
-          if (cancelled) return;
-          if (data?.url) applySrc(data.url);
-          else if (!document.hidden) setYtNative(false);
+      const id = current.videoId;
+      const local = cachedAudioUrl(id);
+      if (local) applySrc(local);
+      else applySrc(`/api/stream?v=${id}`);
+      void loadLocalAudio(id)
+        .then((url) => {
+          if (cancelled || !audioRef.current) return;
+          if (useFlowStore.getState().current?.videoId !== id) return;
+          const el = audioRef.current;
+          if (el.dataset.src === url) return;
+          const t = el.currentTime;
+          const should = useFlowStore.getState().isPlaying;
+          el.dataset.src = url;
+          el.src = url;
+          el.load();
+          const onMeta = () => {
+            el.removeEventListener("loadedmetadata", onMeta);
+            if (t > 0 && Number.isFinite(t)) el.currentTime = t;
+            if (should) void el.play().catch(() => {});
+          };
+          el.addEventListener("loadedmetadata", onMeta);
         })
-        .catch(() => {
-          if (!cancelled && !document.hidden) setYtNative(false);
-        });
+        .catch(() => {});
+      const q = useFlowStore.getState();
+      const nxt = q.queue[q.queueIndex + 1];
+      if (nxt?.videoId) prefetchAudio(nxt.videoId);
       return () => {
         cancelled = true;
       };
@@ -466,7 +483,7 @@ export function AudioEngine() {
     const keep = keepAliveRef.current;
     if (!keep) return;
     const apple = isAppleMobile();
-    if (isYt && isPlaying && !ytNative && !apple) {
+    if (isYt && isPlaying && !ytNative && !apple && !isAndroid()) {
       if (keep.paused) void keep.play().catch(() => {});
     } else if (!keep.paused) {
       keep.pause();
@@ -481,6 +498,24 @@ export function AudioEngine() {
     const onVis = () => {
       if (!useFlowStore.getState().isPlaying) return;
       const audio = audioRef.current;
+      const id = useFlowStore.getState().current?.videoId;
+      if (document.hidden && id && audio) {
+        const local = cachedAudioUrl(id);
+        if (local && audio.dataset.src !== local) {
+          const t = audio.currentTime;
+          audio.dataset.src = local;
+          audio.src = local;
+          audio.load();
+          audio.addEventListener(
+            "loadedmetadata",
+            () => {
+              if (t > 0) audio.currentTime = t;
+              void audio.play().catch(() => {});
+            },
+            { once: true },
+          );
+        }
+      }
       if (audio?.paused && (ytNative || !isYt)) void audio.play().catch(() => {});
       if (!ytNative && isYt && ytRef.current && ytReady.current) {
         try {
@@ -560,16 +595,17 @@ export function AudioEngine() {
           const cur = useFlowStore.getState().current;
           if (cur?.source === "ytmusic" && ytNative && cur.videoId && audio && audio.dataset.retried !== "1") {
             audio.dataset.retried = "1";
-            void fetch(`/api/stream?v=${cur.videoId}`)
-              .then((r) => (r.ok ? r.json() : null))
-              .then((data: { url?: string } | null) => {
-                if (!data?.url || !audioRef.current) return;
-                audioRef.current.src = data.url;
-                audioRef.current.dataset.src = data.url;
+            void loadLocalAudio(cur.videoId)
+              .then((url) => {
+                if (!audioRef.current) return;
+                audioRef.current.src = url;
+                audioRef.current.dataset.src = url;
                 audioRef.current.load();
                 if (useFlowStore.getState().isPlaying) void audioRef.current.play().catch(() => {});
               })
-              .catch(() => {});
+              .catch(() => {
+                if (!document.hidden) setYtNative(false);
+              });
             return;
           }
           if (document.hidden) return;

@@ -1,0 +1,44 @@
+const cache = new Map<string, string>();
+const inflight = new Map<string, Promise<string>>();
+
+function trimCache() {
+  while (cache.size > 8) {
+    const id = cache.keys().next().value;
+    if (!id) break;
+    const url = cache.get(id);
+    if (url) URL.revokeObjectURL(url);
+    cache.delete(id);
+  }
+}
+
+export function cachedAudioUrl(id: string): string | undefined {
+  return cache.get(id);
+}
+
+export function prefetchAudio(id: string) {
+  if (!id || cache.has(id) || inflight.has(id)) return;
+  void loadLocalAudio(id).catch(() => {});
+}
+
+export async function loadLocalAudio(id: string): Promise<string> {
+  const hit = cache.get(id);
+  if (hit) return hit;
+  const pending = inflight.get(id);
+  if (pending) return pending;
+  const job = (async () => {
+    const res = await fetch(`/api/stream?v=${id}`);
+    if (!res.ok) throw new Error("stream");
+    const blob = await res.blob();
+    if (!blob.size) throw new Error("empty");
+    const url = URL.createObjectURL(blob);
+    cache.set(id, url);
+    trimCache();
+    return url;
+  })();
+  inflight.set(id, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(id);
+  }
+}

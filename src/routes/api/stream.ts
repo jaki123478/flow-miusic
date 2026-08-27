@@ -15,19 +15,49 @@ async function resolveUrl(id: string, force = false): Promise<string | null> {
 async function handleStream(request: Request): Promise<Response> {
   const id = new URL(request.url).searchParams.get("v") || "";
   if (!/^[\w-]{11}$/.test(id)) return new Response("Bad request", { status: 400 });
-  let url = await resolveUrl(id, false);
-  if (!url) url = await resolveUrl(id, true);
-  if (!url) return new Response("No stream", { status: 404 });
-  return Response.json(
-    { url },
-    { headers: { "Cache-Control": "private, max-age=30" } },
-  );
+
+  const play = async (force: boolean) => {
+    const target = await resolveUrl(id, force);
+    if (!target) return null;
+    const headers = new Headers();
+    const range = request.headers.get("range");
+    if (range) headers.set("Range", range);
+    headers.set(
+      "User-Agent",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    );
+    headers.set("Accept", "*/*");
+    headers.set("Referer", "https://www.youtube.com/");
+    return fetch(target, { headers, redirect: "follow" });
+  };
+
+  let upstream = await play(false);
+  if (!upstream || upstream.status === 403 || upstream.status === 410) {
+    cache.delete(id);
+    upstream = await play(true);
+  }
+  if (!upstream) return new Response("No stream", { status: 404 });
+
+  const out = new Headers();
+  for (const key of ["content-type", "content-length", "content-range", "accept-ranges"]) {
+    const v = upstream.headers.get(key);
+    if (v) out.set(key, v);
+  }
+  if (!out.has("accept-ranges")) out.set("Accept-Ranges", "bytes");
+  if (!out.has("content-type")) out.set("Content-Type", "audio/mp4");
+  out.set("Cache-Control", "private, max-age=120");
+
+  return new Response(request.method === "HEAD" ? null : upstream.body, {
+    status: upstream.status,
+    headers: out,
+  });
 }
 
 export const Route = createFileRoute("/api/stream")({
   server: {
     handlers: {
       GET: async ({ request }) => handleStream(request),
+      HEAD: async ({ request }) => handleStream(request),
     },
   },
 });
