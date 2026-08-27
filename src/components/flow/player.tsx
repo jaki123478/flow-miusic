@@ -21,7 +21,7 @@ import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/musi
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import { cachedAudioUrl, loadLocalAudio } from "@/lib/music/offline-audio";
 
-function mediaSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
+function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   if (track.videoId) return cachedAudioUrl(track.videoId) || `/api/stream?v=${track.videoId}`;
   return track.streamUrl || "";
@@ -44,6 +44,16 @@ export function AudioEngine() {
   const lastPos = useRef(0);
   const recovering = useRef("");
 
+  const applySrc = (audio: HTMLAudioElement, src: string, play: boolean) => {
+    if (!src) return;
+    if (lastSrc.current !== src) {
+      lastSrc.current = src;
+      audio.src = src;
+      audio.load();
+    }
+    if (play) void audio.play().catch(() => {});
+  };
+
   const recover = (id: string, time: number) => {
     const audio = audioRef.current;
     if (!audio || recovering.current === id) return;
@@ -51,9 +61,7 @@ export function AudioEngine() {
     void loadLocalAudio(id)
       .then((url) => {
         if (useFlowStore.getState().current?.videoId !== id) return;
-        lastSrc.current = url;
-        audio.src = url;
-        audio.load();
+        applySrc(audio, url, true);
         const jump = () => {
           try {
             if (time > 0) audio.currentTime = time;
@@ -63,7 +71,6 @@ export function AudioEngine() {
           if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
         };
         audio.addEventListener("loadedmetadata", jump, { once: true });
-        void audio.play().catch(() => {});
       })
       .catch(() => {
         if (recovering.current === id) recovering.current = "";
@@ -96,25 +103,36 @@ export function AudioEngine() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !current) return;
-    const src = mediaSrc(current);
-    if (!src) return;
+    let cancelled = false;
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
-    if (lastSrc.current !== src) {
-      lastSrc.current = src;
-      audio.src = src;
-      audio.load();
-    }
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
+    const wantPlay = useFlowStore.getState().isPlaying;
+    applySrc(audio, fallbackSrc(current), wantPlay);
     claimAudioFocus();
-    if (useFlowStore.getState().isPlaying) {
+    if (wantPlay) {
       markPlayingForFocus(true);
-      void audio.play().catch(() => {});
       showAndroidNowPlaying(current);
     }
-    pushLockScreen(current, Boolean(useFlowStore.getState().isPlaying), 0, current.duration || 0, 1);
+    pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
+
+    if (current.videoId && !cachedAudioUrl(current.videoId)) {
+      const id = current.videoId;
+      void fetch(`/api/stream?v=${id}&src=1`)
+        .then((r) => r.json())
+        .then((j: { url?: string | null }) => {
+          if (cancelled || !j?.url) return;
+          if (useFlowStore.getState().current?.videoId !== id) return;
+          applySrc(audio, j.url, useFlowStore.getState().isPlaying);
+        })
+        .catch(() => {});
+    }
+
+    return () => {
+      cancelled = true;
+    };
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   useEffect(() => {
@@ -202,6 +220,15 @@ export function AudioEngine() {
       onPause={() => {
         const s = useFlowStore.getState();
         if (s.isPlaying) void audioRef.current?.play().catch(() => {});
+      }}
+      onError={() => {
+        const s = useFlowStore.getState();
+        const id = s.current?.videoId;
+        const audio = audioRef.current;
+        if (!id || !audio) return;
+        const proxy = `/api/stream?v=${id}`;
+        if (!audio.src.includes("/api/stream")) applySrc(audio, proxy, s.isPlaying);
+        else if (s.isPlaying) recover(id, s.currentTime);
       }}
       onStalled={() => {
         const s = useFlowStore.getState();
