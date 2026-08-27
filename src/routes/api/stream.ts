@@ -17,13 +17,36 @@ async function handleStream(request: Request): Promise<Response> {
   const id = parsed.searchParams.get("v") || "";
   if (!/^[\w-]{11}$/.test(id)) return new Response("Bad request", { status: 400 });
 
-  if (parsed.searchParams.get("src")) {
+  const wantSrc =
+    parsed.searchParams.has("src") ||
+    (request.headers.get("accept") || "").includes("application/json");
+
+  if (wantSrc && parsed.searchParams.has("src")) {
     let target = await resolveUrl(id, false);
     if (!target) target = await resolveUrl(id, true);
-    if (!target) return Response.json({ url: null }, { status: 404 });
+    if (!target) {
+      return Response.json(
+        { url: null },
+        {
+          status: 404,
+          headers: {
+            "Content-Type": "application/json; charset=utf-8",
+            "Cache-Control": "no-store",
+            Vary: "Accept",
+          },
+        },
+      );
+    }
     return Response.json(
       { url: target },
-      { headers: { "Cache-Control": "private, max-age=60", "Access-Control-Allow-Origin": "*" } },
+      {
+        headers: {
+          "Content-Type": "application/json; charset=utf-8",
+          "Cache-Control": "no-store",
+          "Access-Control-Allow-Origin": "*",
+          Vary: "Accept",
+        },
+      },
     );
   }
 
@@ -57,6 +80,7 @@ async function handleStream(request: Request): Promise<Response> {
   if (!out.has("accept-ranges")) out.set("Accept-Ranges", "bytes");
   if (!out.has("content-type")) out.set("Content-Type", "audio/mp4");
   out.set("Cache-Control", "private, max-age=120");
+  out.set("Vary", "Accept, Range");
 
   return new Response(request.method === "HEAD" ? null : upstream.body, {
     status: upstream.status,
