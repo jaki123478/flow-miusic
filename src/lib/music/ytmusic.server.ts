@@ -2,7 +2,6 @@ import { Innertube } from "youtubei.js";
 import { FALLBACK_ART, type Track } from "./types";
 
 let tubePromise: Promise<Innertube> | null = null;
-let streamTubePromise: Promise<Innertube> | null = null;
 
 export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
@@ -19,39 +18,22 @@ export async function getTube(): Promise<Innertube> {
   return tubePromise;
 }
 
-async function getStreamTube(): Promise<Innertube> {
-  if (!streamTubePromise) {
-    streamTubePromise = Innertube.create({
-      retrieve_player: true,
-      generate_session_locally: true,
-      lang: "it",
-      location: "IT",
-    }).catch((err) => {
-      streamTubePromise = null;
-      throw err;
-    });
-  }
-  return streamTubePromise;
-}
-
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
-  try {
-    const yt = await getStreamTube();
-    const format = await yt.getStreamingData(id, { type: "audio", quality: "bestefficiency" });
-    const url = format.url || (await format.decipher(yt.session.player));
-    return url || null;
-  } catch {
+  const yt = await getTube();
+  const clients = ["IOS", "ANDROID", "YTMUSIC"] as const;
+  for (const client of clients) {
     try {
-      const yt = await getStreamTube();
-      const info = await yt.getBasicInfo(id);
+      const info = await yt.getBasicInfo(id, { client });
       const format = info.chooseFormat({ type: "audio", quality: "bestefficiency" });
-      return (await format.decipher(yt.session.player)) || format.url || null;
+      const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
+      if (url) return url;
     } catch {
-      return null;
+      /* next client */
     }
   }
+  return null;
 }
 
 function txt(value: unknown): string {

@@ -270,12 +270,20 @@ export function AudioEngine() {
     if (audio.dataset.src === src) return;
     audio.dataset.src = src;
     audio.src = src;
+    audio.setAttribute("playsinline", "true");
+    audio.setAttribute("webkit-playsinline", "true");
     audio.load();
     if (useFlowStore.getState().isPlaying) {
-      void audio.play().catch(() => {
-        if (isYt) setYtNative(false);
-        else pause();
-      });
+      const tryPlay = () =>
+        audio.play().catch(() => {
+          window.setTimeout(() => {
+            void audio.play().catch(() => {
+              if (isYt) setYtNative(false);
+              else pause();
+            });
+          }, 600);
+        });
+      void tryPlay();
     }
   }, [current?.id, current?.streamUrl, current?.videoId, isYt, ytNative]);
 
@@ -306,7 +314,7 @@ export function AudioEngine() {
       if (left >= 0 && left < settings.crossfade) gain *= left / settings.crossfade;
     }
     gain = Math.min(1, Math.max(0, gain));
-    if (p && ytReady.current) {
+    if (!ytNative && p && ytReady.current) {
       if (isMuted) p.mute();
       else {
         p.unMute();
@@ -323,9 +331,10 @@ export function AudioEngine() {
       audio.volume = gain;
       audio.playbackRate = current?.isLive ? 1 : playbackRate;
     }
-  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, currentTime, duration, isYt]);
+  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, currentTime, duration, isYt, ytNative]);
 
   useEffect(() => {
+    if (prefersNativeYtAudio()) return;
     const audio = audioRef.current;
     if (!audio || eqRef.current) return;
     try {
@@ -496,7 +505,7 @@ export function AudioEngine() {
     <>
       <audio
         ref={audioRef}
-        className="hidden"
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
         playsInline
         preload="auto"
         controls={false}
@@ -528,7 +537,14 @@ export function AudioEngine() {
           if (current && current.source !== "ytmusic") onEnded();
         }}
       />
-      <audio ref={keepAliveRef} src="/silence.wav" loop playsInline preload="auto" className="hidden" />
+      <audio
+        ref={keepAliveRef}
+        src="/silence.wav"
+        loop
+        playsInline
+        preload="auto"
+        className="pointer-events-none fixed bottom-0 left-1 h-px w-px opacity-[0.01]"
+      />
       <div
         className={cn(
           "overflow-hidden bg-bg ring-1 ring-border yt-dock",
