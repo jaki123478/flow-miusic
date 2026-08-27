@@ -20,7 +20,6 @@ import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import { cachedAudioUrl, loadLocalAudio } from "@/lib/music/offline-audio";
-import { resolveDirectUrl } from "@/lib/music/play-src";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -60,13 +59,31 @@ export function AudioEngine() {
   const lastMove = useRef(0);
   const lastPos = useRef(0);
   const recovering = useRef("");
+  const primed = useRef("");
 
-  const applySrc = (audio: HTMLAudioElement, src: string, play: boolean) => {
+  const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
+    const going = !audio.paused && audio.currentTime > 0.4;
+    if (!force && going && lastSrc.current && lastSrc.current !== src) return;
     if (lastSrc.current !== src) {
+      if (document.hidden && !force) return;
+      const keep = audio.currentTime || 0;
       lastSrc.current = src;
       audio.src = src;
       audio.load();
+      if (keep > 0.4) {
+        audio.addEventListener(
+          "loadedmetadata",
+          () => {
+            try {
+              audio.currentTime = keep;
+            } catch {
+              /* ignore */
+            }
+          },
+          { once: true },
+        );
+      }
     }
     applyOutput(audio);
     if (play) void audio.play().catch(() => {});
@@ -79,7 +96,7 @@ export function AudioEngine() {
     void loadLocalAudio(id)
       .then((url) => {
         if (useFlowStore.getState().current?.videoId !== id) return;
-        applySrc(audio, url, true);
+        applySrc(audio, url, true, true);
         const jump = () => {
           try {
             if (time > 0) audio.currentTime = time;
@@ -121,33 +138,20 @@ export function AudioEngine() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !current) return;
-    let cancelled = false;
     recovering.current = "";
+    primed.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
-    applySrc(audio, fallbackSrc(current), wantPlay);
+    applySrc(audio, fallbackSrc(current), wantPlay, true);
     claimAudioFocus();
     if (wantPlay) {
       markPlayingForFocus(true);
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
-
-    if (current.videoId && !cachedAudioUrl(current.videoId)) {
-      const id = current.videoId;
-      void resolveDirectUrl(id).then((url) => {
-        if (cancelled || !url) return;
-        if (useFlowStore.getState().current?.videoId !== id) return;
-        applySrc(audio, url, useFlowStore.getState().isPlaying);
-      });
-    }
-
-    return () => {
-      cancelled = true;
-    };
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   useEffect(() => {
@@ -185,6 +189,13 @@ export function AudioEngine() {
       if (t > lastPos.current + 0.15) {
         lastPos.current = t;
         lastMove.current = Date.now();
+        const id = s.current.videoId;
+        if (id && t > 1.5 && primed.current !== id) {
+          primed.current = id;
+          void loadLocalAudio(id).catch(() => {
+            if (primed.current === id) primed.current = "";
+          });
+        }
         return;
       }
       if (Date.now() - lastMove.current > 3500 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
@@ -231,6 +242,12 @@ export function AudioEngine() {
         if (track) {
           markPlayingForFocus(true);
           pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
+          if (track.videoId && primed.current !== track.videoId) {
+            primed.current = track.videoId;
+            void loadLocalAudio(track.videoId).catch(() => {
+              if (primed.current === track.videoId) primed.current = "";
+            });
+          }
         }
       }}
       onPause={() => {
@@ -242,8 +259,9 @@ export function AudioEngine() {
         const id = s.current?.videoId;
         const audio = audioRef.current;
         if (!id || !audio) return;
-        const proxy = `/api/stream?v=${id}`;
-        if (!audio.src.includes("/api/stream")) applySrc(audio, proxy, s.isPlaying);
+        const blob = cachedAudioUrl(id);
+        if (blob) applySrc(audio, blob, s.isPlaying, true);
+        else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
         else if (s.isPlaying) recover(id, s.currentTime);
       }}
       onStalled={() => {
