@@ -17,11 +17,6 @@ import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { TrackArt, TrackRow } from "./tracks";
 
-function playSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
-  if (track.source === "ytmusic" && track.videoId) return `/api/stream?v=${track.videoId}`;
-  return track.streamUrl || "";
-}
-
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const current = useFlowStore((s) => s.current);
@@ -35,58 +30,98 @@ export function AudioEngine() {
   const onEnded = useFlowStore((s) => s.onEnded);
   const lastSeek = useRef(0);
   const lastSrc = useRef("");
+  const lastTick = useRef(0);
+
+  const ytId = current?.source === "ytmusic" ? current.videoId : undefined;
+  const radioSrc = current?.source === "radio" ? current.streamUrl : "";
+
+  useEffect(() => {
+    if (current?.duration && current.duration > 0) setDuration(current.duration);
+  }, [current?.id, current?.duration, setDuration]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !current) return;
-    const src = playSrc(current);
+    if (!audio) return;
+    const src = radioSrc || (!ytId && current?.streamUrl) || "";
     if (!src) return;
     if (lastSrc.current === src) return;
     lastSrc.current = src;
     audio.src = src;
     audio.load();
-    if (useFlowStore.getState().isPlaying) {
-      void audio.play().catch(() => {});
-    }
-  }, [current?.id, current?.videoId, current?.streamUrl]);
+    if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+  }, [current?.id, radioSrc, ytId, current?.streamUrl]);
 
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
+    if (!radioSrc) return;
     if (isPlaying) void audio.play().catch(() => {});
     else audio.pause();
-  }, [isPlaying]);
+  }, [isPlaying, radioSrc]);
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
-    audio.volume = isMuted ? 0 : volume;
+    if (audio) audio.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
 
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
     const audio = audioRef.current;
-    if (!audio) return;
-    if (Math.abs(audio.currentTime - currentTime) > 0.4) audio.currentTime = currentTime;
-  }, [seekVersion, currentTime]);
+    if (audio && radioSrc && Math.abs(audio.currentTime - currentTime) > 0.4) {
+      audio.currentTime = currentTime;
+    }
+  }, [seekVersion, currentTime, radioSrc]);
+
+  useEffect(() => {
+    if (!isPlaying || !current) return;
+    lastTick.current = performance.now();
+    const t = window.setInterval(() => {
+      const s = useFlowStore.getState();
+      if (!s.isPlaying || !s.current) return;
+      const now = performance.now();
+      const dt = Math.min(1, (now - lastTick.current) / 1000);
+      lastTick.current = now;
+      const next = s.currentTime + dt;
+      if (s.duration > 1 && next >= s.duration - 0.05) {
+        s.onEnded();
+        return;
+      }
+      s.setCurrentTime(next);
+    }, 250);
+    return () => window.clearInterval(t);
+  }, [isPlaying, current?.id]);
 
   return (
-    <audio
-      ref={audioRef}
-      playsInline
-      preload="auto"
-      className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
-      onTimeUpdate={(e) => {
-        const t = e.currentTarget.currentTime;
-        if (Number.isFinite(t)) setCurrentTime(t);
-      }}
-      onDurationChange={(e) => {
-        const d = e.currentTarget.duration;
-        if (Number.isFinite(d) && d > 0) setDuration(d);
-      }}
-      onEnded={onEnded}
-    />
+    <>
+      <audio
+        ref={audioRef}
+        playsInline
+        preload="auto"
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
+        onTimeUpdate={(e) => {
+          if (ytId) return;
+          const t = e.currentTarget.currentTime;
+          if (Number.isFinite(t) && t > 0) setCurrentTime(t);
+        }}
+        onDurationChange={(e) => {
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setDuration(d);
+        }}
+        onEnded={() => {
+          if (!ytId) onEnded();
+        }}
+      />
+      {ytId && isPlaying ? (
+        <iframe
+          key={ytId}
+          title="player"
+          src={`https://www.youtube.com/embed/${ytId}?autoplay=1&rel=0&modestbranding=1&playsinline=1&controls=0`}
+          allow="autoplay; encrypted-media; picture-in-picture"
+          className="pointer-events-none fixed right-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[55] size-[168px] rounded-lg border-0 opacity-90 md:bottom-[100px]"
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -172,15 +207,7 @@ export function MiniPlayer() {
           </div>
           <div className="flex w-full items-center gap-2">
             <span className="w-10 text-right text-[11px] tabular-nums text-subtle">{formatTime(currentTime)}</span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 1}
-              step={0.25}
-              value={Math.min(currentTime, duration || 1)}
-              onChange={(e) => seek(Number(e.target.value))}
-              className="seek flex-1"
-            />
+            <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="seek flex-1" />
             <span className="w-10 text-[11px] tabular-nums text-subtle">{formatTime(duration)}</span>
           </div>
         </div>
