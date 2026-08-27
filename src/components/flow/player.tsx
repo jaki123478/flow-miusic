@@ -27,12 +27,28 @@ function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: str
   return track.streamUrl || "";
 }
 
+function applyOutput(audio: HTMLAudioElement) {
+  const s = useFlowStore.getState();
+  const raw = s.isMuted ? 0 : s.volume;
+  const norm = s.settings.normalize ? 0.92 : 1;
+  const duck = s.voiceDuck ? 0.28 : 1;
+  audio.volume = Math.max(0, Math.min(1, raw * norm * duck));
+  try {
+    audio.playbackRate = s.playbackRate || 1;
+  } catch {
+    /* ignore */
+  }
+}
+
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const current = useFlowStore((s) => s.current);
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const volume = useFlowStore((s) => s.volume);
   const isMuted = useFlowStore((s) => s.isMuted);
+  const voiceDuck = useFlowStore((s) => s.voiceDuck);
+  const playbackRate = useFlowStore((s) => s.playbackRate);
+  const normalize = useFlowStore((s) => s.settings.normalize);
   const seekVersion = useFlowStore((s) => s.seekVersion);
   const currentTime = useFlowStore((s) => s.currentTime);
   const setCurrentTime = useFlowStore((s) => s.setCurrentTime);
@@ -51,6 +67,7 @@ export function AudioEngine() {
       audio.src = src;
       audio.load();
     }
+    applyOutput(audio);
     if (play) void audio.play().catch(() => {});
   };
 
@@ -120,7 +137,7 @@ export function AudioEngine() {
 
     if (current.videoId && !cachedAudioUrl(current.videoId)) {
       const id = current.videoId;
-      void fetch(`/api/stream?v=${id}&src=1`)
+      void fetch(`/api/play?v=${id}`, { cache: "no-store", headers: { Accept: "application/json" } })
         .then((r) => r.json())
         .then((j: { url?: string | null }) => {
           if (cancelled || !j?.url) return;
@@ -140,6 +157,7 @@ export function AudioEngine() {
     if (!audio) return;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
+    applyOutput(audio);
     if (isPlaying) void audio.play().catch(() => {});
     else audio.pause();
     if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
@@ -147,8 +165,8 @@ export function AudioEngine() {
 
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio) audio.volume = isMuted ? 0 : volume;
-  }, [volume, isMuted]);
+    if (audio) applyOutput(audio);
+  }, [volume, isMuted, voiceDuck, playbackRate, normalize]);
 
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
@@ -166,19 +184,19 @@ export function AudioEngine() {
       claimAudioFocus();
       if (audio.paused) void audio.play().catch(() => {});
       const t = audio.currentTime || 0;
-      if (t > lastPos.current + 0.2) {
+      if (t > lastPos.current + 0.15) {
         lastPos.current = t;
         lastMove.current = Date.now();
         return;
       }
-      if (Date.now() - lastMove.current > 5000 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
+      if (Date.now() - lastMove.current > 3500 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
         recover(s.current.videoId, t || s.currentTime);
       }
     };
     document.addEventListener("visibilitychange", kick);
     window.addEventListener("pageshow", kick);
     window.addEventListener("focus", kick);
-    const watchdog = window.setInterval(kick, 3000);
+    const watchdog = window.setInterval(kick, 2000);
     return () => {
       document.removeEventListener("visibilitychange", kick);
       window.removeEventListener("pageshow", kick);
@@ -244,6 +262,7 @@ export function MiniPlayer() {
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const currentTime = useFlowStore((s) => s.currentTime);
   const duration = useFlowStore((s) => s.duration);
+  const remainingTime = useFlowStore((s) => s.settings.remainingTime);
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
@@ -264,6 +283,7 @@ export function MiniPlayer() {
   if (!mounted || !current) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
+  const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
   return (
     <div className={cn("now-bar pointer-events-auto bg-elevated md:bg-bg", (!open || showFull) && "is-away")}>
       <div className="md:hidden">
@@ -307,7 +327,7 @@ export function MiniPlayer() {
           <div className="flex w-full items-center gap-2">
             <span className="w-10 text-right text-[11px] tabular-nums text-subtle">{formatTime(currentTime)}</span>
             <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="seek flex-1" />
-            <span className="w-10 text-[11px] tabular-nums text-subtle">{formatTime(duration)}</span>
+            <span className="w-10 text-[11px] tabular-nums text-subtle">{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
           </div>
         </div>
         <div className="flex flex-1 items-center justify-end gap-2">
@@ -324,6 +344,7 @@ export function FullPlayer() {
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const currentTime = useFlowStore((s) => s.currentTime);
   const duration = useFlowStore((s) => s.duration);
+  const remainingTime = useFlowStore((s) => s.settings.remainingTime);
   const queue = useFlowStore((s) => s.queue);
   const show = useFlowStore((s) => s.showFullPlayer);
   const showQueue = useFlowStore((s) => s.showQueue);
@@ -338,6 +359,7 @@ export function FullPlayer() {
   const { mounted, open } = useOpenTransition(show, 260);
   if (!mounted || !current) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
+  const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
   return (
     <div className={cn("player-full fixed inset-0 z-50 flex h-dvh flex-col bg-bg pt-[env(safe-area-inset-top)]", open ? "is-open" : "is-closing")} role="dialog">
       <div className="flex items-center justify-between px-2 py-1">
@@ -358,7 +380,7 @@ export function FullPlayer() {
             <button type="button" onClick={() => toggleLike(current)} className={liked ? "text-primary" : "text-muted"}><Heart className={cn("size-6", liked && "fill-current")} /></button>
           </div>
           <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="mt-6 h-1.5 w-full appearance-none rounded-full bg-elevated" style={{ background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)` }} />
-          <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle"><span>{formatTime(currentTime)}</span><span>{formatTime(duration)}</span></div>
+          <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle"><span>{formatTime(currentTime)}</span><span>{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span></div>
           <div className="mt-4 flex items-center justify-center gap-6">
             <button type="button" onClick={prev} aria-label="Prev"><SkipBack className="size-7 fill-current" /></button>
             <button type="button" onClick={togglePlay} className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg" aria-label="Play">{isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="size-7 fill-current" />}</button>
