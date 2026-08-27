@@ -4,6 +4,7 @@ import { signOut } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { loadLibrary, saveLibrary } from "@/lib/music/cloud";
 import { getRelatedTracks } from "@/lib/music/catalog";
+import { installWebSocketGuard } from "@/lib/net/websocket";
 import { useT } from "@/lib/i18n";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -76,29 +77,11 @@ export function InstallHint() {
     <div className="flex items-center gap-2 bg-elevated px-3 py-2 text-xs text-fg md:hidden">
       <p className="min-w-0 flex-1">{text}</p>
       {promptEvent ? (
-        <button
-          type="button"
-          className="font-semibold text-primary"
-          onClick={() => {
-            void promptEvent.prompt();
-            setText(null);
-          }}
-        >
+        <button type="button" className="font-semibold text-primary" onClick={() => { void promptEvent.prompt(); setText(null); }}>
           Installa
         </button>
       ) : null}
-      <button
-        type="button"
-        className="text-muted"
-        onClick={() => {
-          try {
-            localStorage.setItem("flow_install_hide", "1");
-          } catch {
-            /* ignore */
-          }
-          setText(null);
-        }}
-      >
+      <button type="button" className="text-muted" onClick={() => { try { localStorage.setItem("flow_install_hide", "1"); } catch { /* ignore */ } setText(null); }}>
         Chiudi
       </button>
     </div>
@@ -128,15 +111,7 @@ export function AuthChip() {
         </span>
       )}
       <span className="hidden max-w-[8rem] truncate text-sm font-medium md:inline">{label}</span>
-      <button
-        type="button"
-        disabled={signingOut}
-        onClick={() => {
-          setSigningOut(true);
-          void signOut().catch(() => setSigningOut(false));
-        }}
-        className="text-xs font-medium text-muted hover:text-fg"
-      >
+      <button type="button" disabled={signingOut} onClick={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }} className="text-xs font-medium text-muted hover:text-fg">
         {signingOut ? "…" : t("logout")}
       </button>
     </div>
@@ -154,8 +129,7 @@ export function CloudSync() {
       .then((data) => {
         if (cancelled) return;
         const local = useFlowStore.getState();
-        const remoteHas =
-          data && (data.liked.length > 0 || data.playlists.length > 0 || data.recents.length > 0);
+        const remoteHas = data && (data.liked.length > 0 || data.playlists.length > 0 || data.recents.length > 0);
         if (remoteHas && data) local.importCloud(data);
         else {
           void saveLibrary({ data: local.dumpCloud() }).catch(() => {});
@@ -168,15 +142,7 @@ export function CloudSync() {
 
     const unsub = useFlowStore.subscribe((s, prev) => {
       if (!s.cloudReady) return;
-      if (
-        s.liked === prev.liked &&
-        s.recents === prev.recents &&
-        s.playlists === prev.playlists &&
-        s.settings === prev.settings &&
-        s.volume === prev.volume
-      ) {
-        return;
-      }
+      if (s.liked === prev.liked && s.recents === prev.recents && s.playlists === prev.playlists && s.settings === prev.settings && s.volume === prev.volume) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
         void saveLibrary({ data: useFlowStore.getState().dumpCloud() }).catch(() => {});
@@ -196,6 +162,7 @@ export function CloudSync() {
 export function Prefs() {
   const theme = useFlowStore((s) => s.settings.theme);
   const locale = useFlowStore((s) => s.settings.locale);
+  const notify = useFlowStore((s) => s.notify);
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("theme-light", theme === "light");
@@ -206,6 +173,7 @@ export function Prefs() {
     document.addEventListener("visibilitychange", vis);
     return () => document.removeEventListener("visibilitychange", vis);
   }, [theme, locale]);
+  useEffect(() => installWebSocketGuard((msg) => notify(msg)), [notify]);
   return null;
 }
 
