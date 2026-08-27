@@ -7,6 +7,7 @@ import { getRelatedTracks } from "@/lib/music/catalog";
 import { installWebSocketGuard } from "@/lib/net/websocket";
 import { useT } from "@/lib/i18n";
 import { useFlowStore } from "@/stores/flow-store";
+import { PlaybackWatch } from "./playback-watch";
 
 export function HelpOverlay() {
   const show = useFlowStore((s) => s.showHelp);
@@ -174,7 +175,7 @@ export function Prefs() {
     return () => document.removeEventListener("visibilitychange", vis);
   }, [theme, locale]);
   useEffect(() => installWebSocketGuard((msg) => notify(msg)), [notify]);
-  return null;
+  return <PlaybackWatch />;
 }
 
 export function StationEngine() {
