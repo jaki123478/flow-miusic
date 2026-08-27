@@ -9,6 +9,8 @@ import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
 import { ActionSheet, TrackArt } from "./tracks";
 import { HelpOverlay, InstallHint, AuthChip, CloudSync, Prefs, StationEngine } from "./chrome";
 import { ToastHost } from "./toast";
+import { ChatPanel } from "./chat-panel";
+import { ChatFab, ChatToggle } from "./chat-fab";
 
 const NAV = [
   { to: "/", label: "Home", icon: House },
@@ -135,6 +137,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   });
   const { user, isPending } = useCurrentUserState();
   const hydrate = useFlowStore((s) => s.hydrate);
+  const showChat = useFlowStore((s) => s.showChat);
   const isLogin = pathname === "/login";
 
   useEffect(() => {
@@ -203,8 +206,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         s.setShowHelp(!s.showHelp);
         return;
       }
+      if (e.key === "d" || e.key === "D") {
+        e.preventDefault();
+        s.setShowChat(!s.showChat);
+        return;
+      }
       if (e.key === "Escape") {
         if (s.actionTrack) s.setActionTrack(null);
+        else if (s.showChat) s.setShowChat(false);
         else if (s.showFullPlayer) s.setShowFullPlayer(false);
       }
     };
@@ -278,6 +287,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
             <div className="ml-auto flex items-center gap-2">
+              <ChatToggle />
               <AuthChip />
               <Link to="/settings" className="rounded-full p-2 text-muted" aria-label="Impostazioni">
                 <Settings className="size-5" />
@@ -315,6 +325,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Settings className="size-4" />
               Impostazioni
             </Link>
+            <ChatToggle />
             <div className="pl-2">
               <AuthChip />
             </div>
@@ -327,10 +338,16 @@ export function AppShell({ children }: { children: ReactNode }) {
             {children}
           </main>
         </div>
+        {showChat ? (
+          <aside className="fixed inset-0 z-[45] overflow-hidden bg-surface md:static md:z-auto md:w-80 md:shrink-0 md:rounded-lg">
+            <ChatPanel />
+          </aside>
+        ) : null}
       </div>
 
       <div className="relative z-40 shrink-0">
         <MiniPlayer />
+        <ChatFab />
         <nav className="flex border-t border-border bg-bg pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] md:hidden">
           {NAV.map((item) => {
             const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);

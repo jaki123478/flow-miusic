@@ -81,6 +81,7 @@ interface FlowState {
   notice: string | null;
   listenMs: number;
   showHelp: boolean;
+  showChat: boolean;
   cloudReady: boolean;
   stationOn: boolean;
   plays: Record<string, number>;
@@ -134,6 +135,7 @@ interface FlowState {
   notify: (msg: string) => void;
   addListenMs: (ms: number) => void;
   setShowHelp: (v: boolean) => void;
+  setShowChat: (v: boolean) => void;
   importCloud: (data: {
     liked: Track[];
     recents: Track[];
@@ -192,6 +194,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   notice: null,
   listenMs: 0,
   showHelp: false,
+  showChat: false,
   cloudReady: false,
   stationOn: false,
   plays: {},
@@ -513,6 +516,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     set({ listenMs });
   },
   setShowHelp: (v) => set({ showHelp: v }),
+  setShowChat: (v) => set({ showChat: v }),
   importCloud: (data) => {
     const liked = (data.liked ?? []).map(sanitizeTrack);
     const recents = (data.recents ?? []).map(sanitizeTrack);

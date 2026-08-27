@@ -19,6 +19,7 @@ export function HelpOverlay() {
     ["M", "Muto"],
     ["S / R", "Casuale / Ripeti"],
     ["F / L / Q", "Player / Testi / Coda"],
+    ["D", "Flow DJ"],
     ["Esc", "Chiudi"],
   ];
   return (
