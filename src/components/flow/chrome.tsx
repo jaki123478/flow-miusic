@@ -200,6 +200,10 @@ export function Prefs() {
     root.classList.toggle("theme-light", theme === "light");
     root.lang = locale;
     root.style.colorScheme = theme;
+    const vis = () => root.classList.toggle("app-hidden", document.hidden);
+    vis();
+    document.addEventListener("visibilitychange", vis);
+    return () => document.removeEventListener("visibilitychange", vis);
   }, [theme, locale]);
   return null;
 }

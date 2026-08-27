@@ -519,3 +519,9 @@ html.theme-light {
   --color-danger: #c4453c;
   color-scheme: light;
 }
+
+html.app-hidden *,
+html.app-hidden *::before,
+html.app-hidden *::after {
+  animation-play-state: paused !important;
+}

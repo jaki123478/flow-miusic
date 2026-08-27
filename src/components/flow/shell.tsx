@@ -143,6 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const t = window.setInterval(() => {
+      if (document.hidden) return;
       const s = useFlowStore.getState();
       if (s.isPlaying && s.current) s.addListenMs(5000);
     }, 5000);

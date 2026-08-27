@@ -163,6 +163,7 @@ export function AudioEngine() {
     bass: BiquadFilterNode;
     treble: BiquadFilterNode;
   } | null>(null);
+  const lastUi = useRef(0);
   const settings = useFlowStore((s) => s.settings);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
   const [ytNative, setYtNative] = useState(() => prefersNativeYtAudio());
@@ -385,13 +386,13 @@ export function AudioEngine() {
       if (!p || !ytReady.current) return;
       const time = p.getCurrentTime();
       const dur = p.getDuration();
-      if (Number.isFinite(time)) setCurrentTime(time);
+      if (Number.isFinite(time) && !document.hidden) setCurrentTime(time);
       if (Number.isFinite(dur) && dur > 0) setDuration(dur);
       const cur = useFlowStore.getState().current;
       if (cur) {
         pushLockScreen(cur, true, time, dur, useFlowStore.getState().playbackRate);
       }
-    }, 250);
+    }, document.hidden ? 2000 : 500);
     return () => window.clearInterval(t);
   }, [isYt, ytNative, isPlaying, setCurrentTime, setDuration]);
 
@@ -444,17 +445,7 @@ export function AudioEngine() {
 
   useEffect(() => {
     if (!isPlaying || !current) return;
-    let lock: WakeLockSentinel | null = null;
-    const grab = () => {
-      const api = navigator.wakeLock;
-      if (!api) return;
-      void api.request("screen").then((sent) => {
-        lock = sent;
-      }).catch(() => {});
-    };
-    grab();
     const onVis = () => {
-      if (document.visibilityState === "visible") grab();
       if (!useFlowStore.getState().isPlaying) return;
       const audio = audioRef.current;
       if (audio?.paused && (ytNative || !isYt)) void audio.play().catch(() => {});
@@ -467,13 +458,10 @@ export function AudioEngine() {
       }
     };
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", onVis);
     window.addEventListener("pageshow", onVis);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("focus", onVis);
       window.removeEventListener("pageshow", onVis);
-      void lock?.release();
     };
   }, [isPlaying, current?.id, isYt, ytNative]);
 
@@ -511,7 +499,12 @@ export function AudioEngine() {
         controls={false}
         onTimeUpdate={(e) => {
           const t = e.currentTarget.currentTime;
-          setCurrentTime(t);
+          const now = performance.now();
+          const gap = document.hidden ? 2000 : 400;
+          if (now - lastUi.current >= gap) {
+            lastUi.current = now;
+            setCurrentTime(t);
+          }
           const cur = useFlowStore.getState().current;
           if (cur && (cur.source !== "ytmusic" || ytNative)) {
             pushLockScreen(cur, !e.currentTarget.paused, t, e.currentTarget.duration, e.currentTarget.playbackRate);

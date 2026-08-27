@@ -20,27 +20,42 @@ function artUrl(src: string) {
   return `${window.location.origin}/api/proxy?u=${encodeURIComponent(src)}`;
 }
 
+let lastMetaId = "";
+let lastState: "none" | "paused" | "playing" = "none";
+let lastPosAt = 0;
+
 export function pushLockScreen(track: Track, isPlaying: boolean, currentTime: number, duration: number, rate: number) {
   if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
   const src = artUrl(track.artwork);
   try {
-    navigator.mediaSession.metadata = new MediaMetadata({
-      title: track.title,
-      artist: track.artist,
-      album: track.album || "Flow",
-      artwork: src
-        ? [
-            { src, sizes: "96x96", type: "image/jpeg" },
-            { src, sizes: "256x256", type: "image/jpeg" },
-            { src, sizes: "512x512", type: "image/jpeg" },
-          ]
-        : [],
-    });
-    navigator.mediaSession.playbackState = isPlaying ? "playing" : "paused";
+    if (lastMetaId !== track.id) {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: track.artist,
+        album: track.album || "Flow",
+        artwork: src
+          ? [
+              { src, sizes: "96x96", type: "image/jpeg" },
+              { src, sizes: "256x256", type: "image/jpeg" },
+              { src, sizes: "512x512", type: "image/jpeg" },
+            ]
+          : [],
+      });
+      lastMetaId = track.id;
+    }
+    const state: "paused" | "playing" = isPlaying ? "playing" : "paused";
+    if (lastState !== state) {
+      navigator.mediaSession.playbackState = state;
+      lastState = state;
+    }
   } catch {
     /* older WebKit */
   }
   if (track.isLive) return;
+  const now = Date.now();
+  const gap = typeof document !== "undefined" && document.hidden ? 2500 : 900;
+  if (now - lastPosAt < gap) return;
+  lastPosAt = now;
   const dur = Number.isFinite(duration) && duration > 0 ? duration : 0;
   const pos = Number.isFinite(currentTime) ? Math.max(0, currentTime) : 0;
   if (dur <= 0) return;
