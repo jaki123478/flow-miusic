@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { ChromeBackgroundCard } from "@/components/flow/background-audio";
 import { useFlowStore, DEFAULT_SETTINGS, type FlowSettings } from "@/stores/flow-store";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -48,6 +49,8 @@ function SettingsPage() {
         <h1 className="text-3xl font-bold tracking-tight">Impostazioni</h1>
         <p className="mt-1 text-sm text-muted">Riproduzione, aspetto, lingua e privacy.</p>
       </header>
+
+      <ChromeBackgroundCard />
 
       <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
         <p className="text-sm font-medium">Tema</p>

@@ -22,7 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
-import { bindLockScreenActions, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
+import { bindLockScreenActions, isAndroid, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { PlayingBars, shareTrack, TrackArt, TrackRow } from "./tracks";
@@ -475,6 +475,9 @@ export function AudioEngine() {
 
   useEffect(() => {
     if (!isPlaying || !current) return;
+    if (isAndroid() && typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission().catch(() => {});
+    }
     const onVis = () => {
       if (!useFlowStore.getState().isPlaying) return;
       const audio = audioRef.current;
