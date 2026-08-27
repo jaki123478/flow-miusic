@@ -139,6 +139,12 @@ function SettingsPage() {
           on={settings.remainingTime}
           onChange={(v) => set({ remainingTime: v })}
         />
+        <Toggle
+          label="Flow DJ parla"
+          hint="Il chatbot legge le risposte ad alta voce e puoi dettare col microfono"
+          on={settings.voiceOn}
+          onChange={(v) => set({ voiceOn: v })}
+        />
       </section>
 
       <section className="rounded-lg bg-surface px-4 py-3">

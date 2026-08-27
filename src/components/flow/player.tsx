@@ -168,6 +168,7 @@ export function AudioEngine() {
   } | null>(null);
   const lastUi = useRef(0);
   const settings = useFlowStore((s) => s.settings);
+  const voiceDuck = useFlowStore((s) => s.voiceDuck);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
   const [ytNative, setYtNative] = useState(() => prefersNativeYtAudio());
   const hero = isYt && !ytNative && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
@@ -362,6 +363,7 @@ export function AudioEngine() {
     const p = ytRef.current;
     let gain = isMuted ? 0 : volume;
     if (settings.normalize) gain *= 0.9;
+    if (voiceDuck) gain *= 0.28;
     if (!prefersNativeYtAudio() && !isYt && settings.crossfade > 0 && duration > 0) {
       const left = duration - currentTime;
       if (left >= 0 && left < settings.crossfade) gain *= left / settings.crossfade;
@@ -384,7 +386,7 @@ export function AudioEngine() {
       audio.volume = gain;
       audio.playbackRate = current?.isLive ? 1 : playbackRate;
     }
-  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, isYt, ytNative, duration]);
+  }, [volume, isMuted, playbackRate, current?.isLive, settings.normalize, settings.crossfade, isYt, ytNative, duration, voiceDuck]);
 
   useEffect(() => {
     if (prefersNativeYtAudio()) return;

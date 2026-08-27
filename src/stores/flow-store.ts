@@ -8,6 +8,7 @@ export type FlowSettings = {
   hideExplicit: boolean;
   privateSession: boolean;
   remainingTime: boolean;
+  voiceOn: boolean;
   eqBass: number;
   eqTreble: number;
   theme: "dark" | "light";
@@ -20,6 +21,7 @@ export const DEFAULT_SETTINGS: FlowSettings = {
   hideExplicit: false,
   privateSession: false,
   remainingTime: false,
+  voiceOn: false,
   eqBass: 0,
   eqTreble: 0,
   theme: "dark",
@@ -84,6 +86,7 @@ interface FlowState {
   showChat: boolean;
   cloudReady: boolean;
   stationOn: boolean;
+  voiceDuck: boolean;
   plays: Record<string, number>;
   followedArtists: string[];
 
@@ -136,6 +139,7 @@ interface FlowState {
   addListenMs: (ms: number) => void;
   setShowHelp: (v: boolean) => void;
   setShowChat: (v: boolean) => void;
+  setVoiceDuck: (v: boolean) => void;
   importCloud: (data: {
     liked: Track[];
     recents: Track[];
@@ -197,6 +201,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   showChat: false,
   cloudReady: false,
   stationOn: false,
+  voiceDuck: false,
   plays: {},
   followedArtists: [],
 
@@ -517,6 +522,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
   setShowHelp: (v) => set({ showHelp: v }),
   setShowChat: (v) => set({ showChat: v }),
+  setVoiceDuck: (v) => set({ voiceDuck: v }),
   importCloud: (data) => {
     const liked = (data.liked ?? []).map(sanitizeTrack);
     const recents = (data.recents ?? []).map(sanitizeTrack);

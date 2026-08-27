@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { Bot, Heart, Pause, Radio, Send, SkipForward, Sparkles, X } from "lucide-react";
+import { Bot, Heart, Mic, Pause, Radio, Send, SkipForward, Sparkles, Volume2, VolumeOff, X } from "lucide-react";
 import { chatTurn, type ChatResult } from "@/lib/music/assistant";
 import { stationToTrack } from "@/lib/music/catalog";
 import type { Track } from "@/lib/music/types";
+import { canListen, speakable, speakDj, startListening, stopSpeaking } from "@/lib/music/voice";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { TrackArt, TrackRow } from "./tracks";
@@ -81,25 +82,69 @@ export function ChatPanel() {
   const toggleLike = useFlowStore((s) => s.toggleLike);
   const notify = useFlowStore((s) => s.notify);
   const liked = useFlowStore((s) => (s.current ? s.liked.some((t) => t.id === s.current!.id) : false));
+  const voiceOn = useFlowStore((s) => s.settings.voiceOn);
+  const locale = useFlowStore((s) => s.settings.locale);
+  const patchSettings = useFlowStore((s) => s.patchSettings);
+  const setVoiceDuck = useFlowStore((s) => s.setVoiceDuck);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  const [listening, setListening] = useState(false);
+  const [heard, setHeard] = useState("");
   const busyRef = useRef(false);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const endRef = useRef<HTMLDivElement | null>(null);
+  const stopListenRef = useRef<(() => void) | null>(null);
+  const listenLiveRef = useRef(false);
+
+  const lang = locale === "en" ? "en" : "it";
+  const micOk = canListen();
+
+  const haltSpeech = () => {
+    stopSpeaking();
+    setVoiceDuck(false);
+  };
+
+  const haltListen = () => {
+    listenLiveRef.current = false;
+    stopListenRef.current?.();
+    stopListenRef.current = null;
+    setListening(false);
+    setHeard("");
+  };
+
+  const talk = (text: string) => {
+    if (!useFlowStore.getState().settings.voiceOn) return;
+    speakDj(speakable(text), lang, {
+      onStart: () => setVoiceDuck(true),
+      onEnd: () => setVoiceDuck(false),
+    });
+  };
 
   useEffect(() => {
-    if (showChat) inputRef.current?.focus();
-  }, [showChat]);
+    if (showChat && !voiceOn) inputRef.current?.focus();
+  }, [showChat, voiceOn]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: "end" });
   }, [messages, busy]);
 
+  useEffect(() => {
+    return () => {
+      stopListenRef.current?.();
+      stopListenRef.current = null;
+      listenLiveRef.current = false;
+      stopSpeaking();
+      useFlowStore.getState().setVoiceDuck(false);
+    };
+  }, []);
+
   const send = async (raw: string) => {
     const text = raw.trim();
     if (!text || busyRef.current) return;
+    haltListen();
+    haltSpeech();
     busyRef.current = true;
     setBusy(true);
     setDraft("");
@@ -118,29 +163,96 @@ export function ChatPanel() {
         },
       });
       applyChatResult(result);
+      const reply = result.reply?.trim() || "Ecco cosa ho trovato.";
       setMessages((prev) => [
         ...prev,
         {
           id: uid(),
           role: "assistant",
-          text: result.reply?.trim() || "Ecco cosa ho trovato.",
+          text: reply,
           tracks: result.tracks,
           radios: result.radios,
         },
       ]);
+      talk(reply);
     } catch {
       notify("Non riesco a rispondere ora");
+      const reply = "Qualcosa è andato storto. Riprova tra un attimo.";
       setMessages((prev) => [
         ...prev,
-        { id: uid(), role: "assistant", text: "Qualcosa è andato storto. Riprova tra un attimo." },
+        { id: uid(), role: "assistant", text: reply },
       ]);
+      talk(reply);
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
   };
 
+  const toggleVoice = () => {
+    if (voiceOn) {
+      patchSettings({ voiceOn: false });
+      haltSpeech();
+      return;
+    }
+    patchSettings({ voiceOn: true });
+    const intro =
+      lang === "en"
+        ? "Hi, I'm Flow DJ. What should we play?"
+        : "Ciao, sono Flow DJ. Dimmi cosa vuoi ascoltare.";
+    speakDj(speakable(intro), lang, {
+      onStart: () => setVoiceDuck(true),
+      onEnd: () => setVoiceDuck(false),
+    });
+  };
+
+  const onMic = () => {
+    if (!micOk || busyRef.current) return;
+    if (listening) {
+      haltListen();
+      return;
+    }
+    haltSpeech();
+    listenLiveRef.current = true;
+    setListening(true);
+    setHeard("");
+    try {
+      stopListenRef.current = startListening(lang, {
+        onPartial: (text: string) => {
+          setHeard(text);
+          setDraft(text);
+        },
+        onFinal: (text: string) => {
+          if (!listenLiveRef.current) return;
+          setHeard(text);
+          setDraft(text);
+          void send(text);
+        },
+        onError: (msg: string) => notify(msg),
+        onEnd: () => {
+          listenLiveRef.current = false;
+          stopListenRef.current = null;
+          setListening(false);
+          setHeard("");
+        },
+      });
+    } catch {
+      listenLiveRef.current = false;
+      setListening(false);
+      setHeard("");
+    }
+  };
+
+  const closeChat = () => {
+    haltListen();
+    haltSpeech();
+    setShowChat(false);
+  };
+
   const empty = messages.length === 0;
+  const placeholder = listening
+    ? heard || (lang === "en" ? "Listening…" : "Ti ascolto…")
+    : "Chiedi un brano, un mood…";
 
   return (
     <section
@@ -155,11 +267,23 @@ export function ChatPanel() {
         </span>
         <div className="min-w-0 flex-1">
           <h2 className="truncate text-sm font-bold">Flow DJ</h2>
-          <p className="truncate text-xs text-muted">Chiedi un brano, un mood, i testi</p>
+          <p className="truncate text-xs text-muted">Parla o scrivi: brani, mood, testi</p>
         </div>
         <button
           type="button"
-          onClick={() => setShowChat(false)}
+          onClick={toggleVoice}
+          className={cn(
+            "pressable flex size-11 shrink-0 items-center justify-center rounded-full hover:text-fg",
+            voiceOn ? "text-primary" : "text-muted",
+          )}
+          aria-label="Attiva voce"
+          aria-pressed={voiceOn}
+        >
+          {voiceOn ? <Volume2 className="size-5" /> : <VolumeOff className="size-5" />}
+        </button>
+        <button
+          type="button"
+          onClick={closeChat}
           className="pressable flex size-11 shrink-0 items-center justify-center rounded-full text-muted hover:text-fg"
           aria-label="Chiudi"
         >
@@ -301,13 +425,26 @@ export function ChatPanel() {
           ref={inputRef}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          placeholder="Chiedi un brano, un mood…"
+          placeholder={placeholder}
           autoComplete="off"
           enterKeyHint="send"
           disabled={busy}
           className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-base outline-none ring-1 ring-border placeholder:text-subtle disabled:opacity-60"
           aria-label="Messaggio per Flow DJ"
         />
+        <button
+          type="button"
+          onClick={onMic}
+          disabled={!micOk || busy}
+          className={cn(
+            "pressable flex size-11 shrink-0 items-center justify-center rounded-full disabled:opacity-40",
+            listening ? "animate-pulse bg-primary text-primary-fg" : "text-muted hover:text-fg",
+          )}
+          aria-label="Parla"
+          aria-pressed={listening}
+        >
+          <Mic className="size-4" />
+        </button>
         <button
           type="submit"
           disabled={busy || !draft.trim()}
