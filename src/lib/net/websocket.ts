@@ -1,3 +1,5 @@
+import { exponentialDelay } from "./backoff";
+
 export type WsStatus = "idle" | "connecting" | "open" | "retrying" | "closed" | "error";
 
 export type ManagedSocketOptions = {
@@ -78,11 +80,14 @@ export function createManagedSocket(opts: ManagedSocketOptions) {
       opts.onError?.(detail);
       return;
     }
-    const base = opts.baseDelayMs ?? 600;
-    const cap = opts.maxDelayMs ?? 12_000;
-    const wait = Math.min(cap, base * 2 ** attempt) + Math.floor(Math.random() * 250);
+    const wait = exponentialDelay(attempt, {
+      baseMs: opts.baseDelayMs ?? 600,
+      maxMs: opts.maxDelayMs ?? 12_000,
+      factor: 2,
+      jitter: 0.3,
+    });
     attempt += 1;
-    setStatus("retrying", `${detail} · nuovo tentativo ${attempt}/${max}`);
+    setStatus("retrying", `${detail} · nuovo tentativo ${attempt}/${max} tra ${Math.round(wait / 100) / 10}s`);
     retryTimer = window.setTimeout(connect, wait);
   };
 
@@ -94,9 +99,8 @@ export function createManagedSocket(opts: ManagedSocketOptions) {
     }
     drop();
     clearTimers();
-    let href = "";
     try {
-      href = urlOf();
+      const href = urlOf();
       setStatus("connecting");
       socket = opts.protocols ? new WebSocket(href, opts.protocols) : new WebSocket(href);
     } catch (err) {
@@ -128,8 +132,7 @@ export function createManagedSocket(opts: ManagedSocketOptions) {
     };
 
     socket.onerror = () => {
-      const msg = wsErrorMessage(1006);
-      opts.onError?.(msg);
+      opts.onError?.(wsErrorMessage(1006));
     };
 
     socket.onclose = (ev) => {

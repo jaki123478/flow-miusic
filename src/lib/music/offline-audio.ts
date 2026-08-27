@@ -1,3 +1,5 @@
+import { withBackoff } from "@/lib/net/backoff";
+
 const cache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
@@ -25,16 +27,19 @@ export async function loadLocalAudio(id: string): Promise<string> {
   if (hit) return hit;
   const pending = inflight.get(id);
   if (pending) return pending;
-  const job = (async () => {
-    const res = await fetch(`/api/stream?v=${id}`);
-    if (!res.ok && res.status !== 206) throw new Error("stream");
-    const blob = await res.blob();
-    if (!blob.size) throw new Error("empty");
-    const url = URL.createObjectURL(blob);
-    cache.set(id, url);
-    trimCache();
-    return url;
-  })();
+  const job = withBackoff(
+    async () => {
+      const res = await fetch(`/api/stream?v=${id}`);
+      if (!res.ok && res.status !== 206) throw new Error(`stream ${res.status}`);
+      const blob = await res.blob();
+      if (!blob.size) throw new Error("empty");
+      const url = URL.createObjectURL(blob);
+      cache.set(id, url);
+      trimCache();
+      return url;
+    },
+    { baseMs: 500, maxMs: 8000, maxAttempts: 4, factor: 2, jitter: 0.2 },
+  );
   inflight.set(id, job);
   try {
     return await job;
