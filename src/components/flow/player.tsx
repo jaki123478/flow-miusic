@@ -170,7 +170,7 @@ export function AudioEngine() {
   const settings = useFlowStore((s) => s.settings);
   const voiceDuck = useFlowStore((s) => s.voiceDuck);
   const isYt = current?.source === "ytmusic" && Boolean(current.videoId);
-  const [ytNative, setYtNative] = useState(() => prefersNativeYtAudio());
+  const [ytNative, setYtNative] = useState(false);
   const hero = isYt && !ytNative && showFullPlayer && !showQueue && !showLyrics && !hideVideo;
 
   useEffect(() => {
@@ -292,17 +292,13 @@ export function AudioEngine() {
     if (isYt && current?.videoId) {
       const id = current.videoId;
       const local = cachedAudioUrl(id);
-      if (local) applySrc(local);
-      else if (!prefersNativeYtAudio()) applySrc(`/api/stream?v=${id}`);
+      applySrc(local || `/api/stream?v=${id}`);
       void loadLocalAudio(id)
         .then((url) => {
           if (cancelled || !audioRef.current) return;
           if (useFlowStore.getState().current?.videoId !== id) return;
           const el = audioRef.current;
-          if (el.dataset.src === url) {
-            if (useFlowStore.getState().isPlaying) void el.play().catch(() => {});
-            return;
-          }
+          if (el.dataset.src === url) return;
           const t = el.currentTime;
           const should = useFlowStore.getState().isPlaying;
           el.dataset.src = url;
@@ -311,13 +307,15 @@ export function AudioEngine() {
           const onMeta = () => {
             el.removeEventListener("loadedmetadata", onMeta);
             if (t > 0 && Number.isFinite(t)) el.currentTime = t;
-            if (should) void el.play().catch(() => {});
+            if (should) {
+              void el.play().then(() => {
+                if (prefersNativeYtAudio()) setYtNative(true);
+              }).catch(() => {});
+            }
           };
           el.addEventListener("loadedmetadata", onMeta);
         })
-        .catch(() => {
-          if (!cancelled && !document.hidden && !prefersNativeYtAudio()) setYtNative(false);
-        });
+        .catch(() => {});
       const q = useFlowStore.getState();
       const upcoming = q.queue.slice(q.queueIndex + 1, q.queueIndex + 3);
       for (const t of upcoming) {
@@ -355,8 +353,13 @@ export function AudioEngine() {
     }
     const audio = audioRef.current;
     if (!audio) return;
-    if (isPlaying) void audio.play().catch(() => pause());
-    else audio.pause();
+    if (isPlaying) {
+      void audio.play().then(() => {
+        if (prefersNativeYtAudio() && audio.readyState >= 2) setYtNative(true);
+      }).catch(() => {
+        if (isYt) setYtNative(false);
+      });
+    } else audio.pause();
   }, [isPlaying, isYt, ytNative]);
 
   useEffect(() => {
@@ -621,7 +624,10 @@ export function AudioEngine() {
           const d = e.currentTarget.duration;
           if (Number.isFinite(d)) setDuration(d);
         }}
-        onEnded={onEnded}
+        onEnded={() => {
+          if (isYt && !ytNative) return;
+          onEnded();
+        }}
         onPause={(e) => {
           if (audioFocusLost()) return;
           const el = e.currentTarget;
@@ -631,30 +637,18 @@ export function AudioEngine() {
             if (el.paused) void el.play().catch(() => {});
           }, 350);
         }}
+        onCanPlay={() => {
+          const el = audioRef.current;
+          const id = useFlowStore.getState().current?.videoId;
+          if (!el || !id || !prefersNativeYtAudio()) return;
+          if (!cachedAudioUrl(id)) return;
+          if (!useFlowStore.getState().isPlaying) return;
+          void el.play().then(() => setYtNative(true)).catch(() => {});
+        }}
         onError={() => {
-          const audio = audioRef.current;
           const cur = useFlowStore.getState().current;
-          if (cur?.source === "ytmusic" && ytNative && cur.videoId && audio && audio.dataset.retried !== "1") {
-            audio.dataset.retried = "1";
-            void loadLocalAudio(cur.videoId)
-              .then((url) => {
-                if (!audioRef.current) return;
-                audioRef.current.src = url;
-                audioRef.current.dataset.src = url;
-                audioRef.current.load();
-                if (useFlowStore.getState().isPlaying) void audioRef.current.play().catch(() => {});
-              })
-              .catch(() => {
-                if (!document.hidden) setYtNative(false);
-              });
-            return;
-          }
-          if (document.hidden) return;
-          if (isYt && ytNative) {
-            setYtNative(false);
-            return;
-          }
-          if (cur && cur.source !== "ytmusic") onEnded();
+          if (isYt) setYtNative(false);
+          else if (cur && cur.source !== "ytmusic") onEnded();
         }}
       />
       <audio

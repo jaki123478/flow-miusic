@@ -232,7 +232,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         recents,
-        hideVideo: true,
+        hideVideo: false,
         stationOn: false,
       });
       return;
@@ -240,7 +240,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const existing = get().queue;
     const found = existing.findIndex((t) => t.id === track.id);
     if (found >= 0) {
-      set({ current: track, queueIndex: found, isPlaying: true, currentTime: 0, recents, hideVideo: true });
+      set({ current: track, queueIndex: found, isPlaying: true, currentTime: 0, recents, hideVideo: false });
     } else {
       set({
         current: track,
@@ -249,7 +249,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
         isPlaying: true,
         currentTime: 0,
         recents,
-        hideVideo: true,
+        hideVideo: false,
       });
     }
   },
