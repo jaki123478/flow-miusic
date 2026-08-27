@@ -22,6 +22,7 @@ import {
   VolumeX,
 } from "lucide-react";
 import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
+import { bindAudioFocus, audioFocusLost, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { clearAndroidNowPlaying, showAndroidNowPlaying } from "@/lib/music/android-bg";
 import { bindLockScreenActions, isAndroid, isAppleMobile, prefersNativeYtAudio, pushLockScreen } from "@/lib/music/lock-screen";
 import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
@@ -488,6 +489,27 @@ export function AudioEngine() {
   }, [current, isPlaying, duration, playbackRate, resume, pause, prev, next]);
 
   useEffect(() => {
+    return bindAudioFocus({
+      onLost: () => {
+        useFlowStore.getState().pause();
+        audioRef.current?.pause();
+        ytRef.current?.pauseVideo();
+      },
+      onGained: () => {
+        if (!shouldResumeAfterFocus()) return;
+        useFlowStore.getState().resume();
+        void audioRef.current?.play().catch(() => {});
+        if (!ytNative && ytRef.current && ytReady.current) ytRef.current.playVideo();
+      },
+    });
+  }, [ytNative]);
+
+  useEffect(() => {
+    markPlayingForFocus(Boolean(isPlaying && current));
+    if (isPlaying) claimAudioFocus();
+  }, [isPlaying, current?.id]);
+
+  useEffect(() => {
     if (!isAndroid()) return;
     if (isPlaying && current) showAndroidNowPlaying(current);
     else clearAndroidNowPlaying();
@@ -510,6 +532,7 @@ export function AudioEngine() {
       void Notification.requestPermission().catch(() => {});
     }
     const onVis = () => {
+      if (audioFocusLost()) return;
       if (!useFlowStore.getState().isPlaying) return;
       const audio = audioRef.current;
       const id = useFlowStore.getState().current?.videoId;
@@ -598,9 +621,11 @@ export function AudioEngine() {
         }}
         onEnded={onEnded}
         onPause={(e) => {
+          if (audioFocusLost()) return;
           const el = e.currentTarget;
+          if (!document.hidden) return;
           window.setTimeout(() => {
-            if (!useFlowStore.getState().isPlaying) return;
+            if (audioFocusLost() || !useFlowStore.getState().isPlaying) return;
             if (el.paused) void el.play().catch(() => {});
           }, 350);
         }}

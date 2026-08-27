@@ -83,6 +83,7 @@ export function ChromeBackgroundCard() {
             {androidBackgroundTips().map((s) => (
               <li key={s}>{s}</li>
             ))}
+            <li>Audio focus: una chiamata o Maps mette in pausa Flow e lo riprende dopo, senza rubare l’audio.</li>
           </ol>
           <div className="flex flex-wrap gap-2 pt-1">
             <button
