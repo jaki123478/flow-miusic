@@ -19,10 +19,11 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
+import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
 
 function mediaSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
-  if (track.videoId) return `/api/stream?v=${track.videoId}`;
+  if (track.videoId) return cachedAudioUrl(track.videoId) || `/api/stream?v=${track.videoId}`;
   return track.streamUrl || "";
 }
 
@@ -39,6 +40,31 @@ export function AudioEngine() {
   const onEnded = useFlowStore((s) => s.onEnded);
   const lastSeek = useRef(0);
   const lastSrc = useRef("");
+  const lastTickAt = useRef(0);
+  const lastTickTime = useRef(0);
+
+  const useLocal = (id: string, time: number) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    void loadLocalAudio(id)
+      .then((url) => {
+        if (useFlowStore.getState().current?.videoId !== id) return;
+        lastSrc.current = url;
+        audio.src = url;
+        audio.load();
+        const jump = () => {
+          try {
+            audio.currentTime = time;
+          } catch {
+            /* ignore */
+          }
+          if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+        };
+        audio.addEventListener("loadedmetadata", jump, { once: true });
+        void audio.play().then(jump).catch(() => {});
+      })
+      .catch(() => {});
+  };
 
   useEffect(() => {
     claimAudioFocus();
@@ -52,7 +78,10 @@ export function AudioEngine() {
       stop: () => useFlowStore.getState().pause(),
     });
     return bindAudioFocus({
-      onLost: () => useFlowStore.getState().pause(),
+      onLost: () => {
+        if (document.hidden) return;
+        useFlowStore.getState().pause();
+      },
       onGained: () => useFlowStore.getState().resume(),
     });
   }, []);
@@ -68,6 +97,7 @@ export function AudioEngine() {
       audio.load();
     }
     if (current.duration && current.duration > 0) setDuration(current.duration);
+    if (current.videoId) prefetchAudio(current.videoId);
     claimAudioFocus();
     if (useFlowStore.getState().isPlaying) {
       markPlayingForFocus(true);
@@ -107,23 +137,29 @@ export function AudioEngine() {
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
       if (audio.paused) void audio.play().catch(() => {});
+      const now = Date.now();
+      const t = audio.currentTime || 0;
+      if (lastTickAt.current && now - lastTickAt.current > 2500 && Math.abs(t - lastTickTime.current) < 0.15) {
+        if (s.current.videoId && !String(audio.src).startsWith("blob:")) {
+          useLocal(s.current.videoId, t || s.currentTime);
+        }
+      }
+      lastTickAt.current = now;
+      lastTickTime.current = t;
     };
-    const onVis = () => {
-      if (!document.hidden) kick();
-      else window.setTimeout(kick, 250);
-    };
+    const onVis = () => window.setTimeout(kick, 200);
     document.addEventListener("visibilitychange", onVis);
     window.addEventListener("focus", kick);
     window.addEventListener("pageshow", kick);
-    window.addEventListener("freeze", kick);
-    window.addEventListener("resume", kick);
-    const watchdog = window.setInterval(kick, 4000);
+    window.addEventListener("offline", kick);
+    window.addEventListener("online", kick);
+    const watchdog = window.setInterval(kick, 2000);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("focus", kick);
       window.removeEventListener("pageshow", kick);
-      window.removeEventListener("freeze", kick);
-      window.removeEventListener("resume", kick);
+      window.removeEventListener("offline", kick);
+      window.removeEventListener("online", kick);
       window.clearInterval(watchdog);
     };
   }, []);
@@ -140,6 +176,8 @@ export function AudioEngine() {
         const t = el.currentTime;
         if (!Number.isFinite(t)) return;
         setCurrentTime(t);
+        lastTickAt.current = Date.now();
+        lastTickTime.current = t;
         const track = useFlowStore.getState().current;
         if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
       }}
@@ -156,12 +194,11 @@ export function AudioEngine() {
       }}
       onPause={() => {
         const s = useFlowStore.getState();
-        if (s.isPlaying && !document.hidden) {
-          void audioRef.current?.play().catch(() => {});
-        }
+        if (s.isPlaying) void audioRef.current?.play().catch(() => {});
       }}
       onStalled={() => {
-        if (useFlowStore.getState().isPlaying) void audioRef.current?.play().catch(() => {});
+        const s = useFlowStore.getState();
+        if (s.isPlaying && s.current?.videoId) useLocal(s.current.videoId, audioRef.current?.currentTime || s.currentTime);
       }}
       onWaiting={() => {
         if (useFlowStore.getState().isPlaying) void audioRef.current?.play().catch(() => {});
@@ -319,30 +356,17 @@ export function FullPlayer() {
               <Heart className={cn("size-6", liked && "fill-current")} />
             </button>
           </div>
-          <input
-            type="range"
-            min={0}
-            max={duration || 1}
-            step={0.25}
-            value={Math.min(currentTime, duration || 1)}
-            onChange={(e) => seek(Number(e.target.value))}
-            className="mt-6 h-1.5 w-full appearance-none rounded-full bg-elevated"
-            style={{ background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)` }}
-          />
+          <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="mt-6 h-1.5 w-full appearance-none rounded-full bg-elevated" style={{ background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)` }} />
           <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle">
             <span>{formatTime(currentTime)}</span>
             <span>{formatTime(duration)}</span>
           </div>
           <div className="mt-4 flex items-center justify-center gap-6">
-            <button type="button" onClick={prev} aria-label="Prev">
-              <SkipBack className="size-7 fill-current" />
-            </button>
+            <button type="button" onClick={prev} aria-label="Prev"><SkipBack className="size-7 fill-current" /></button>
             <button type="button" onClick={togglePlay} className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg" aria-label="Play">
               {isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="size-7 fill-current" />}
             </button>
-            <button type="button" onClick={next} aria-label="Next">
-              <SkipForward className="size-7 fill-current" />
-            </button>
+            <button type="button" onClick={next} aria-label="Next"><SkipForward className="size-7 fill-current" /></button>
           </div>
         </div>
       )}
