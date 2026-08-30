@@ -19,7 +19,7 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
-import { cachedAudioUrl, loadLocalAudio } from "@/lib/music/offline-audio";
+import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -60,13 +60,15 @@ export function AudioEngine() {
   const lastPos = useRef(0);
   const recovering = useRef("");
   const primed = useRef("");
+  const wakeRef = useRef<WakeLockSentinel | null>(null);
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
     const going = !audio.paused && audio.currentTime > 0.4;
-    if (!force && going && lastSrc.current && lastSrc.current !== src) return;
+    const toBlob = src.startsWith("blob:");
+    const fromNet = lastSrc.current.includes("/api/stream");
+    if (!force && going && lastSrc.current && lastSrc.current !== src && !(toBlob && fromNet)) return;
     if (lastSrc.current !== src) {
-      if (document.hidden && !force) return;
       const keep = audio.currentTime || 0;
       lastSrc.current = src;
       audio.src = src;
@@ -80,6 +82,7 @@ export function AudioEngine() {
             } catch {
               /* ignore */
             }
+            if (play || useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
           },
           { once: true },
         );
@@ -89,23 +92,59 @@ export function AudioEngine() {
     if (play) void audio.play().catch(() => {});
   };
 
+  const armLocal = (id: string) => {
+    if (!id || primed.current === id) return;
+    primed.current = id;
+    void loadLocalAudio(id)
+      .then((url) => {
+        const audio = audioRef.current;
+        const s = useFlowStore.getState();
+        if (!audio || s.current?.videoId !== id) return;
+        if (String(audio.src).startsWith("blob:")) return;
+        applySrc(audio, url, s.isPlaying, true);
+      })
+      .catch(() => {
+        if (primed.current === id) primed.current = "";
+      });
+  };
+
   const recover = (id: string, time: number) => {
     const audio = audioRef.current;
     if (!audio || recovering.current === id) return;
     recovering.current = id;
-    void loadLocalAudio(id)
-      .then((url) => {
-        if (useFlowStore.getState().current?.videoId !== id) return;
-        applySrc(audio, url, true, true);
-        const jump = () => {
+    const ready = cachedAudioUrl(id);
+    if (ready) {
+      applySrc(audio, ready, true, true);
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
           try {
             if (time > 0) audio.currentTime = time;
           } catch {
             /* ignore */
           }
-          if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
-        };
-        audio.addEventListener("loadedmetadata", jump, { once: true });
+          void audio.play().catch(() => {});
+        },
+        { once: true },
+      );
+      return;
+    }
+    void loadLocalAudio(id)
+      .then((url) => {
+        if (useFlowStore.getState().current?.videoId !== id) return;
+        applySrc(audio, url, true, true);
+        audio.addEventListener(
+          "loadedmetadata",
+          () => {
+            try {
+              if (time > 0) audio.currentTime = time;
+            } catch {
+              /* ignore */
+            }
+            if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+          },
+          { once: true },
+        );
       })
       .catch(() => {
         if (recovering.current === id) recovering.current = "";
@@ -113,6 +152,9 @@ export function AudioEngine() {
   };
 
   useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
+    }
     claimAudioFocus();
     bindLockScreenActions({
       play: () => useFlowStore.getState().resume(),
@@ -152,6 +194,9 @@ export function AudioEngine() {
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
+    if (current.videoId) armLocal(current.videoId);
+    const nxt = useFlowStore.getState().queue[1];
+    if (nxt?.videoId) prefetchAudio(nxt.videoId);
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   useEffect(() => {
@@ -160,8 +205,19 @@ export function AudioEngine() {
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
     applyOutput(audio);
-    if (isPlaying) void audio.play().catch(() => {});
-    else audio.pause();
+    if (isPlaying) {
+      void audio.play().catch(() => {});
+      if (current?.videoId) armLocal(current.videoId);
+      if ("wakeLock" in navigator) {
+        void navigator.wakeLock.request("screen").then((lock) => {
+          wakeRef.current = lock;
+        }).catch(() => {});
+      }
+    } else {
+      audio.pause();
+      void wakeRef.current?.release().catch(() => {});
+      wakeRef.current = null;
+    }
     if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
   }, [isPlaying, current]);
 
@@ -184,32 +240,34 @@ export function AudioEngine() {
       const s = useFlowStore.getState();
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
+      if (document.hidden && s.current.videoId) {
+        const blob = cachedAudioUrl(s.current.videoId);
+        if (blob && !String(audio.src).startsWith("blob:")) applySrc(audio, blob, true, true);
+      }
       if (audio.paused) void audio.play().catch(() => {});
       const t = audio.currentTime || 0;
       if (t > lastPos.current + 0.15) {
         lastPos.current = t;
         lastMove.current = Date.now();
-        const id = s.current.videoId;
-        if (id && t > 1.5 && primed.current !== id) {
-          primed.current = id;
-          void loadLocalAudio(id).catch(() => {
-            if (primed.current === id) primed.current = "";
-          });
-        }
+        if (s.current.videoId) armLocal(s.current.videoId);
         return;
       }
-      if (Date.now() - lastMove.current > 3500 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
+      if (Date.now() - lastMove.current > 2500 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
         recover(s.current.videoId, t || s.currentTime);
       }
     };
     document.addEventListener("visibilitychange", kick);
     window.addEventListener("pageshow", kick);
     window.addEventListener("focus", kick);
-    const watchdog = window.setInterval(kick, 2000);
+    window.addEventListener("freeze", kick);
+    window.addEventListener("resume", kick);
+    const watchdog = window.setInterval(kick, 1500);
     return () => {
       document.removeEventListener("visibilitychange", kick);
       window.removeEventListener("pageshow", kick);
       window.removeEventListener("focus", kick);
+      window.removeEventListener("freeze", kick);
+      window.removeEventListener("resume", kick);
       window.clearInterval(watchdog);
     };
   }, []);
@@ -242,17 +300,16 @@ export function AudioEngine() {
         if (track) {
           markPlayingForFocus(true);
           pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
-          if (track.videoId && primed.current !== track.videoId) {
-            primed.current = track.videoId;
-            void loadLocalAudio(track.videoId).catch(() => {
-              if (primed.current === track.videoId) primed.current = "";
-            });
-          }
+          if (track.videoId) armLocal(track.videoId);
         }
       }}
       onPause={() => {
         const s = useFlowStore.getState();
         if (s.isPlaying) void audioRef.current?.play().catch(() => {});
+      }}
+      onWaiting={() => {
+        const s = useFlowStore.getState();
+        if (s.isPlaying && s.current?.videoId) recover(s.current.videoId, audioRef.current?.currentTime || s.currentTime);
       }}
       onError={() => {
         const s = useFlowStore.getState();
