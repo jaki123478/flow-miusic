@@ -4,7 +4,7 @@ const cache = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
 
 function trimCache() {
-  while (cache.size > 6) {
+  while (cache.size > 8) {
     const id = cache.keys().next().value;
     if (!id) break;
     const url = cache.get(id);
@@ -29,7 +29,10 @@ export async function loadLocalAudio(id: string): Promise<string> {
   if (pending) return pending;
   const job = withBackoff(
     async () => {
-      const res = await fetch(`/api/stream?v=${id}`);
+      const res = await fetch(`/api/stream?v=${id}`, {
+        cache: "no-store",
+        headers: { Accept: "audio/*,*/*" },
+      });
       if (!res.ok && res.status !== 206) throw new Error(`stream ${res.status}`);
       const blob = await res.blob();
       if (!blob.size) throw new Error("empty");
@@ -38,7 +41,7 @@ export async function loadLocalAudio(id: string): Promise<string> {
       trimCache();
       return url;
     },
-    { baseMs: 500, maxMs: 8000, maxAttempts: 4, factor: 2, jitter: 0.2 },
+    { baseMs: 400, maxMs: 6000, maxAttempts: 5, factor: 2, jitter: 0.2 },
   );
   inflight.set(id, job);
   try {
