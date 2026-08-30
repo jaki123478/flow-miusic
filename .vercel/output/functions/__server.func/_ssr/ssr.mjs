@@ -1,16 +1,31 @@
-import { n as __exportAll } from "../_runtime.mjs";
-import { A as _getRenderedMatches, B as isNotFound, D as getStylesheetHref, E as getScriptPreloadAttrs, I as isRedirect, L as isResolvedRedirect, M as invariant, O as resolveManifestAssetLink, R as parseRedirect, V as require_react, a as isSsrResponse, c as stripSsrResponseBody, f as RouterProvider, i as disposeSsrResponseDetached, j as executeRewriteInput, k as resolveManifestCssLink, n as bindSsrResponseToRequest, o as normalizeSsrResponse, r as defineHandlerCallback, s as replaceSsrResponse, t as renderRouterToStream, x as require_jsx_runtime, z as rootRouteId } from "../_libs/@tanstack/react-router+[...].mjs";
+import { r as __exportAll$1 } from "../_runtime.mjs";
+import { A as resolveManifestCssLink, B as rootRouteId, D as getScriptPreloadAttrs, H as require_react, L as isRedirect, M as executeRewriteInput, N as invariant, O as getStylesheetHref, R as isResolvedRedirect, S as require_jsx_runtime, V as isNotFound, a as isSsrResponse, c as stripSsrResponseBody, f as RouterProvider, i as disposeSsrResponseDetached, j as _getRenderedMatches, k as resolveManifestAssetLink, n as bindSsrResponseToRequest, o as normalizeSsrResponse, r as defineHandlerCallback, s as replaceSsrResponse, t as renderRouterToStream, z as parseRedirect } from "../_libs/@tanstack/react-router+[...].mjs";
 import { n as createMemoryHistory } from "../_libs/tanstack__history.mjs";
 import { a as getOrigin, c as createSerializationAdapter, d as toCrossJSONAsync, f as toCrossJSONStream, i as getNormalizedURL, l as makeSerovalPlugin, n as mergeHeaders, o as defaultSerovalPlugins, r as attachRouterServerSsrUtils, s as createRawStreamRPCPlugin, t as waitForRequest, u as fromJSON } from "../_libs/@tanstack/router-core+[...].mjs";
-import { n as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
+import { n as setCookie, r as toResponse, t as H3Event } from "../_libs/h3-v2+rou3.mjs";
 import { AsyncLocalStorage } from "node:async_hooks";
+//#region node_modules/.nitro/vite/services/ssr/assets/rolldown-runtime-D7D4PA-g.js
+var __defProp = Object.defineProperty;
+var __exportAll = (all, no_symbols) => {
+	let target = {};
+	for (var name in all) __defProp(target, name, {
+		get: all[name],
+		enumerable: true
+	});
+	if (!no_symbols) __defProp(target, Symbol.toStringTag, { value: "Module" });
+	return target;
+};
+//#endregion
 //#region node_modules/.nitro/vite/services/ssr/index.js
-var ssr_exports = /* @__PURE__ */ __exportAll({
+var ssr_exports = /* @__PURE__ */ __exportAll$1({
+	a: () => getServerFnById,
 	createServerEntry: () => createServerEntry,
 	default: () => server_default,
-	n: () => TSS_SERVER_FUNCTION,
-	r: () => getServerFnById,
-	t: () => createServerFn
+	i: () => TSS_SERVER_FUNCTION,
+	n: () => createMiddleware,
+	o: () => getRequest,
+	r: () => createServerFn,
+	t: () => server_exports
 });
 require_react();
 var import_jsx_runtime = require_jsx_runtime();
@@ -73,6 +88,21 @@ function getH3Event() {
 	if (!event) throw new Error(`No StartEvent found in AsyncLocalStorage. Make sure you are using the function within the server runtime.`);
 	return event.h3Event;
 }
+function getRequest() {
+	return getH3Event().req;
+}
+/**
+* Set a cookie value by name.
+* @param name Name of the cookie to set
+* @param value Value of the cookie to set
+* @param options {CookieSerializeOptions} Options for serializing the cookie
+* ```ts
+* setCookie('Authorization', '1234567')
+* ```
+*/
+function setCookie$1(name, value, options) {
+	setCookie(getH3Event(), name, value, options);
+}
 function getResponse() {
 	return getH3Event().res;
 }
@@ -87,7 +117,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-BLIw51kX.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-6NQrltB6.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -109,35 +139,95 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"02870f145ed293cf162bbe007ee1f2f3e2e84304ede96df4483cd43ae7997e20": {
 		functionName: "getTopRadios_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"1d774a97ddc65e6ea8fa4d8de5564851dac8d347f4da7748d684e9a06fd845d9": {
+		functionName: "listUserPlaylists_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"24128d9fef7ed7b28e076e3ff5dd8aeb86eaa462cea934c8c730433ef91fb021": {
+		functionName: "saveLibrary_createServerFn_handler",
+		importer: () => import("./cloud-BaY5AZ_E.mjs")
+	},
+	"2c5986bfbbc1fec6871fbfb28bb0e161830c733aab33519ddc02a3fe26bff3bd": {
+		functionName: "unfollowUser_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"348717c0bc10e27730f609890bfe31e7973d38f21f4d1e318fb4699d08d7b865": {
+		functionName: "listFriendsFeed_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"38bf62ce71e0190290db930d5798ef4ee437b20a1cdff3eee56aecfdfcf321b3": {
+		functionName: "getSharedPlaylist_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"3a61f6d9a5b2a72932f3b42ae25bd9fea4a51eb3d0412a5c2087bade843a5521": {
+		functionName: "getDiscoverMix_createServerFn_handler",
+		importer: () => import("./catalog-BR8mu-w6.mjs")
 	},
 	"6eeca8432c020e4488999a9f520d136ca6d359bf146e4fc720286117cfb8c004": {
 		functionName: "searchCatalog_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"73277765d67cecebc5623e3d311b5ab07b43284d7a420c462a42185468509542": {
+		functionName: "chatTurn_createServerFn_handler",
+		importer: () => import("./assistant-CY4VaxLo.mjs")
 	},
 	"73f83a45f51d7430d01c6ba65abb1226397cf20c8962951e26bac99785823176": {
 		functionName: "getGenreMix_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
 	},
 	"74d2cdb2d98c87a08e4dcc4ab358f071ee955183d53df01037b0507f9a6648c3": {
 		functionName: "getChartTracks_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"7580feac10e6253205f841f28f3415ddc74e772b735c0f713a7d07cdd35c926f": {
+		functionName: "getRelatedTracks_createServerFn_handler",
+		importer: () => import("./catalog-BR8mu-w6.mjs")
 	},
 	"8cf6eee8babbaea2485437d5cb4b2c235dbd85b74941fe6109bbf26b9db42407": {
 		functionName: "getHomeFeed_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
 	},
-	"ce8a487e4cbefbdf4ec0ffa79cb9704d62902152f43f9d7d07bca5a65759f7c5": {
-		functionName: "getTrackLyrics_createServerFn_handler",
-		importer: () => import("./lyrics-FTshG52X.mjs")
+	"92d821464d41705d2e2089b73ce3a31822baedf41ef8a9033b3d6d8e81197a28": {
+		functionName: "getFreshTracks_createServerFn_handler",
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"a647c0c3f3b4aeb4738fff3de93771df92b8a50843fdc50af33dc5655a22b8b9": {
+		functionName: "loadLibrary_createServerFn_handler",
+		importer: () => import("./cloud-BaY5AZ_E.mjs")
+	},
+	"ab37ff9b70b544c9bbbc85c414574743846319983fa1544ae2f39e0b18722c41": {
+		functionName: "getPlayUrl_createServerFn_handler",
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"afa95265f4f577d598099ad132c957a676be41bec0b1c639083bdf97fe9f4946": {
+		functionName: "getVideoTrack_createServerFn_handler",
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"b3740a781b8c2931661ba664483641862702a657b02d31b78df7cf3880636cc4": {
+		functionName: "addSharedTrack_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"d10a7b663b69d3e1af86f8323b415e9018c2157846c363d760b3b1d7cc8ba126": {
+		functionName: "followUser_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
 	},
 	"e717f14110eb25ec0b39ab5ab4b7f9b3b857b73869aee0b9e1025fd5f0dba8d9": {
 		functionName: "getCountryRadios_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
+	},
+	"ea6a09f743b9ccfc3ea1b144fd1fce5ad9dbc05c4b6411ca82670d5d56620830": {
+		functionName: "importSpotify_createServerFn_handler",
+		importer: () => import("./import-playlists-D5bcH2jS.mjs")
+	},
+	"eb715264cb14916343622bdad7fc98482b5f416cefea1798c071844e56a8e606": {
+		functionName: "publishPlaylist_createServerFn_handler",
+		importer: () => import("./share-D9sbOXKn.mjs")
 	},
 	"ec02d6163239e7f655cf1fccbdc3f61e78a074317e13902650d1532a6e9f3fe4": {
 		functionName: "createMoodMix_createServerFn_handler",
-		importer: () => import("./catalog-rZTI_b7V.mjs")
+		importer: () => import("./catalog-BR8mu-w6.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1407,7 +1497,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-CHLvWwov.mjs").then((n) => n.t),
+		import("./router-2cWS5y1K.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);
@@ -1845,6 +1935,7 @@ async function handleServerRoutes({ getRouter, request, url, executeRouter, cont
 	}
 	return normalizeSsrResponse(response);
 }
+var server_exports = /* @__PURE__ */ __exportAll({ setCookie: () => setCookie$1 });
 var fetch = createStartHandler(defaultStreamHandler);
 function createServerEntry(entry) {
 	return { async fetch(...args) {
@@ -1853,4 +1944,4 @@ function createServerEntry(entry) {
 }
 var server_default = createServerEntry({ fetch });
 //#endregion
-export { createServerEntry, server_default as default, ssr_exports as i, TSS_SERVER_FUNCTION as n, getServerFnById as r, createServerFn as t };
+export { getServerFnById as a, __exportAll as c, createServerEntry, server_default as default, TSS_SERVER_FUNCTION as i, createMiddleware as n, getRequest as o, createServerFn as r, ssr_exports as s, server_exports as t };
