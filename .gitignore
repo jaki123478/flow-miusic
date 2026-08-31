@@ -3,3 +3,8 @@ node_modules/
 .github_repo
 .env
 .env.*
+.gradle/
+android/.gradle/
+android/app/build/
+android/local.properties
+

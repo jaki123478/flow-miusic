@@ -71,6 +71,22 @@ function SettingsPage() {
         <p className="mt-1 text-sm text-muted">Riproduzione, aspetto, equalizzatore e memoria.</p>
       </header>
 
+      <section className="space-y-2 rounded-xl bg-surface px-4 py-4 ring-1 ring-border">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-base font-bold text-fg">App Android (APK)</p>
+            <p className="text-xs text-muted">Installa l'app nativa standalone con background audio e notifiche lock-screen.</p>
+          </div>
+          <a
+            href="/Flow-Music.apk"
+            download="Flow-Music.apk"
+            className="flex h-10 shrink-0 items-center justify-center rounded-full bg-primary px-4 text-xs font-bold text-primary-fg shadow-md transition-transform hover:scale-105 active:scale-95"
+          >
+            Scarica APK
+          </a>
+        </div>
+      </section>
+
       <ChromeBackgroundCard />
 
       <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
