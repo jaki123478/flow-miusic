@@ -20,7 +20,7 @@ import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
-import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
+import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
   cachedAudioUrl,
@@ -73,7 +73,12 @@ export function AudioEngine() {
   const lastMove = useRef(0);
   const lastPos = useRef(0);
   const recovering = useRef("");
-  const primed = useRef("");
+
+  const resumeElement = (audio: HTMLAudioElement | null) => {
+    if (!audio) return;
+    if (useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
+  };
+
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
     // Reloading src while hidden kills Android audio (play() is rejected; Range stream dies).
@@ -82,55 +87,45 @@ export function AudioEngine() {
       if (play && audio.paused) void audio.play().catch(() => {});
       return;
     }
-    const going = !audio.paused && audio.currentTime > 0.4;
-    const toBlob = src.startsWith("blob:");
-    const fromNet = lastSrc.current.includes("/api/stream");
-    if (!force && going && lastSrc.current && lastSrc.current !== src && !(toBlob && fromNet)) return;
-    if (lastSrc.current !== src) {
-      const keep = audio.currentTime || 0;
-      lastSrc.current = src;
-      audio.src = src;
-      audio.load();
-      if (keep > 0.4) {
-        audio.addEventListener(
-          "loadedmetadata",
-          () => {
-            try {
-              audio.currentTime = keep;
-            } catch {
-              /* ignore */
-            }
-            if (play || useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
-          },
-          { once: true },
-        );
-      }
+    if (lastSrc.current === src) {
+      applyOutput(audio);
+      if (play) void audio.play().catch(() => {});
+      return;
+    }
+    const playing = !audio.paused && !audio.error;
+    const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
+    // Mid-play blob swap calls load() and drops Chrome Android audio focus.
+    if (playing && blobUpgrade) return;
+    if (playing && !force) return;
+    const keep = audio.currentTime || 0;
+    lastSrc.current = src;
+    audio.src = src;
+    audio.load();
+    if (keep > 0.4) {
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          try {
+            audio.currentTime = keep;
+          } catch {
+            /* ignore */
+          }
+          if (play || useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+        },
+        { once: true },
+      );
     }
     applyOutput(audio);
     if (play) void audio.play().catch(() => {});
   };
 
-  const armLocal = (id: string) => {
-    if (!id || primed.current === id) return;
-    primed.current = id;
-    void loadLocalAudio(id)
-      .then((url) => {
-        const audio = audioRef.current;
-        const s = useFlowStore.getState();
-        if (!audio || s.current?.videoId !== id) return;
-        if (document.hidden) return;
-        if (String(audio.src).startsWith("blob:")) return;
-        applySrc(audio, url, s.isPlaying, true);
-      })
-      .catch(() => {
-        if (primed.current === id) primed.current = "";
-      });
-  };
-
   const recover = (id: string, time: number) => {
     const audio = audioRef.current;
     if (!audio || recovering.current === id) return;
-    if (document.hidden) return;
+    if (document.hidden) {
+      resumeElement(audio);
+      return;
+    }
     recovering.current = id;
     const ready = cachedAudioUrl(id);
     if (ready) {
@@ -151,6 +146,7 @@ export function AudioEngine() {
     }
     void loadLocalAudio(id)
       .then((url) => {
+        if (document.hidden) return;
         if (useFlowStore.getState().current?.videoId !== id) return;
         applySrc(audio, url, true, true);
         audio.addEventListener(
@@ -175,15 +171,29 @@ export function AudioEngine() {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
     }
+    const el = audioRef.current;
+    if (el) {
+      el.setAttribute("playsinline", "true");
+      el.setAttribute("webkit-playsinline", "true");
+    }
     claimAudioFocus();
     bindLockScreenActions({
-      play: () => useFlowStore.getState().resume(),
-      pause: () => useFlowStore.getState().pause(),
+      play: () => {
+        useFlowStore.getState().resume();
+        void audioRef.current?.play().catch(() => {});
+      },
+      pause: () => {
+        useFlowStore.getState().pause();
+        audioRef.current?.pause();
+      },
       prev: () => useFlowStore.getState().prev(),
       next: () => useFlowStore.getState().next(),
       seek: (t) => useFlowStore.getState().seek(t),
       skip: (d) => useFlowStore.getState().skipBy(d),
-      stop: () => useFlowStore.getState().pause(),
+      stop: () => {
+        useFlowStore.getState().pause();
+        audioRef.current?.pause();
+      },
     });
     return bindAudioFocus({
       onLost: () => {
@@ -191,8 +201,10 @@ export function AudioEngine() {
         useFlowStore.getState().pause();
       },
       onGained: () => {
+        if (!shouldResumeAfterFocus()) return;
         const s = useFlowStore.getState();
         if (s.current) s.resume();
+        void audioRef.current?.play().catch(() => {});
       },
     });
   }, []);
@@ -201,7 +213,6 @@ export function AudioEngine() {
     const audio = audioRef.current;
     if (!audio || !current) return;
     recovering.current = "";
-    primed.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
     if (current.duration && current.duration > 0) setDuration(current.duration);
@@ -214,9 +225,9 @@ export function AudioEngine() {
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
-    if (current.videoId) armLocal(current.videoId);
-    const nxt = useFlowStore.getState().queue[1];
-    if (nxt?.videoId) prefetchAudio(nxt.videoId);
+    const st = useFlowStore.getState();
+    const nxt = st.queue[st.queueIndex + 1];
+    if (nxt?.videoId && nxt.videoId !== current.videoId) prefetchAudio(nxt.videoId);
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   useEffect(() => {
@@ -227,7 +238,6 @@ export function AudioEngine() {
     applyOutput(audio);
     if (isPlaying) {
       void audio.play().catch(() => {});
-      if (current?.videoId && !document.hidden) armLocal(current.videoId);
     } else {
       audio.pause();
     }
@@ -254,18 +264,17 @@ export function AudioEngine() {
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
       if (document.hidden) {
-        if (audio.paused && s.isPlaying) void audio.play().catch(() => {});
+        resumeElement(audio);
         return;
       }
-      if (audio.paused) void audio.play().catch(() => {});
+      resumeElement(audio);
       const t = audio.currentTime || 0;
       if (t > lastPos.current + 0.15) {
         lastPos.current = t;
         lastMove.current = Date.now();
-        if (s.current.videoId) armLocal(s.current.videoId);
         return;
       }
-      if (Date.now() - lastMove.current > 2500 && s.current.videoId && !String(audio.src).startsWith("blob:")) {
+      if (Date.now() - lastMove.current > 4000 && s.current.videoId && audio.error) {
         recover(s.current.videoId, t || s.currentTime);
       }
     };
@@ -274,7 +283,7 @@ export function AudioEngine() {
     window.addEventListener("focus", kick);
     window.addEventListener("freeze", kick);
     window.addEventListener("resume", kick);
-    const watchdog = window.setInterval(kick, 1500);
+    const watchdog = window.setInterval(kick, 2000);
     return () => {
       document.removeEventListener("visibilitychange", kick);
       window.removeEventListener("pageshow", kick);
@@ -309,34 +318,35 @@ export function AudioEngine() {
       }}
       onPlaying={() => {
         lastMove.current = Date.now();
+        recovering.current = "";
         const track = useFlowStore.getState().current;
         if (track) {
           markPlayingForFocus(true);
           pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
-          if (track.videoId) armLocal(track.videoId);
         }
       }}
       onPause={() => {
-        const s = useFlowStore.getState();
-        if (s.isPlaying) void audioRef.current?.play().catch(() => {});
+        resumeElement(audioRef.current);
       }}
       onWaiting={() => {
-        const s = useFlowStore.getState();
-        if (s.isPlaying && s.current?.videoId) recover(s.current.videoId, audioRef.current?.currentTime || s.currentTime);
+        if (document.hidden) resumeElement(audioRef.current);
       }}
       onError={() => {
         const s = useFlowStore.getState();
         const id = s.current?.videoId;
         const audio = audioRef.current;
         if (!id || !audio) return;
+        if (document.hidden) {
+          resumeElement(audio);
+          return;
+        }
         const blob = cachedAudioUrl(id);
         if (blob) applySrc(audio, blob, s.isPlaying, true);
         else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
         else if (s.isPlaying) recover(id, s.currentTime);
       }}
       onStalled={() => {
-        const s = useFlowStore.getState();
-        if (s.isPlaying && s.current?.videoId) recover(s.current.videoId, audioRef.current?.currentTime || s.currentTime);
+        if (document.hidden) resumeElement(audioRef.current);
       }}
       onEnded={onEnded}
     />
