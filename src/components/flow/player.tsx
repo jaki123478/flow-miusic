@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type TouchEvent } from "react";
 import {
+  Check,
   ChevronDown,
   Download,
   Gauge,
@@ -12,15 +13,30 @@ import {
   Radio,
   Repeat,
   Repeat1,
+  RotateCcw,
+  RotateCw,
   Share2,
   Shuffle,
   SkipBack,
   SkipForward,
+  Sliders,
+  Sparkles,
+  Type,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
-import { useFlowStore } from "@/stores/flow-store";
+import { useFlowStore, type FlowSettings } from "@/stores/flow-store";
+
+const EQ_PRESETS = [
+  { id: "flat", label: "Flat", bass: 0, treble: 0 },
+  { id: "bass_boost", label: "Bass Boost", bass: 7, treble: 0 },
+  { id: "vocal", label: "Vocal Boost", bass: -2, treble: 5 },
+  { id: "treble_boost", label: "Treble Boost", bass: -1, treble: 7 },
+  { id: "rock", label: "Rock", bass: 5, treble: 4 },
+  { id: "pop", label: "Pop", bass: 3, treble: 3 },
+  { id: "electronic", label: "Electronic", bass: 6, treble: 5 },
+] as const;
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
@@ -437,11 +453,16 @@ export function FullPlayer() {
   const playbackRate = useFlowStore((s) => s.playbackRate || 1);
   const sleepEndsAt = useFlowStore((s) => s.sleepEndsAt);
   const sleepEndOfTrack = useFlowStore((s) => s.sleepEndOfTrack);
-  const lyricsFontSize = useFlowStore((s) => s.settings.lyricsFontSize || "md");
+  const settings = useFlowStore((s) => s.settings);
+  const patchSettings = useFlowStore((s) => s.patchSettings);
+  const lyricsFontSize = settings.lyricsFontSize || "md";
+  const autoplayRelated = settings.autoplayRelated ?? true;
+
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
   const seek = useFlowStore((s) => s.seek);
+  const skipBy = useFlowStore((s) => s.skipBy);
   const toggleShuffle = useFlowStore((s) => s.toggleShuffle);
   const cycleRepeat = useFlowStore((s) => s.cycleRepeat);
   const setPlaybackRate = useFlowStore((s) => s.setPlaybackRate);
@@ -464,6 +485,8 @@ export function FullPlayer() {
   const [glow, setGlow] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [showSleepMenu, setShowSleepMenu] = useState(false);
+  const [showEqMenu, setShowEqMenu] = useState(false);
+  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const lyricsBox = useRef<HTMLDivElement | null>(null);
 
   const { mounted, open } = useOpenTransition(show, 260);
@@ -554,25 +577,50 @@ export function FullPlayer() {
   };
 
   const cycleRate = () => {
-    const rates = [1, 1.25, 1.5, 0.8];
+    const rates = [1, 1.25, 1.5, 2.0, 0.8];
     const curIdx = rates.indexOf(playbackRate);
     const nextRate = rates[(curIdx + 1) % rates.length];
     setPlaybackRate(nextRate);
+    notify(`Velocità: ${nextRate}x`);
+  };
+
+  const cycleLyricsFontSize = () => {
+    const sizes: ("sm" | "md" | "lg" | "xl")[] = ["sm", "md", "lg", "xl"];
+    const curIdx = sizes.indexOf(lyricsFontSize);
+    const nextSize = sizes[(curIdx + 1) % sizes.length];
+    patchSettings({ lyricsFontSize: nextSize });
+    notify(`Carattere testi: ${nextSize.toUpperCase()}`);
   };
 
   const startRadioMix = async () => {
     if (!current) return;
     try {
+      notify("Ricerca correlati YouTube Music…");
       const related = await getRelatedTracks({
         data: { artist: current.artist, title: current.title, excludeId: current.id },
       });
       if (related && related.length) {
         playQueue([current, ...related], 0);
-        notify("Radio avviata");
+        notify(`Radio avviata (${related.length} brani)`);
       }
     } catch {
       notify("Impossibile avviare la radio");
     }
+  };
+
+  const handleTouchStart = (e: TouchEvent) => {
+    setTouchStartX(e.touches[0]?.clientX ?? null);
+  };
+
+  const handleTouchEnd = (e: TouchEvent) => {
+    if (touchStartX === null) return;
+    const endX = e.changedTouches[0]?.clientX ?? touchStartX;
+    const diff = endX - touchStartX;
+    if (Math.abs(diff) > 60) {
+      if (diff < 0) next();
+      else prev();
+    }
+    setTouchStartX(null);
   };
 
   return (
@@ -581,34 +629,48 @@ export function FullPlayer() {
       role="dialog"
       style={glow ? ({ ["--player-glow"]: glow } as CSSProperties) : undefined}
     >
+      {/* Lyra Dynamic Ambient Glow Background */}
       <div className="pointer-events-none absolute inset-0" aria-hidden>
-        <img src={current.artwork} alt="" referrerPolicy="no-referrer" className="player-ambient size-full object-cover blur-3xl opacity-40 saturate-150" />
+        <img src={current.artwork} alt="" referrerPolicy="no-referrer" className="player-ambient size-full object-cover blur-3xl opacity-45 saturate-200" />
         <div
           className="absolute inset-0"
           style={{
             background: glow
-              ? `linear-gradient(180deg, color-mix(in oklab, ${glow} 55%, transparent) 0%, rgb(0 0 0 / 0.55) 42%, rgb(0 0 0 / 0.88) 100%)`
-              : "linear-gradient(180deg, rgb(0 0 0 / 0.28) 0%, rgb(0 0 0 / 0.82) 100%)",
+              ? `linear-gradient(180deg, color-mix(in oklab, ${glow} 55%, transparent) 0%, rgb(0 0 0 / 0.6) 40%, rgb(0 0 0 / 0.92) 100%)`
+              : "linear-gradient(180deg, rgb(0 0 0 / 0.35) 0%, rgb(0 0 0 / 0.88) 100%)",
           }}
         />
       </div>
 
       <div className="relative z-10 flex min-h-0 flex-1 flex-col">
-        {/* Header Bar */}
-        <div className="mx-2 mt-1 flex items-center justify-between rounded-2xl px-1 py-0.5 player-glass">
-          <button type="button" onClick={() => setShowFullPlayer(false)} className="flex size-11 items-center justify-center rounded-full hover:bg-elevated/60" aria-label="Chiudi">
-            <ChevronDown className="size-6" />
+        {/* Top Header Bar */}
+        <div className="mx-3 mt-1.5 flex items-center justify-between rounded-2xl px-2 py-1 player-glass shadow-lg">
+          <button type="button" onClick={() => setShowFullPlayer(false)} className="flex size-11 items-center justify-center rounded-full hover:bg-elevated/60 active:scale-95 transition-transform" aria-label="Chiudi">
+            <ChevronDown className="size-6 text-fg" />
           </button>
-          <p className="text-xs font-medium tracking-wide text-muted uppercase">In riproduzione</p>
-          <div className="flex items-center">
+          <div className="flex flex-col items-center">
+            <p className="text-[10px] font-bold tracking-widest text-muted uppercase">In Riproduzione</p>
+            <span className="text-[11px] font-medium text-primary">Lyra Audio Engine</span>
+          </div>
+          <div className="flex items-center gap-0.5">
+            {showLyrics && (
+              <button
+                type="button"
+                onClick={cycleLyricsFontSize}
+                className="flex size-10 items-center justify-center rounded-full text-fg/80 hover:text-primary hover:bg-elevated/60 transition-colors text-xs font-bold"
+                title="Cambia dimensione caratteri"
+              >
+                <Type className="size-4" />
+              </button>
+            )}
             <button
               type="button"
               onClick={runShare}
               disabled={sharing}
-              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", sharing ? "text-primary" : "text-fg hover:text-primary")}
+              className={cn("flex size-10 items-center justify-center rounded-full transition-colors", sharing ? "text-primary" : "text-fg/80 hover:text-primary hover:bg-elevated/60")}
               aria-label="Condividi testo"
             >
-              <Share2 className="size-5" />
+              <Share2 className="size-4" />
             </button>
             <button
               type="button"
@@ -616,10 +678,10 @@ export function FullPlayer() {
                 setShowQueue(false);
                 setShowLyrics(!showLyrics);
               }}
-              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", showLyrics ? "text-primary" : "text-fg hover:text-primary")}
+              className={cn("flex size-10 items-center justify-center rounded-full transition-colors", showLyrics ? "text-primary bg-primary/15" : "text-fg/80 hover:text-primary hover:bg-elevated/60")}
               aria-label="Testi"
             >
-              <Mic2 className="size-5" />
+              <Mic2 className="size-4" />
             </button>
             <button
               type="button"
@@ -627,19 +689,22 @@ export function FullPlayer() {
                 setShowLyrics(false);
                 setShowQueue(!showQueue);
               }}
-              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", showQueue ? "text-primary" : "text-fg hover:text-primary")}
+              className={cn("flex size-10 items-center justify-center rounded-full transition-colors", showQueue ? "text-primary bg-primary/15" : "text-fg/80 hover:text-primary hover:bg-elevated/60")}
               aria-label="Coda"
             >
-              <ListMusic className="size-5" />
+              <ListMusic className="size-4" />
             </button>
           </div>
         </div>
 
         {/* Content Body */}
         {showQueue ? (
-          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8">
-            <div className="sticky top-0 z-10 mb-2 mt-3 flex items-center justify-between rounded-2xl px-3 py-2 player-glass">
-              <p className="text-sm font-medium">Coda · {queue.length} brani</p>
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8 pt-2">
+            <div className="sticky top-0 z-10 mb-3 flex items-center justify-between rounded-2xl px-3.5 py-2.5 player-glass shadow-lg">
+              <div>
+                <p className="text-sm font-bold text-fg">In Coda · {queue.length} brani</p>
+                <p className="text-[11px] text-muted">{autoplayRelated ? "Autoplay YouTube Music attivo" : "Autoplay disattivato"}</p>
+              </div>
               <button
                 type="button"
                 disabled={busyQueue || !queue.some(canDownloadTrack)}
@@ -649,7 +714,7 @@ export function FullPlayer() {
                   void downloadTracks(queue, (done, total) => setQueueProg(`${done}/${total}`))
                     .then((r) => {
                       const saved = r.ok + r.skipped;
-                      notify(r.fail ? `Salvati ${saved}, ${r.fail} errori` : `${saved} brani in cache`);
+                      notify(r.fail ? `Salvati ${saved}, ${r.fail} errori` : `${saved} brani salvati in cache`);
                     })
                     .catch(() => notify("Download coda non riuscito"))
                     .finally(() => {
@@ -657,28 +722,30 @@ export function FullPlayer() {
                       setQueueProg("");
                     });
                 }}
-                className="h-9 rounded-full bg-primary px-3 text-xs font-semibold text-primary-fg disabled:opacity-50"
+                className="h-9 rounded-full bg-primary px-4 text-xs font-bold text-primary-fg shadow-md disabled:opacity-50 active:scale-95 transition-transform"
               >
-                {busyQueue ? queueProg || "Scarico…" : "Scarica coda"}
+                {busyQueue ? queueProg || "Salvataggio…" : "Salva tutta la coda"}
               </button>
             </div>
-            {queue.map((t, i) => (
-              <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
-            ))}
+            <div className="space-y-1">
+              {queue.map((t, i) => (
+                <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
+              ))}
+            </div>
           </div>
         ) : (
-          <div className="flex min-h-0 flex-1 flex-col px-6 pb-4">
+          <div className="flex min-h-0 flex-1 flex-col px-5 pb-3">
             {showLyrics ? (
-              <div ref={lyricsBox} className="player-glass mx-auto mt-3 min-h-0 w-full max-w-lg flex-1 overflow-y-auto rounded-2xl px-4 py-6 text-center space-y-4">
+              <div ref={lyricsBox} className="player-glass mx-auto mt-2 min-h-0 w-full max-w-lg flex-1 overflow-y-auto rounded-3xl px-4 py-6 text-center space-y-3.5 shadow-2xl">
                 {lyricsLoading ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted">
-                    <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                    <p className="mt-4 text-sm">Caricamento testi LRCLIB…</p>
+                  <div className="flex flex-col items-center justify-center py-16 text-muted">
+                    <div className="size-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <p className="mt-4 text-sm font-semibold">Caricamento testi LRCLIB…</p>
                   </div>
                 ) : !lyrics?.lines.length ? (
-                  <div className="flex flex-col items-center justify-center py-12 text-muted">
+                  <div className="flex flex-col items-center justify-center py-16 text-muted">
                     <Mic2 className="size-12 opacity-25" />
-                    <p className="mt-3 text-base font-semibold text-fg">Testo non disponibile</p>
+                    <p className="mt-3 text-base font-bold text-fg">Testo non disponibile</p>
                     <p className="mt-1 text-xs text-subtle">Nessun testo sincronizzato trovato per questo brano.</p>
                   </div>
                 ) : (
@@ -701,13 +768,13 @@ export function FullPlayer() {
                         data-ly={i}
                         onClick={() => lyrics.synced && seek(line.timeMs / 1000)}
                         className={cn(
-                          "block w-full text-center leading-snug transition-all rounded-lg cursor-pointer",
+                          "block w-full text-center leading-snug transition-all rounded-xl cursor-pointer select-none",
                           sizeStyle,
                           isCur
-                            ? "scale-105 text-primary"
+                            ? "scale-105 text-primary font-black drop-shadow-md"
                             : isPast
                             ? "text-fg/80 font-medium"
-                            : "text-muted/60 hover:text-fg/80",
+                            : "text-muted/60 hover:text-fg/90",
                         )}
                       >
                         {line.text}
@@ -717,72 +784,82 @@ export function FullPlayer() {
                 )}
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={() => setShowLyrics(true)}
-                className="player-art-float mx-auto mt-6 aspect-square w-[min(100%-2rem,22rem)] overflow-hidden rounded-3xl bg-elevated ring-1 ring-white/10"
-                aria-label="Mostra testi"
+              <div
+                onTouchStart={handleTouchStart}
+                onTouchEnd={handleTouchEnd}
+                className="flex min-h-0 flex-1 items-center justify-center py-2"
               >
-                <TrackArt src={current.artwork} alt={current.title} />
-              </button>
-            )}
-
-            {/* Track Info & Action Bar */}
-            <div className="player-glass mt-4 rounded-3xl px-4 py-4">
-              <div className="flex items-start gap-3">
-                <div className="min-w-0 flex-1">
-                  <h1 className="truncate text-2xl font-bold tracking-tight">{current.title}</h1>
-                  <p className="mt-1 truncate text-sm font-medium text-muted">{current.artist}</p>
-                </div>
-                {canDownload ? (
-                  <button
-                    type="button"
-                    disabled={busyDl}
-                    onClick={() => {
-                      if (!current.videoId) return;
-                      setBusyDl(true);
-                      const op = downloaded ? removeDownload(current.videoId) : downloadTrack(current);
-                      void op
-                        .then(() => notify(downloaded ? "Download rimosso" : "Brano salvato offline"))
-                        .catch(() => notify("Download non riuscito"))
-                        .finally(() => setBusyDl(false));
-                    }}
-                    className={cn("size-10 flex items-center justify-center rounded-full text-muted hover:text-fg", downloaded && "text-primary")}
-                    aria-label={downloaded ? "Rimuovi download" : "Scarica"}
-                  >
-                    <Download className="size-5" />
-                  </button>
-                ) : null}
                 <button
                   type="button"
-                  onClick={() => toggleLike(current)}
-                  className={cn("size-10 flex items-center justify-center rounded-full", liked ? "text-primary" : "text-muted hover:text-fg")}
-                  aria-label="Mi piace"
+                  onClick={() => setShowLyrics(true)}
+                  className="player-art-float aspect-square w-[min(100%-1rem,22rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15 transition-transform active:scale-95"
+                  aria-label="Mostra testi"
                 >
-                  <Heart className={cn("size-6", liked && "fill-current")} />
+                  <TrackArt src={current.artwork} alt={current.title} />
                 </button>
               </div>
+            )}
 
-              {/* Seek Bar */}
-              <input
-                type="range"
-                min={0}
-                max={duration || 1}
-                step={0.25}
-                value={Math.min(currentTime, duration || 1)}
-                onChange={(e) => seek(Number(e.target.value))}
-                className="mt-5 h-1.5 w-full appearance-none rounded-full bg-elevated cursor-pointer accent-primary"
-                style={{
-                  background: `linear-gradient(to right, var(--color-primary) ${progress}%, rgb(255 255 255 / 0.18) ${progress}%)`,
-                }}
-              />
-              <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle">
-                <span>{formatTime(currentTime)}</span>
-                <span>{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
+            {/* Lyra Material You Meta & Controls Glass Island */}
+            <div className="player-glass mt-auto rounded-3xl px-5 py-4 shadow-2xl">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-xl font-bold tracking-tight text-fg md:text-2xl">{current.title}</h1>
+                  <p className="mt-0.5 truncate text-sm font-medium text-muted">{current.artist}</p>
+                </div>
+                <div className="flex items-center gap-1">
+                  {canDownload ? (
+                    <button
+                      type="button"
+                      disabled={busyDl}
+                      onClick={() => {
+                        if (!current.videoId) return;
+                        setBusyDl(true);
+                        const op = downloaded ? removeDownload(current.videoId) : downloadTrack(current);
+                        void op
+                          .then(() => notify(downloaded ? "Download rimosso" : "Brano salvato offline"))
+                          .catch(() => notify("Download non riuscito"))
+                          .finally(() => setBusyDl(false));
+                      }}
+                      className={cn("size-10 flex items-center justify-center rounded-full text-muted hover:text-fg transition-colors", downloaded && "text-primary")}
+                      aria-label={downloaded ? "Rimuovi download" : "Scarica"}
+                    >
+                      <Download className="size-5" />
+                    </button>
+                  ) : null}
+                  <button
+                    type="button"
+                    onClick={() => toggleLike(current)}
+                    className={cn("size-10 flex items-center justify-center rounded-full transition-transform active:scale-125", liked ? "text-primary" : "text-muted hover:text-fg")}
+                    aria-label="Mi piace"
+                  >
+                    <Heart className={cn("size-6", liked && "fill-current text-primary")} />
+                  </button>
+                </div>
               </div>
 
-              {/* Controls */}
-              <div className="mt-3 flex items-center justify-between">
+              {/* Material You Waveform / Scrubbing Seekbar */}
+              <div className="mt-4">
+                <input
+                  type="range"
+                  min={0}
+                  max={duration || 1}
+                  step={0.25}
+                  value={Math.min(currentTime, duration || 1)}
+                  onChange={(e) => seek(Number(e.target.value))}
+                  className="h-2 w-full appearance-none rounded-full bg-elevated cursor-pointer accent-primary"
+                  style={{
+                    background: `linear-gradient(to right, var(--color-primary) ${progress}%, rgb(255 255 255 / 0.16) ${progress}%)`,
+                  }}
+                />
+                <div className="mt-1 flex justify-between text-xs tabular-nums text-subtle font-medium">
+                  <span>{formatTime(currentTime)}</span>
+                  <span>{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
+                </div>
+              </div>
+
+              {/* Lyra Main Control Bar */}
+              <div className="mt-2 flex items-center justify-between">
                 <button
                   type="button"
                   onClick={toggleShuffle}
@@ -794,17 +871,27 @@ export function FullPlayer() {
 
                 <button
                   type="button"
+                  onClick={() => skipBy(-10)}
+                  className="size-10 flex items-center justify-center rounded-full text-muted hover:text-fg active:scale-95 transition-transform"
+                  aria-label="Indietro 10 secondi"
+                  title="-10s"
+                >
+                  <RotateCcw className="size-4" />
+                </button>
+
+                <button
+                  type="button"
                   onClick={prev}
-                  className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
+                  className="size-11 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95 transition-transform"
                   aria-label="Brano precedente"
                 >
-                  <SkipBack className="size-7 fill-current" />
+                  <SkipBack className="size-6 fill-current" />
                 </button>
 
                 <button
                   type="button"
                   onClick={togglePlay}
-                  className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg transition-transform active:scale-95 hover:scale-105"
+                  className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg shadow-xl transition-transform active:scale-90 hover:scale-105"
                   aria-label="Play/Pausa"
                 >
                   {isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="size-7 fill-current ml-0.5" />}
@@ -813,10 +900,20 @@ export function FullPlayer() {
                 <button
                   type="button"
                   onClick={next}
-                  className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
+                  className="size-11 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95 transition-transform"
                   aria-label="Brano successivo"
                 >
-                  <SkipForward className="size-7 fill-current" />
+                  <SkipForward className="size-6 fill-current" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => skipBy(10)}
+                  className="size-10 flex items-center justify-center rounded-full text-muted hover:text-fg active:scale-95 transition-transform"
+                  aria-label="Avanti 10 secondi"
+                  title="+10s"
+                >
+                  <RotateCw className="size-4" />
                 </button>
 
                 <button
@@ -829,40 +926,87 @@ export function FullPlayer() {
                 </button>
               </div>
 
-              {/* Utility Row */}
-              <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-xs text-muted">
+              {/* Bottom Quick Tools Dock */}
+              <div className="mt-3 flex items-center justify-between border-t border-white/10 pt-2.5 text-xs text-muted">
+                {/* Equalizer Button */}
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowEqMenu(!showEqMenu);
+                      setShowSleepMenu(false);
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-full bg-elevated/70 px-3 py-1 font-semibold hover:text-fg transition-colors",
+                      settings.eqPreset !== "flat" && "text-primary bg-primary/10",
+                    )}
+                  >
+                    <Sliders className="size-3.5" />
+                    EQ
+                  </button>
+                  {showEqMenu && (
+                    <div className="absolute bottom-9 left-0 z-50 min-w-48 rounded-2xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-xl ring-1 ring-border text-xs space-y-1">
+                      <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Preset Equalizzatore</p>
+                      {EQ_PRESETS.map((p) => (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            patchSettings({ eqPreset: p.id, eqBass: p.bass, eqTreble: p.treble });
+                            setShowEqMenu(false);
+                            notify(`Equalizzatore: ${p.label}`);
+                          }}
+                          className={cn(
+                            "flex w-full items-center justify-between rounded-xl px-2.5 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg",
+                            settings.eqPreset === p.id && "text-primary font-bold bg-primary/10",
+                          )}
+                        >
+                          <span>{p.label}</span>
+                          {settings.eqPreset === p.id && <Check className="size-3.5 text-primary" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Speed Switcher */}
                 <button
                   type="button"
                   onClick={cycleRate}
-                  className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
+                  className="flex items-center gap-1.5 rounded-full bg-elevated/70 px-3 py-1 font-semibold hover:text-fg transition-colors"
                 >
                   <Gauge className="size-3.5" />
                   {playbackRate}x
                 </button>
 
+                {/* Sleep Timer */}
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => setShowSleepMenu(!showSleepMenu)}
+                    onClick={() => {
+                      setShowSleepMenu(!showSleepMenu);
+                      setShowEqMenu(false);
+                    }}
                     className={cn(
-                      "flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg",
-                      (sleepEndsAt || sleepEndOfTrack) && "text-primary",
+                      "flex items-center gap-1.5 rounded-full bg-elevated/70 px-3 py-1 font-semibold hover:text-fg transition-colors",
+                      (sleepEndsAt || sleepEndOfTrack) && "text-primary bg-primary/10",
                     )}
                   >
                     <Moon className="size-3.5" />
                     {sleepEndOfTrack ? "Fine brano" : sleepEndsAt ? "Timer attivo" : "Timer"}
                   </button>
-                  {showSleepMenu ? (
-                    <div className="absolute bottom-9 right-0 z-50 min-w-44 rounded-xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-md ring-1 ring-border text-xs space-y-1">
-                      <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Timer sonno</p>
+                  {showSleepMenu && (
+                    <div className="absolute bottom-9 right-0 z-50 min-w-44 rounded-2xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-xl ring-1 ring-border text-xs space-y-1">
+                      <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Timer di spegnimento</p>
                       <button
                         type="button"
                         onClick={() => {
                           setSleep(null);
                           setSleepEndOfTrack(false);
                           setShowSleepMenu(false);
+                          notify("Timer disattivato");
                         }}
-                        className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
+                        className="block w-full rounded-xl px-2.5 py-1.5 text-left font-medium hover:bg-surface"
                       >
                         Disattivato
                       </button>
@@ -871,14 +1015,14 @@ export function FullPlayer() {
                         onClick={() => {
                           setSleepEndOfTrack(true);
                           setShowSleepMenu(false);
-                          notify("Timer: spegnimento a fine brano");
+                          notify("Timer: spegnimento al termine del brano");
                         }}
                         className={cn(
-                          "block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg",
-                          sleepEndOfTrack && "text-primary font-bold",
+                          "block w-full rounded-xl px-2.5 py-1.5 text-left font-medium hover:bg-surface",
+                          sleepEndOfTrack && "text-primary font-bold bg-primary/10",
                         )}
                       >
-                        Al termine del brano
+                        Al termine del brano 🌙
                       </button>
                       {[
                         [15, "15 minuti"],
@@ -894,22 +1038,23 @@ export function FullPlayer() {
                             setShowSleepMenu(false);
                             notify(`Timer impostato su ${label}`);
                           }}
-                          className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
+                          className="block w-full rounded-xl px-2.5 py-1.5 text-left font-medium hover:bg-surface"
                         >
                           {label}
                         </button>
                       ))}
                     </div>
-                  ) : null}
+                  )}
                 </div>
 
+                {/* Radio Button */}
                 <button
                   type="button"
                   onClick={() => void startRadioMix()}
-                  className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
+                  className="flex items-center gap-1.5 rounded-full bg-elevated/70 px-3 py-1 font-semibold hover:text-fg transition-colors text-primary"
                 >
-                  <Radio className="size-3.5 text-primary" />
-                  Radio brano
+                  <Radio className="size-3.5" />
+                  Radio
                 </button>
               </div>
             </div>

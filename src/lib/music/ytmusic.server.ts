@@ -25,7 +25,7 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   // 1. Innertube direct resolution
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "YTMUSIC", "WEB_REMIX"] as const;
+    const clients = ["IOS", "ANDROID", "YTMUSIC", "WEB"] as const;
     for (const client of clients) {
       try {
         const info = await yt.getBasicInfo(id, { client });
