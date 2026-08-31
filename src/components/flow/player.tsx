@@ -436,6 +436,8 @@ export function FullPlayer() {
   const repeat = useFlowStore((s) => s.repeat);
   const playbackRate = useFlowStore((s) => s.playbackRate || 1);
   const sleepEndsAt = useFlowStore((s) => s.sleepEndsAt);
+  const sleepEndOfTrack = useFlowStore((s) => s.sleepEndOfTrack);
+  const lyricsFontSize = useFlowStore((s) => s.settings.lyricsFontSize || "md");
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
@@ -444,6 +446,7 @@ export function FullPlayer() {
   const cycleRepeat = useFlowStore((s) => s.cycleRepeat);
   const setPlaybackRate = useFlowStore((s) => s.setPlaybackRate);
   const setSleep = useFlowStore((s) => s.setSleep);
+  const setSleepEndOfTrack = useFlowStore((s) => s.setSleepEndOfTrack);
   const toggleLike = useFlowStore((s) => s.toggleLike);
   const playQueue = useFlowStore((s) => s.playQueue);
   const liked = useFlowStore((s) => (current ? s.liked.some((t) => t.id === current.id) : false));
@@ -679,24 +682,38 @@ export function FullPlayer() {
                     <p className="mt-1 text-xs text-subtle">Nessun testo sincronizzato trovato per questo brano.</p>
                   </div>
                 ) : (
-                  lyrics.lines.map((line, i) => (
-                    <button
-                      key={`${line.timeMs}-${i}`}
-                      type="button"
-                      data-ly={i}
-                      onClick={() => lyrics.synced && seek(line.timeMs / 1000)}
-                      className={cn(
-                        "block w-full py-2 text-center text-lg leading-snug transition-all rounded-lg cursor-pointer",
-                        i === activeIdx
-                          ? "scale-105 font-extrabold text-primary text-xl"
-                          : i < activeIdx
-                          ? "text-fg/80 font-medium text-base"
-                          : "text-muted/60 text-base hover:text-fg/80",
-                      )}
-                    >
-                      {line.text}
-                    </button>
-                  ))
+                  lyrics.lines.map((line, i) => {
+                    const isCur = i === activeIdx;
+                    const isPast = i < activeIdx;
+                    const sizeStyle =
+                      lyricsFontSize === "sm"
+                        ? isCur ? "text-lg font-bold py-1.5" : "text-sm py-1"
+                        : lyricsFontSize === "lg"
+                        ? isCur ? "text-2xl font-extrabold py-3" : "text-lg py-1.5"
+                        : lyricsFontSize === "xl"
+                        ? isCur ? "text-3xl font-black py-3.5" : "text-xl py-2"
+                        : isCur ? "text-xl font-extrabold py-2" : "text-base py-1.5";
+
+                    return (
+                      <button
+                        key={`${line.timeMs}-${i}`}
+                        type="button"
+                        data-ly={i}
+                        onClick={() => lyrics.synced && seek(line.timeMs / 1000)}
+                        className={cn(
+                          "block w-full text-center leading-snug transition-all rounded-lg cursor-pointer",
+                          sizeStyle,
+                          isCur
+                            ? "scale-105 text-primary"
+                            : isPast
+                            ? "text-fg/80 font-medium"
+                            : "text-muted/60 hover:text-fg/80",
+                        )}
+                      >
+                        {line.text}
+                      </button>
+                    );
+                  })
                 )}
               </div>
             ) : (
@@ -827,16 +844,43 @@ export function FullPlayer() {
                   <button
                     type="button"
                     onClick={() => setShowSleepMenu(!showSleepMenu)}
-                    className={cn("flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg", sleepEndsAt && "text-primary")}
+                    className={cn(
+                      "flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg",
+                      (sleepEndsAt || sleepEndOfTrack) && "text-primary",
+                    )}
                   >
                     <Moon className="size-3.5" />
-                    {sleepEndsAt ? "Timer attivo" : "Timer"}
+                    {sleepEndOfTrack ? "Fine brano" : sleepEndsAt ? "Timer attivo" : "Timer"}
                   </button>
                   {showSleepMenu ? (
-                    <div className="absolute bottom-9 right-0 z-50 min-w-36 rounded-xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-md ring-1 ring-border text-xs space-y-1">
+                    <div className="absolute bottom-9 right-0 z-50 min-w-44 rounded-xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-md ring-1 ring-border text-xs space-y-1">
                       <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Timer sonno</p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSleep(null);
+                          setSleepEndOfTrack(false);
+                          setShowSleepMenu(false);
+                        }}
+                        className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
+                      >
+                        Disattivato
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSleepEndOfTrack(true);
+                          setShowSleepMenu(false);
+                          notify("Timer: spegnimento a fine brano");
+                        }}
+                        className={cn(
+                          "block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg",
+                          sleepEndOfTrack && "text-primary font-bold",
+                        )}
+                      >
+                        Al termine del brano
+                      </button>
                       {[
-                        [null, "Disattivato"],
                         [15, "15 minuti"],
                         [30, "30 minuti"],
                         [45, "45 minuti"],
@@ -846,8 +890,9 @@ export function FullPlayer() {
                           key={String(mins)}
                           type="button"
                           onClick={() => {
-                            setSleep(mins as number | null);
+                            setSleep(mins as number);
                             setShowSleepMenu(false);
+                            notify(`Timer impostato su ${label}`);
                           }}
                           className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
                         >

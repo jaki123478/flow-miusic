@@ -1,1 +1,0 @@
-import{t as e}from"./react-SIfiwpqq.js";import{r as t}from"./useRouter-CO-L024d.js";import{b as n}from"./index-CmpPE0CG.js";e();var r=t();function i({children:e}){let{user:t}=n();return t?(0,r.jsx)(r.Fragment,{children:e}):null}function a({children:e}){let{user:t,isPending:i}=n();return i||t?null:(0,r.jsx)(r.Fragment,{children:e})}export{a as n,i as t};

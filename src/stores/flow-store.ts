@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Playlist, RepeatMode, Track } from "@/lib/music/types";
 import type { Locale } from "@/lib/i18n";
+import { getRelatedTracks } from "@/lib/music/catalog";
 
 export type FlowSettings = {
   crossfade: number;
@@ -11,7 +12,10 @@ export type FlowSettings = {
   voiceOn: boolean;
   eqBass: number;
   eqTreble: number;
-  theme: "dark" | "light";
+  eqPreset: "flat" | "bass_boost" | "vocal" | "treble_boost" | "rock" | "pop" | "electronic" | "custom";
+  autoplayRelated: boolean;
+  lyricsFontSize: "sm" | "md" | "lg" | "xl";
+  theme: "dark" | "light" | "oled";
   locale: Locale;
 };
 
@@ -24,6 +28,9 @@ export const DEFAULT_SETTINGS: FlowSettings = {
   voiceOn: false,
   eqBass: 0,
   eqTreble: 0,
+  eqPreset: "flat",
+  autoplayRelated: true,
+  lyricsFontSize: "md",
   theme: "dark",
   locale: "it",
 };
@@ -70,6 +77,7 @@ interface FlowState {
   playbackRate: number;
   seekVersion: number;
   sleepEndsAt: number | null;
+  sleepEndOfTrack: boolean;
   showFullPlayer: boolean;
   showQueue: boolean;
   showLyrics: boolean;
@@ -109,6 +117,7 @@ interface FlowState {
   cycleRepeat: () => void;
   setPlaybackRate: (r: number) => void;
   setSleep: (minutes: number | null) => void;
+  setSleepEndOfTrack: (v: boolean) => void;
   setShowFullPlayer: (v: boolean) => void;
   setShowQueue: (v: boolean) => void;
   setShowLyrics: (v: boolean) => void;
@@ -185,6 +194,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   playbackRate: 1,
   seekVersion: 0,
   sleepEndsAt: null,
+  sleepEndOfTrack: false,
   showFullPlayer: false,
   showQueue: false,
   showLyrics: false,
@@ -282,7 +292,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   next: () => {
-    const { queue, queueIndex, repeat, shuffle } = get();
+    const { queue, queueIndex, repeat, shuffle, settings, current } = get();
     if (!queue.length) return;
     let nextIndex: number;
     if (shuffle && queue.length > 1) {
@@ -292,14 +302,36 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     } else {
       nextIndex = queueIndex + 1;
       if (nextIndex >= queue.length) {
-        if (repeat === "all") nextIndex = 0;
-        else {
+        if (repeat === "all") {
+          nextIndex = 0;
+        } else if (settings.autoplayRelated && current) {
+          void getRelatedTracks({
+            data: { artist: current.artist, title: current.title, excludeId: current.id },
+          })
+            .then((related) => {
+              if (related && related.length) {
+                const existingIds = new Set(get().queue.map((t) => t.id));
+                const fresh = related.filter((t) => !existingIds.has(t.id));
+                if (fresh.length) {
+                  get().appendQueue(fresh);
+                  get().next();
+                } else {
+                  set({ isPlaying: false });
+                }
+              } else {
+                set({ isPlaying: false });
+              }
+            })
+            .catch(() => set({ isPlaying: false }));
+          return;
+        } else {
           set({ isPlaying: false });
           return;
         }
       }
     }
     const track = queue[nextIndex];
+    if (!track) return;
     const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
     set({
@@ -313,6 +345,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   onEnded: () => {
+    if (get().sleepEndOfTrack) {
+      set({ isPlaying: false, sleepEndOfTrack: false });
+      get().notify("Timer completato (fine brano)");
+      return;
+    }
     if (get().repeat === "one") {
       set({ currentTime: 0, isPlaying: true, seekVersion: get().seekVersion + 1 });
       return;
@@ -357,7 +394,9 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
   setPlaybackRate: (r) => set({ playbackRate: r }),
   setSleep: (minutes) =>
-    set({ sleepEndsAt: minutes == null ? null : Date.now() + minutes * 60_000 }),
+    set({ sleepEndsAt: minutes == null ? null : Date.now() + minutes * 60_000, sleepEndOfTrack: false }),
+  setSleepEndOfTrack: (v) =>
+    set({ sleepEndOfTrack: v, sleepEndsAt: null }),
   setShowFullPlayer: (v) => set({ showFullPlayer: v, showQueue: v ? get().showQueue : false }),
   setShowQueue: (v) => set({ showQueue: v, showLyrics: v ? false : get().showLyrics }),
   setShowLyrics: (v) => set({ showLyrics: v, showQueue: v ? false : get().showQueue }),

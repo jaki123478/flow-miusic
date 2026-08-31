@@ -8,6 +8,7 @@ import {
   writeLastFmConfig,
   type LastFmConfig,
 } from "@/lib/music/lastfm";
+import { clearAllDownloads, formatBytes, useCacheStats } from "@/lib/music/offline-audio";
 import { useFlowStore, DEFAULT_SETTINGS, type FlowSettings } from "@/stores/flow-store";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -40,6 +41,16 @@ function Toggle({
   );
 }
 
+const EQ_PRESETS = [
+  { id: "flat", label: "Flat", bass: 0, treble: 0 },
+  { id: "bass_boost", label: "Bass Boost", bass: 7, treble: 0 },
+  { id: "vocal", label: "Vocal", bass: -2, treble: 5 },
+  { id: "treble_boost", label: "Treble Boost", bass: -1, treble: 7 },
+  { id: "rock", label: "Rock", bass: 5, treble: 4 },
+  { id: "pop", label: "Pop", bass: 3, treble: 3 },
+  { id: "electronic", label: "Electronic", bass: 6, treble: 5 },
+] as const;
+
 function SettingsPage() {
   const settings = useFlowStore((s) => s.settings);
   const patch = useFlowStore((s) => s.patchSettings);
@@ -47,6 +58,8 @@ function SettingsPage() {
   const liked = useFlowStore((s) => s.liked.length);
   const recents = useFlowStore((s) => s.recents.length);
   const notify = useFlowStore((s) => s.notify);
+  const cache = useCacheStats();
+  const [clearing, setClearing] = useState(false);
   const hours = listenMs / 3_600_000;
 
   const set = (partial: Partial<FlowSettings>) => patch(partial);
@@ -55,24 +68,28 @@ function SettingsPage() {
     <div className="flow-enter mx-auto max-w-xl space-y-8 pb-8">
       <header>
         <h1 className="text-3xl font-bold tracking-tight">Impostazioni</h1>
-        <p className="mt-1 text-sm text-muted">Riproduzione, aspetto, lingua e privacy.</p>
+        <p className="mt-1 text-sm text-muted">Riproduzione, aspetto, equalizzatore e memoria.</p>
       </header>
 
       <ChromeBackgroundCard />
 
       <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
-        <p className="text-sm font-medium">Tema</p>
-        <div className="flex gap-2">
-          {(["dark", "light"] as const).map((theme) => (
+        <p className="text-sm font-medium">Tema interfaccia</p>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: "dark", label: "Scuro" },
+            { id: "oled", label: "Nero OLED (AMOLED)" },
+            { id: "light", label: "Chiaro" },
+          ].map((item) => (
             <button
-              key={theme}
+              key={item.id}
               type="button"
-              onClick={() => set({ theme })}
-              className={`h-9 rounded-full px-4 text-sm font-medium ${
-                settings.theme === theme ? "bg-primary text-primary-fg" : "bg-elevated"
+              onClick={() => set({ theme: item.id as FlowSettings["theme"] })}
+              className={`h-9 rounded-full px-4 text-sm font-medium transition-colors ${
+                settings.theme === item.id ? "bg-primary text-primary-fg font-bold" : "bg-elevated text-muted hover:text-fg"
               }`}
             >
-              {theme === "dark" ? "Scuro" : "Chiaro"}
+              {item.label}
             </button>
           ))}
         </div>
@@ -136,6 +153,12 @@ function SettingsPage() {
           </div>
         </div>
         <Toggle
+          label="Autoplay infinito (Radio continua)"
+          hint="Quando la playlist/coda finisce, scopre e riproduce automaticamente brani simili"
+          on={settings.autoplayRelated}
+          onChange={(v) => set({ autoplayRelated: v })}
+        />
+        <Toggle
           label="Normalizza volume"
           hint="Livello più costante tra brani e radio"
           on={settings.normalize}
@@ -147,6 +170,29 @@ function SettingsPage() {
           on={settings.remainingTime}
           onChange={(v) => set({ remainingTime: v })}
         />
+        <div className="py-3">
+          <p className="text-sm font-medium">Dimensione testi karaoke</p>
+          <p className="mb-2 text-xs text-muted">Grandezza dei caratteri nella visualizzazione testi sincronizzati.</p>
+          <div className="flex gap-2">
+            {[
+              { id: "sm", label: "Piccolo" },
+              { id: "md", label: "Medio" },
+              { id: "lg", label: "Grande" },
+              { id: "xl", label: "Molto grande" },
+            ].map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => set({ lyricsFontSize: f.id as FlowSettings["lyricsFontSize"] })}
+                className={`h-9 rounded-full px-3 text-xs font-medium ${
+                  settings.lyricsFontSize === f.id ? "bg-primary text-primary-fg font-bold" : "bg-elevated"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
         <Toggle
           label="Flow DJ parla"
           hint="Il chatbot legge le risposte ad alta voce e puoi dettare col microfono"
@@ -155,9 +201,28 @@ function SettingsPage() {
         />
       </section>
 
-      <section className="rounded-lg bg-surface px-4 py-3">
-        <p className="text-sm font-medium">Equalizzatore</p>
-        <p className="mb-3 text-xs text-muted">Bassi e acuti sulla radio e sugli stream nativi.</p>
+      <section className="space-y-4 rounded-lg bg-surface px-4 py-3">
+        <div>
+          <p className="text-sm font-medium">Equalizzatore Audio</p>
+          <p className="text-xs text-muted">Preset e regolazione frequenze (stile Lyra Music).</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {EQ_PRESETS.map((p) => {
+            const active = settings.eqPreset === p.id && settings.eqBass === p.bass && settings.eqTreble === p.treble;
+            return (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => set({ eqPreset: p.id, eqBass: p.bass, eqTreble: p.treble })}
+                className={`h-8 rounded-full px-3 text-xs font-medium transition-colors ${
+                  active ? "bg-primary text-primary-fg font-bold" : "bg-elevated text-muted hover:text-fg"
+                }`}
+              >
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
         <label className="mt-2 flex items-center gap-3 text-sm">
           Bassi
           <input
@@ -166,10 +231,10 @@ function SettingsPage() {
             max={12}
             step={1}
             value={settings.eqBass}
-            onChange={(e) => set({ eqBass: Number(e.target.value) })}
+            onChange={(e) => set({ eqBass: Number(e.target.value), eqPreset: "custom" })}
             className="seek flex-1"
           />
-          <span className="w-8 text-right text-xs tabular-nums text-muted">{settings.eqBass}</span>
+          <span className="w-8 text-right text-xs tabular-nums text-muted">{settings.eqBass > 0 ? `+${settings.eqBass}` : settings.eqBass}</span>
         </label>
         <label className="mt-2 flex items-center gap-3 text-sm">
           Acuti
@@ -179,11 +244,31 @@ function SettingsPage() {
             max={12}
             step={1}
             value={settings.eqTreble}
-            onChange={(e) => set({ eqTreble: Number(e.target.value) })}
+            onChange={(e) => set({ eqTreble: Number(e.target.value), eqPreset: "custom" })}
             className="seek flex-1"
           />
-          <span className="w-8 text-right text-xs tabular-nums text-muted">{settings.eqTreble}</span>
+          <span className="w-8 text-right text-xs tabular-nums text-muted">{settings.eqTreble > 0 ? `+${settings.eqTreble}` : settings.eqTreble}</span>
         </label>
+      </section>
+
+      <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
+        <p className="text-sm font-medium">Memoria & Brani Offline</p>
+        <p className="text-xs text-muted">
+          Hai {cache.count} brani salvati offline ({formatBytes(cache.bytes)} occupati).
+        </p>
+        <button
+          type="button"
+          disabled={clearing || cache.count === 0}
+          onClick={() => {
+            setClearing(true);
+            void clearAllDownloads()
+              .then(() => notify("Cache offline svuotata"))
+              .finally(() => setClearing(false));
+          }}
+          className="h-10 rounded-full bg-elevated px-4 text-xs font-semibold text-fg hover:bg-highlight disabled:opacity-50"
+        >
+          {clearing ? "Svuotamento…" : "Svuota cache brani offline"}
+        </button>
       </section>
 
       <section className="divide-y divide-border rounded-lg bg-surface px-4">

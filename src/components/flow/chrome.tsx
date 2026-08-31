@@ -167,8 +167,9 @@ export function Prefs() {
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("theme-light", theme === "light");
+    root.classList.toggle("theme-oled", theme === "oled");
     root.lang = locale;
-    root.style.colorScheme = theme;
+    root.style.colorScheme = theme === "light" ? "light" : "dark";
     const vis = () => root.classList.toggle("app-hidden", document.hidden);
     vis();
     document.addEventListener("visibilitychange", vis);
