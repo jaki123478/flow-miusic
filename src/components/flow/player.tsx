@@ -1,8 +1,10 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  Download,
   Heart,
   ListMusic,
+  Mic2,
   Pause,
   Play,
   Repeat,
@@ -19,7 +21,15 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
-import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
+import {
+  cachedAudioUrl,
+  downloadTrack,
+  loadLocalAudio,
+  prefetchAudio,
+  removeDownload,
+  useIsDownloaded,
+} from "@/lib/music/offline-audio";
+import { getTrackLyrics, type LyricsPayload } from "@/lib/music/lyrics";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -412,6 +422,8 @@ export function MiniPlayer() {
   );
 }
 
+const lyricsMem = new Map<string, LyricsPayload>();
+
 export function FullPlayer() {
   const current = useFlowStore((s) => s.current);
   const isPlaying = useFlowStore((s) => s.isPlaying);
@@ -421,6 +433,7 @@ export function FullPlayer() {
   const queue = useFlowStore((s) => s.queue);
   const show = useFlowStore((s) => s.showFullPlayer);
   const showQueue = useFlowStore((s) => s.showQueue);
+  const showLyrics = useFlowStore((s) => s.showLyrics);
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
   const prev = useFlowStore((s) => s.prev);
@@ -429,27 +442,148 @@ export function FullPlayer() {
   const liked = useFlowStore((s) => (current ? s.liked.some((t) => t.id === current.id) : false));
   const setShowFullPlayer = useFlowStore((s) => s.setShowFullPlayer);
   const setShowQueue = useFlowStore((s) => s.setShowQueue);
+  const setShowLyrics = useFlowStore((s) => s.setShowLyrics);
+  const notify = useFlowStore((s) => s.notify);
+  const downloaded = useIsDownloaded(current?.videoId);
+  const [busyDl, setBusyDl] = useState(false);
+  const [lyrics, setLyrics] = useState<LyricsPayload | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const lyricsBox = useRef<HTMLDivElement | null>(null);
   const { mounted, open } = useOpenTransition(show, 260);
+
+  useEffect(() => {
+    if (!current || current.isLive) {
+      setLyrics(null);
+      return;
+    }
+    const key = current.videoId || current.id;
+    const hit = lyricsMem.get(key);
+    if (hit) {
+      setLyrics(hit);
+      return;
+    }
+    let cancelled = false;
+    setLyricsLoading(true);
+    void getTrackLyrics({
+      data: {
+        videoId: current.videoId,
+        title: current.title,
+        artist: current.artist,
+        album: current.album,
+        duration: current.duration || duration || undefined,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        lyricsMem.set(key, res);
+        setLyrics(res);
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLyricsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [current?.id, current?.videoId, current?.title, current?.artist, current?.album, current?.duration, current?.isLive, duration]);
+
+  const activeIdx = lyrics?.synced
+    ? lyrics.lines.reduce((acc, line, i) => (currentTime * 1000 >= line.timeMs ? i : acc), 0)
+    : -1;
+
+  useEffect(() => {
+    if (!showLyrics || activeIdx < 0) return;
+    const root = lyricsBox.current;
+    const el = root?.querySelector(`[data-ly="${activeIdx}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeIdx, showLyrics]);
+
   if (!mounted || !current) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
+  const canDownload = Boolean(current.videoId) && !current.isLive && current.source !== "radio";
   return (
     <div className={cn("player-full fixed inset-0 z-50 flex h-dvh flex-col bg-bg pt-[env(safe-area-inset-top)]", open ? "is-open" : "is-closing")} role="dialog">
       <div className="flex items-center justify-between px-2 py-1">
         <button type="button" onClick={() => setShowFullPlayer(false)} className="flex size-11 items-center justify-center" aria-label="Chiudi"><ChevronDown className="size-6" /></button>
         <p className="text-xs font-medium tracking-wide text-muted uppercase">In riproduzione</p>
-        <button type="button" onClick={() => setShowQueue(!showQueue)} className={cn("flex size-11 items-center justify-center", showQueue ? "text-primary" : "text-fg")}><ListMusic className="size-5" /></button>
+        <div className="flex items-center">
+          <button
+            type="button"
+            onClick={() => setShowLyrics(!showLyrics)}
+            className={cn("flex size-11 items-center justify-center", showLyrics ? "text-primary" : "text-fg")}
+            aria-label="Testi"
+          >
+            <Mic2 className="size-5" />
+          </button>
+          <button type="button" onClick={() => setShowQueue(!showQueue)} className={cn("flex size-11 items-center justify-center", showQueue ? "text-primary" : "text-fg")} aria-label="Coda">
+            <ListMusic className="size-5" />
+          </button>
+        </div>
       </div>
       {showQueue ? (
         <div className="min-h-0 flex-1 overflow-y-auto px-3">{queue.map((t, i) => <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />)}</div>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col px-6 pb-8">
-          <div className="mx-auto mt-4 aspect-square w-[min(100%-2rem,22rem)] overflow-hidden rounded-xl bg-elevated"><TrackArt src={current.artwork} alt={current.title} /></div>
+          {showLyrics ? (
+            <div ref={lyricsBox} className="mx-auto mt-2 min-h-0 w-full max-w-lg flex-1 overflow-y-auto rounded-xl bg-elevated/60 px-4 py-6">
+              {lyricsLoading ? (
+                <p className="text-center text-sm text-muted">Cerco i testi…</p>
+              ) : !lyrics?.lines.length ? (
+                <p className="text-center text-sm text-muted">Nessun testo trovato per questo brano.</p>
+              ) : (
+                lyrics.lines.map((line, i) => (
+                  <button
+                    key={`${line.timeMs}-${i}`}
+                    type="button"
+                    data-ly={i}
+                    onClick={() => lyrics.synced && seek(line.timeMs / 1000)}
+                    className={cn(
+                      "block w-full py-1.5 text-left text-lg leading-snug transition-colors",
+                      i === activeIdx ? "font-bold text-primary" : "text-muted",
+                    )}
+                  >
+                    {line.text}
+                  </button>
+                ))
+              )}
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowLyrics(true)}
+              className="mx-auto mt-4 aspect-square w-[min(100%-2rem,22rem)] overflow-hidden rounded-xl bg-elevated"
+              aria-label="Mostra testi"
+            >
+              <TrackArt src={current.artwork} alt={current.title} />
+            </button>
+          )}
           <div className="mt-6 flex items-start gap-3">
             <div className="min-w-0 flex-1">
               <h1 className="truncate text-2xl font-semibold">{current.title}</h1>
               <p className="mt-1 truncate text-sm text-muted">{current.artist}</p>
             </div>
+            {canDownload ? (
+              <button
+                type="button"
+                disabled={busyDl}
+                onClick={() => {
+                  if (!current.videoId) return;
+                  setBusyDl(true);
+                  const op = downloaded ? removeDownload(current.videoId) : downloadTrack(current);
+                  void op
+                    .then(() => notify(downloaded ? "Download rimosso" : "Brano salvato offline"))
+                    .catch(() => notify("Download non riuscito"))
+                    .finally(() => setBusyDl(false));
+                }}
+                className={cn("text-muted", downloaded && "text-primary")}
+                aria-label={downloaded ? "Rimuovi download" : "Scarica"}
+              >
+                <Download className="size-6" />
+              </button>
+            ) : null}
             <button type="button" onClick={() => toggleLike(current)} className={liked ? "text-primary" : "text-muted"}><Heart className={cn("size-6", liked && "fill-current")} /></button>
           </div>
           <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="mt-6 h-1.5 w-full appearance-none rounded-full bg-elevated" style={{ background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)` }} />

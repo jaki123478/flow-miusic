@@ -5,13 +5,14 @@ import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { importSpotify } from "@/lib/music/import-playlists";
 import { publishPlaylist } from "@/lib/music/share";
+import { removeDownload, useOfflineDownloads } from "@/lib/music/offline-audio";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 import type { Track } from "@/lib/music/types";
 
 export const Route = createFileRoute("/library")({ component: LibraryPage });
 
-type Tab = "liked" | "recents" | "playlists";
+type Tab = "liked" | "recents" | "playlists" | "downloads";
 
 function LibraryPage() {
   const liked = useFlowStore((s) => s.liked);
@@ -28,6 +29,8 @@ function LibraryPage() {
   const setPlaylistPublic = useFlowStore((s) => s.setPlaylistPublic);
   const clearRecents = useFlowStore((s) => s.clearRecents);
   const user = useCurrentUser();
+  const downloads = useOfflineDownloads();
+  const notify = useFlowStore((s) => s.notify);
   const [tab, setTab] = useState<Tab>("liked");
   const [title, setTitle] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
@@ -46,6 +49,7 @@ function LibraryPage() {
     { id: "liked", label: "Preferiti", count: liked.length },
     { id: "recents", label: "Recenti", count: recents.length },
     { id: "playlists", label: "Playlist", count: playlists.length },
+    { id: "downloads", label: "Scaricati", count: downloads.length },
   ];
 
   return (
@@ -137,6 +141,39 @@ function LibraryPage() {
             </button>
             {recents.map((t, i) => (
               <TrackRow key={t.id} track={t} queue={recents} index={i} />
+            ))}
+          </>
+        )
+      ) : null}
+
+
+      {tab === "downloads" ? (
+        downloads.length === 0 ? (
+          <Empty text="Nessun brano salvato offline. Dal menu di una traccia scegli Scarica offline." />
+        ) : (
+          <>
+            <SectionHeader
+              title="Scaricati"
+              action="Riproduci"
+              onAction={() => playQueue(downloads, 0)}
+            />
+            {downloads.map((t, i) => (
+              <div key={t.id} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <TrackRow track={t} queue={downloads} index={i} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!t.videoId) return;
+                    void removeDownload(t.videoId).then(() => notify("Download rimosso"));
+                  }}
+                  className="flex size-11 shrink-0 items-center justify-center text-subtle"
+                  aria-label="Rimuovi download"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             ))}
           </>
         )
