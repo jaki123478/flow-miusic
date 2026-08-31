@@ -6,7 +6,6 @@ import { useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
-import { KeepAlive } from "./keep-alive";
 import { ActionSheet, TrackArt } from "./tracks";
 import { HelpOverlay, InstallHint, AuthChip, CloudSync, Prefs, StationEngine } from "./chrome";
 import { ToastHost } from "./toast";
@@ -236,7 +235,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       <Prefs />
       <StationEngine />
       <AudioEngine />
-      <KeepAlive />
       <div className="flex min-h-0 flex-1 gap-2 p-0 md:p-2 md:pb-0">
         <aside className="hidden w-72 shrink-0 flex-col gap-2 md:flex">
           <div className="rounded-lg bg-surface px-3 py-2">
