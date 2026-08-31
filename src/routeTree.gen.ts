@@ -27,7 +27,6 @@ import { Route as ApiProxyRouteImport } from './routes/api/proxy'
 import { Route as ApiStreamRouteImport } from './routes/api/stream'
 import { Route as PIdRouteImport } from './routes/p.$id'
 import { Route as TIdRouteImport } from './routes/t.$id'
-import { Route as URouteImport } from './routes/u.'
 import { Route as UIdRouteImport } from './routes/u.$id'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
@@ -121,11 +120,6 @@ const TIdRoute = TIdRouteImport.update({
   path: '/t/$id',
   getParentRoute: () => rootRouteImport,
 } as any)
-const URoute = URouteImport.update({
-  id: '/u/',
-  path: '/u/',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const UIdRoute = UIdRouteImport.update({
   id: '/u/$id',
   path: '/u/$id',
@@ -151,7 +145,6 @@ export interface FileRoutesByFullPath {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/stats': typeof StatsRoute
-  '/u/': typeof URoute
   '/api/play': typeof ApiPlayRoute
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
@@ -174,7 +167,6 @@ export interface FileRoutesByTo {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/stats': typeof StatsRoute
-  '/u': typeof URoute
   '/api/play': typeof ApiPlayRoute
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
@@ -198,7 +190,6 @@ export interface FileRoutesById {
   '/search': typeof SearchRoute
   '/settings': typeof SettingsRoute
   '/stats': typeof StatsRoute
-  '/u/': typeof URoute
   '/api/play': typeof ApiPlayRoute
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
@@ -223,7 +214,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/stats'
-    | '/u/'
     | '/api/play'
     | '/api/proxy'
     | '/api/stream'
@@ -246,7 +236,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/stats'
-    | '/u'
     | '/api/play'
     | '/api/proxy'
     | '/api/stream'
@@ -269,7 +258,6 @@ export interface FileRouteTypes {
     | '/search'
     | '/settings'
     | '/stats'
-    | '/u/'
     | '/api/play'
     | '/api/proxy'
     | '/api/stream'
@@ -293,7 +281,6 @@ export interface RootRouteChildren {
   SearchRoute: typeof SearchRoute
   SettingsRoute: typeof SettingsRoute
   StatsRoute: typeof StatsRoute
-  URoute: typeof URoute
   ApiPlayRoute: typeof ApiPlayRoute
   ApiProxyRoute: typeof ApiProxyRoute
   ApiStreamRoute: typeof ApiStreamRoute
@@ -431,13 +418,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TIdRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/u/': {
-      id: '/u/'
-      path: '/u'
-      fullPath: '/u/'
-      preLoaderRoute: typeof URouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/u/$id': {
       id: '/u/$id'
       path: '/u/$id'
@@ -469,7 +449,6 @@ const rootRouteChildren: RootRouteChildren = {
   SearchRoute: SearchRoute,
   SettingsRoute: SettingsRoute,
   StatsRoute: StatsRoute,
-  URoute: URoute,
   ApiPlayRoute: ApiPlayRoute,
   ApiProxyRoute: ApiProxyRoute,
   ApiStreamRoute: ApiStreamRoute,
