@@ -117,7 +117,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-RhUDwgxn.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-nJdUBlVU.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -139,7 +139,7 @@ async function getStartManifest(matchedRoutes) {
 var manifest = {
 	"02870f145ed293cf162bbe007ee1f2f3e2e84304ede96df4483cd43ae7997e20": {
 		functionName: "getTopRadios_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"1d774a97ddc65e6ea8fa4d8de5564851dac8d347f4da7748d684e9a06fd845d9": {
 		functionName: "listUserPlaylists_createServerFn_handler",
@@ -157,41 +157,49 @@ var manifest = {
 		functionName: "listFriendsFeed_createServerFn_handler",
 		importer: () => import("./share-D9sbOXKn.mjs")
 	},
+	"351f225b34096eb08e6d35a1522b9a9fb7771752e02520f75204619318aa87bf": {
+		functionName: "lastFmUpdate_createServerFn_handler",
+		importer: () => import("./lastfm-DA7SgwtT.mjs")
+	},
 	"38bf62ce71e0190290db930d5798ef4ee437b20a1cdff3eee56aecfdfcf321b3": {
 		functionName: "getSharedPlaylist_createServerFn_handler",
 		importer: () => import("./share-D9sbOXKn.mjs")
 	},
 	"3a61f6d9a5b2a72932f3b42ae25bd9fea4a51eb3d0412a5c2087bade843a5521": {
 		functionName: "getDiscoverMix_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
+	},
+	"6095f063f621f088fea9299e213229ee522c781627f94d6033222a923eeff0b0": {
+		functionName: "lastFmHandshake_createServerFn_handler",
+		importer: () => import("./lastfm-DA7SgwtT.mjs")
 	},
 	"6eeca8432c020e4488999a9f520d136ca6d359bf146e4fc720286117cfb8c004": {
 		functionName: "searchCatalog_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"73277765d67cecebc5623e3d311b5ab07b43284d7a420c462a42185468509542": {
 		functionName: "chatTurn_createServerFn_handler",
-		importer: () => import("./assistant-DdsC4pdG.mjs")
+		importer: () => import("./assistant-dInzW7tw.mjs")
 	},
 	"73f83a45f51d7430d01c6ba65abb1226397cf20c8962951e26bac99785823176": {
 		functionName: "getGenreMix_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"74d2cdb2d98c87a08e4dcc4ab358f071ee955183d53df01037b0507f9a6648c3": {
 		functionName: "getChartTracks_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"7580feac10e6253205f841f28f3415ddc74e772b735c0f713a7d07cdd35c926f": {
 		functionName: "getRelatedTracks_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"8cf6eee8babbaea2485437d5cb4b2c235dbd85b74941fe6109bbf26b9db42407": {
 		functionName: "getHomeFeed_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"92d821464d41705d2e2089b73ce3a31822baedf41ef8a9033b3d6d8e81197a28": {
 		functionName: "getFreshTracks_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"a647c0c3f3b4aeb4738fff3de93771df92b8a50843fdc50af33dc5655a22b8b9": {
 		functionName: "loadLibrary_createServerFn_handler",
@@ -199,11 +207,11 @@ var manifest = {
 	},
 	"ab37ff9b70b544c9bbbc85c414574743846319983fa1544ae2f39e0b18722c41": {
 		functionName: "getPlayUrl_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"afa95265f4f577d598099ad132c957a676be41bec0b1c639083bdf97fe9f4946": {
 		functionName: "getVideoTrack_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"b3740a781b8c2931661ba664483641862702a657b02d31b78df7cf3880636cc4": {
 		functionName: "addSharedTrack_createServerFn_handler",
@@ -211,7 +219,7 @@ var manifest = {
 	},
 	"ce8a487e4cbefbdf4ec0ffa79cb9704d62902152f43f9d7d07bca5a65759f7c5": {
 		functionName: "getTrackLyrics_createServerFn_handler",
-		importer: () => import("./lyrics-BYeTUFjK.mjs")
+		importer: () => import("./lyrics-Dv8fB53c.mjs")
 	},
 	"d10a7b663b69d3e1af86f8323b415e9018c2157846c363d760b3b1d7cc8ba126": {
 		functionName: "followUser_createServerFn_handler",
@@ -219,7 +227,7 @@ var manifest = {
 	},
 	"e717f14110eb25ec0b39ab5ab4b7f9b3b857b73869aee0b9e1025fd5f0dba8d9": {
 		functionName: "getCountryRadios_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	},
 	"ea6a09f743b9ccfc3ea1b144fd1fce5ad9dbc05c4b6411ca82670d5d56620830": {
 		functionName: "importSpotify_createServerFn_handler",
@@ -231,7 +239,7 @@ var manifest = {
 	},
 	"ec02d6163239e7f655cf1fccbdc3f61e78a074317e13902650d1532a6e9f3fe4": {
 		functionName: "createMoodMix_createServerFn_handler",
-		importer: () => import("./catalog-BR8mu-w6.mjs")
+		importer: () => import("./catalog-CTqlkoak.mjs")
 	}
 };
 async function getServerFnById(id, access) {
@@ -1501,7 +1509,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-B9rxu5c1.mjs").then((n) => n.t),
+		import("./router-3XRz9yob.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);

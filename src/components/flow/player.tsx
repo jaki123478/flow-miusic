@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import {
   ChevronDown,
+  Download,
   Gauge,
   Heart,
   ListMusic,
@@ -11,6 +12,7 @@ import {
   Radio,
   Repeat,
   Repeat1,
+  Share2,
   Shuffle,
   SkipBack,
   SkipForward,
@@ -23,10 +25,19 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
-import { cachedAudioUrl, loadLocalAudio, prefetchAudio } from "@/lib/music/offline-audio";
-import { getTrackLyrics, type LyricLine } from "@/lib/music/lyrics";
+import {
+  cachedAudioUrl,
+  canDownloadTrack,
+  downloadTrack,
+  downloadTracks,
+  loadLocalAudio,
+  prefetchAudio,
+  removeDownload,
+  useIsDownloaded,
+} from "@/lib/music/offline-audio";
+import { getTrackLyrics, type LyricsPayload } from "@/lib/music/lyrics";
 import { getRelatedTracks } from "@/lib/music/catalog";
-import type { Track } from "@/lib/music/types";
+import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -67,10 +78,14 @@ export function AudioEngine() {
   const lastPos = useRef(0);
   const recovering = useRef("");
   const primed = useRef("");
-  const wakeRef = useRef<WakeLockSentinel | null>(null);
-
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
+    // Reloading src while hidden kills Android audio (play() is rejected; Range stream dies).
+    if (document.hidden) {
+      applyOutput(audio);
+      if (play && audio.paused) void audio.play().catch(() => {});
+      return;
+    }
     const going = !audio.paused && audio.currentTime > 0.4;
     const toBlob = src.startsWith("blob:");
     const fromNet = lastSrc.current.includes("/api/stream");
@@ -107,6 +122,7 @@ export function AudioEngine() {
         const audio = audioRef.current;
         const s = useFlowStore.getState();
         if (!audio || s.current?.videoId !== id) return;
+        if (document.hidden) return;
         if (String(audio.src).startsWith("blob:")) return;
         applySrc(audio, url, s.isPlaying, true);
       })
@@ -118,6 +134,7 @@ export function AudioEngine() {
   const recover = (id: string, time: number) => {
     const audio = audioRef.current;
     if (!audio || recovering.current === id) return;
+    if (document.hidden) return;
     recovering.current = id;
     const ready = cachedAudioUrl(id);
     if (ready) {
@@ -214,16 +231,9 @@ export function AudioEngine() {
     applyOutput(audio);
     if (isPlaying) {
       void audio.play().catch(() => {});
-      if (current?.videoId) armLocal(current.videoId);
-      if ("wakeLock" in navigator) {
-        void navigator.wakeLock.request("screen").then((lock) => {
-          wakeRef.current = lock;
-        }).catch(() => {});
-      }
+      if (current?.videoId && !document.hidden) armLocal(current.videoId);
     } else {
       audio.pause();
-      void wakeRef.current?.release().catch(() => {});
-      wakeRef.current = null;
     }
     if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
   }, [isPlaying, current]);
@@ -247,9 +257,9 @@ export function AudioEngine() {
       const s = useFlowStore.getState();
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
-      if (document.hidden && s.current.videoId) {
-        const blob = cachedAudioUrl(s.current.videoId);
-        if (blob && !String(audio.src).startsWith("blob:")) applySrc(audio, blob, true, true);
+      if (document.hidden) {
+        if (audio.paused && s.isPlaying) void audio.play().catch(() => {});
+        return;
       }
       if (audio.paused) void audio.play().catch(() => {});
       const t = audio.currentTime || 0;
@@ -419,120 +429,7 @@ export function MiniPlayer() {
   );
 }
 
-function LyricsView({
-  track,
-  currentTime,
-  onSeek,
-}: {
-  track: Track;
-  currentTime: number;
-  onSeek: (time: number) => void;
-}) {
-  const [lyrics, setLyrics] = useState<LyricLine[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const activeLineRef = useRef<HTMLButtonElement | null>(null);
-
-  useEffect(() => {
-    let unmounted = false;
-    setLoading(true);
-    setLyrics(null);
-    getTrackLyrics({
-      data: {
-        title: track.title,
-        artist: track.artist,
-        duration: track.duration,
-        videoId: track.videoId,
-      },
-    })
-      .then((res) => {
-        if (!unmounted) {
-          setLyrics(res && res.length ? res : []);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!unmounted) {
-          setLyrics([]);
-          setLoading(false);
-        }
-      });
-    return () => {
-      unmounted = true;
-    };
-  }, [track.id, track.title, track.artist, track.duration, track.videoId]);
-
-  const currentMs = currentTime * 1000;
-  const activeIndex = useMemo(() => {
-    if (!lyrics || !lyrics.length) return -1;
-    let idx = -1;
-    for (let i = 0; i < lyrics.length; i++) {
-      if (lyrics[i].timeMs <= currentMs + 250) {
-        idx = i;
-      } else {
-        break;
-      }
-    }
-    return idx;
-  }, [lyrics, currentMs]);
-
-  useEffect(() => {
-    if (activeLineRef.current && scrollRef.current) {
-      activeLineRef.current.scrollIntoView({
-        behavior: "smooth",
-        block: "center",
-      });
-    }
-  }, [activeIndex]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-muted">
-        <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        <p className="mt-4 text-sm font-medium">Caricamento testi sincronizzati (LRCLIB)…</p>
-      </div>
-    );
-  }
-
-  if (!lyrics || !lyrics.length) {
-    return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center p-6 text-center text-muted">
-        <Mic2 className="size-14 opacity-25" />
-        <p className="mt-3 text-base font-semibold text-fg">Testo non disponibile</p>
-        <p className="mt-1 max-w-xs text-xs text-subtle">
-          Nessun testo trovato per questo brano. Riprova più tardi o cerca un'altra versione.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div ref={scrollRef} className="scrollbar-none min-h-0 flex-1 overflow-y-auto px-4 py-8 space-y-5 text-center">
-      {lyrics.map((line, idx) => {
-        const isActive = idx === activeIndex;
-        const isPast = idx < activeIndex;
-        return (
-          <button
-            key={`${line.timeMs}-${idx}`}
-            ref={isActive ? activeLineRef : undefined}
-            type="button"
-            onClick={() => onSeek(line.timeMs / 1000)}
-            className={cn(
-              "block w-full py-2 transition-all rounded-lg cursor-pointer text-center select-none",
-              isActive
-                ? "scale-105 text-primary text-xl font-extrabold"
-                : isPast
-                ? "text-fg/80 text-base font-medium"
-                : "text-muted/50 text-base hover:text-fg/80"
-            )}
-          >
-            {line.text}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
+const lyricsMem = new Map<string, LyricsPayload>();
 
 export function FullPlayer() {
   const current = useFlowStore((s) => s.current);
@@ -562,14 +459,105 @@ export function FullPlayer() {
   const setShowFullPlayer = useFlowStore((s) => s.setShowFullPlayer);
   const setShowQueue = useFlowStore((s) => s.setShowQueue);
   const setShowLyrics = useFlowStore((s) => s.setShowLyrics);
+  const notify = useFlowStore((s) => s.notify);
+
+  const downloaded = useIsDownloaded(current?.videoId);
+  const [busyDl, setBusyDl] = useState(false);
+  const [busyQueue, setBusyQueue] = useState(false);
+  const [queueProg, setQueueProg] = useState("");
+  const [lyrics, setLyrics] = useState<LyricsPayload | null>(null);
+  const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [glow, setGlow] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
   const [showSleepMenu, setShowSleepMenu] = useState(false);
+  const lyricsBox = useRef<HTMLDivElement | null>(null);
 
   const { mounted, open } = useOpenTransition(show, 260);
+
+  useEffect(() => {
+    if (!current?.artwork) {
+      setGlow(null);
+      return;
+    }
+    let cancelled = false;
+    void averageArtworkColor(current.artwork).then((color) => {
+      if (!cancelled) setGlow(color);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [current?.artwork]);
+
+  useEffect(() => {
+    if (!current || current.isLive) {
+      setLyrics(null);
+      return;
+    }
+    const key = current.videoId || current.id;
+    const hit = lyricsMem.get(key);
+    if (hit) {
+      setLyrics(hit);
+      return;
+    }
+    let cancelled = false;
+    setLyricsLoading(true);
+    void getTrackLyrics({
+      data: {
+        videoId: current.videoId,
+        title: current.title,
+        artist: current.artist,
+        album: current.album,
+        duration: current.duration || duration || undefined,
+      },
+    })
+      .then((res) => {
+        if (cancelled) return;
+        lyricsMem.set(key, res);
+        setLyrics(res);
+      })
+      .catch(() => {
+        if (!cancelled) setLyrics(null);
+      })
+      .finally(() => {
+        if (!cancelled) setLyricsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [current?.id, current?.videoId, current?.title, current?.artist, current?.album, current?.duration, current?.isLive, duration]);
+
+  const activeIdx = lyrics?.synced
+    ? lyrics.lines.reduce((acc, line, i) => (currentTime * 1000 >= line.timeMs ? i : acc), 0)
+    : -1;
+
+  useEffect(() => {
+    if (!showLyrics || activeIdx < 0) return;
+    const root = lyricsBox.current;
+    const el = root?.querySelector(`[data-ly="${activeIdx}"]`);
+    el?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [activeIdx, showLyrics]);
+
   if (!mounted || !current) return null;
 
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
+  const canDownload = canDownloadTrack(current);
+  const shareLine =
+    (activeIdx >= 0 ? lyrics?.lines[activeIdx]?.text : lyrics?.lines[0]?.text) || current.title;
+
+  const runShare = () => {
+    if (sharing) return;
+    setSharing(true);
+    void shareLyricsCard({ track: current, line: shareLine })
+      .then((how) => {
+        if (how === "shared") notify("Testo condiviso");
+        else if (how === "downloaded") notify("Immagine della card salvata");
+        else notify("Testo copiato");
+      })
+      .catch(() => notify("Condivisione non riuscita"))
+      .finally(() => setSharing(false));
+  };
 
   const cycleRate = () => {
     const rates = [1, 1.25, 1.5, 0.8];
@@ -586,251 +574,311 @@ export function FullPlayer() {
       });
       if (related && related.length) {
         playQueue([current, ...related], 0);
+        notify("Radio avviata");
       }
     } catch {
-      /* ignore */
+      notify("Impossibile avviare la radio");
     }
   };
 
   return (
     <div
-      className={cn(
-        "player-full fixed inset-0 z-50 flex h-dvh flex-col bg-bg pt-[env(safe-area-inset-top)] overflow-hidden",
-        open ? "is-open" : "is-closing"
-      )}
+      className={cn("player-full fixed inset-0 z-50 flex h-dvh flex-col overflow-hidden bg-bg pt-[env(safe-area-inset-top)]", open ? "is-open" : "is-closing")}
       role="dialog"
+      style={glow ? ({ ["--player-glow"]: glow } as CSSProperties) : undefined}
     >
-      {/* Material You Ambient Background Wash */}
-      {current.artwork ? (
-        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-30">
-          <img
-            src={current.artwork}
-            alt=""
-            referrerPolicy="no-referrer"
-            className="size-full scale-125 object-cover blur-3xl saturate-150"
-          />
-          <div className="absolute inset-0 bg-gradient-to-b from-bg/60 via-bg/85 to-bg" />
-        </div>
-      ) : null}
-
-      {/* Top Bar */}
-      <div className="flex items-center justify-between px-3 py-2">
-        <button
-          type="button"
-          onClick={() => setShowFullPlayer(false)}
-          className="flex size-11 items-center justify-center rounded-full hover:bg-elevated/60 active:scale-95"
-          aria-label="Chiudi"
-        >
-          <ChevronDown className="size-6" />
-        </button>
-
-        {/* View Switcher Chips */}
-        <div className="flex items-center gap-1 rounded-full bg-elevated/70 p-0.5 backdrop-blur-md">
-          <button
-            type="button"
-            onClick={() => {
-              setShowQueue(false);
-              setShowLyrics(false);
-            }}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs font-semibold transition-all",
-              !showQueue && !showLyrics ? "bg-fg text-bg" : "text-muted hover:text-fg"
-            )}
-          >
-            Brano
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowQueue(false);
-              setShowLyrics(true);
-            }}
-            className={cn(
-              "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all",
-              showLyrics ? "bg-fg text-bg" : "text-muted hover:text-fg"
-            )}
-          >
-            <Mic2 className="size-3" />
-            Testi
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setShowLyrics(false);
-              setShowQueue(true);
-            }}
-            className={cn(
-              "flex items-center gap-1 rounded-full px-3 py-1 text-xs font-semibold transition-all",
-              showQueue ? "bg-fg text-bg" : "text-muted hover:text-fg"
-            )}
-          >
-            <ListMusic className="size-3" />
-            Coda
-          </button>
-        </div>
-
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setShowSleepMenu(!showSleepMenu)}
-            className={cn(
-              "flex size-11 items-center justify-center rounded-full transition-colors hover:bg-elevated/60",
-              sleepEndsAt ? "text-primary font-bold" : "text-muted"
-            )}
-            aria-label="Sleep timer"
-          >
-            <Moon className="size-5" />
-          </button>
-
-          {showSleepMenu ? (
-            <div className="absolute right-0 top-12 z-50 min-w-36 rounded-xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-md ring-1 ring-border text-xs space-y-1">
-              <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Timer sonno</p>
-              {[
-                [null, "Disattivato"],
-                [15, "15 minuti"],
-                [30, "30 minuti"],
-                [45, "45 minuti"],
-                [60, "1 ora"],
-              ].map(([mins, label]) => (
-                <button
-                  key={String(mins)}
-                  type="button"
-                  onClick={() => {
-                    setSleep(mins as number | null);
-                    setShowSleepMenu(false);
-                  }}
-                  className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          ) : null}
-        </div>
+      <div className="pointer-events-none absolute inset-0" aria-hidden>
+        <img src={current.artwork} alt="" referrerPolicy="no-referrer" className="player-ambient size-full object-cover blur-3xl opacity-40 saturate-150" />
+        <div
+          className="absolute inset-0"
+          style={{
+            background: glow
+              ? `linear-gradient(180deg, color-mix(in oklab, ${glow} 55%, transparent) 0%, rgb(0 0 0 / 0.55) 42%, rgb(0 0 0 / 0.88) 100%)`
+              : "linear-gradient(180deg, rgb(0 0 0 / 0.28) 0%, rgb(0 0 0 / 0.82) 100%)",
+          }}
+        />
       </div>
 
-      {/* Main Content View */}
-      {showLyrics ? (
-        <LyricsView track={current} currentTime={currentTime} onSeek={seek} />
-      ) : showQueue ? (
-        <div className="min-h-0 flex-1 overflow-y-auto px-3">
-          <div className="mb-2 px-2 pt-2 text-xs font-semibold text-muted uppercase tracking-wider">
-            In coda ({queue.length} brani)
-          </div>
-          {queue.map((t, i) => (
-            <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
-          ))}
-        </div>
-      ) : (
-        <div className="flex min-h-0 flex-1 flex-col justify-center px-6 pb-2">
-          <div className="mx-auto aspect-square w-[min(100%-2rem,22rem)] overflow-hidden rounded-2xl bg-elevated shadow-2xl ring-1 ring-white/10">
-            <TrackArt src={current.artwork} alt={current.title} />
-          </div>
-          <div className="mt-6 flex items-start gap-3">
-            <div className="min-w-0 flex-1">
-              <h1 className="truncate text-2xl font-bold tracking-tight">{current.title}</h1>
-              <p className="mt-1 truncate text-sm font-medium text-muted">{current.artist}</p>
-            </div>
+      <div className="relative z-10 flex min-h-0 flex-1 flex-col">
+        {/* Header Bar */}
+        <div className="mx-2 mt-1 flex items-center justify-between rounded-2xl px-1 py-0.5 player-glass">
+          <button type="button" onClick={() => setShowFullPlayer(false)} className="flex size-11 items-center justify-center rounded-full hover:bg-elevated/60" aria-label="Chiudi">
+            <ChevronDown className="size-6" />
+          </button>
+          <p className="text-xs font-medium tracking-wide text-muted uppercase">In riproduzione</p>
+          <div className="flex items-center">
             <button
               type="button"
-              onClick={() => toggleLike(current)}
-              className={cn("size-10 flex items-center justify-center rounded-full", liked ? "text-primary" : "text-muted hover:text-fg")}
-              aria-label="Mi piace"
+              onClick={runShare}
+              disabled={sharing}
+              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", sharing ? "text-primary" : "text-fg hover:text-primary")}
+              aria-label="Condividi testo"
             >
-              <Heart className={cn("size-6", liked && "fill-current")} />
+              <Share2 className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowQueue(false);
+                setShowLyrics(!showLyrics);
+              }}
+              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", showLyrics ? "text-primary" : "text-fg hover:text-primary")}
+              aria-label="Testi"
+            >
+              <Mic2 className="size-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowLyrics(false);
+                setShowQueue(!showQueue);
+              }}
+              className={cn("flex size-11 items-center justify-center rounded-full transition-colors", showQueue ? "text-primary" : "text-fg hover:text-primary")}
+              aria-label="Coda"
+            >
+              <ListMusic className="size-5" />
             </button>
           </div>
         </div>
-      )}
 
-      {/* Bottom Controls Area */}
-      <div className="px-6 pb-6 pt-2">
-        {/* Seek Bar */}
-        <input
-          type="range"
-          min={0}
-          max={duration || 1}
-          step={0.25}
-          value={Math.min(currentTime, duration || 1)}
-          onChange={(e) => seek(Number(e.target.value))}
-          className="h-1.5 w-full appearance-none rounded-full bg-elevated/80 cursor-pointer accent-primary"
-          style={{
-            background: `linear-gradient(to right, var(--color-primary) ${progress}%, var(--color-elevated) ${progress}%)`,
-          }}
-        />
-        <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle">
-          <span>{formatTime(currentTime)}</span>
-          <span>{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
-        </div>
+        {/* Content Body */}
+        {showQueue ? (
+          <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-8">
+            <div className="sticky top-0 z-10 mb-2 mt-3 flex items-center justify-between rounded-2xl px-3 py-2 player-glass">
+              <p className="text-sm font-medium">Coda · {queue.length} brani</p>
+              <button
+                type="button"
+                disabled={busyQueue || !queue.some(canDownloadTrack)}
+                onClick={() => {
+                  setBusyQueue(true);
+                  setQueueProg("");
+                  void downloadTracks(queue, (done, total) => setQueueProg(`${done}/${total}`))
+                    .then((r) => {
+                      const saved = r.ok + r.skipped;
+                      notify(r.fail ? `Salvati ${saved}, ${r.fail} errori` : `${saved} brani in cache`);
+                    })
+                    .catch(() => notify("Download coda non riuscito"))
+                    .finally(() => {
+                      setBusyQueue(false);
+                      setQueueProg("");
+                    });
+                }}
+                className="h-9 rounded-full bg-primary px-3 text-xs font-semibold text-primary-fg disabled:opacity-50"
+              >
+                {busyQueue ? queueProg || "Scarico…" : "Scarica coda"}
+              </button>
+            </div>
+            {queue.map((t, i) => (
+              <TrackRow key={`${t.id}-${i}`} track={t} queue={queue} index={i} showIndex />
+            ))}
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col px-6 pb-4">
+            {showLyrics ? (
+              <div ref={lyricsBox} className="player-glass mx-auto mt-3 min-h-0 w-full max-w-lg flex-1 overflow-y-auto rounded-2xl px-4 py-6 text-center space-y-4">
+                {lyricsLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted">
+                    <div className="size-7 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                    <p className="mt-4 text-sm">Caricamento testi LRCLIB…</p>
+                  </div>
+                ) : !lyrics?.lines.length ? (
+                  <div className="flex flex-col items-center justify-center py-12 text-muted">
+                    <Mic2 className="size-12 opacity-25" />
+                    <p className="mt-3 text-base font-semibold text-fg">Testo non disponibile</p>
+                    <p className="mt-1 text-xs text-subtle">Nessun testo sincronizzato trovato per questo brano.</p>
+                  </div>
+                ) : (
+                  lyrics.lines.map((line, i) => (
+                    <button
+                      key={`${line.timeMs}-${i}`}
+                      type="button"
+                      data-ly={i}
+                      onClick={() => lyrics.synced && seek(line.timeMs / 1000)}
+                      className={cn(
+                        "block w-full py-2 text-center text-lg leading-snug transition-all rounded-lg cursor-pointer",
+                        i === activeIdx
+                          ? "scale-105 font-extrabold text-primary text-xl"
+                          : i < activeIdx
+                          ? "text-fg/80 font-medium text-base"
+                          : "text-muted/60 text-base hover:text-fg/80",
+                      )}
+                    >
+                      {line.text}
+                    </button>
+                  ))
+                )}
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setShowLyrics(true)}
+                className="player-art-float mx-auto mt-6 aspect-square w-[min(100%-2rem,22rem)] overflow-hidden rounded-3xl bg-elevated ring-1 ring-white/10"
+                aria-label="Mostra testi"
+              >
+                <TrackArt src={current.artwork} alt={current.title} />
+              </button>
+            )}
 
-        {/* Primary Playback Controls */}
-        <div className="mt-3 flex items-center justify-between">
-          <button
-            type="button"
-            onClick={toggleShuffle}
-            className={cn("size-10 flex items-center justify-center rounded-full transition-colors", shuffle ? "text-primary" : "text-muted hover:text-fg")}
-            aria-label="Shuffle"
-          >
-            <Shuffle className="size-5" />
-          </button>
+            {/* Track Info & Action Bar */}
+            <div className="player-glass mt-4 rounded-3xl px-4 py-4">
+              <div className="flex items-start gap-3">
+                <div className="min-w-0 flex-1">
+                  <h1 className="truncate text-2xl font-bold tracking-tight">{current.title}</h1>
+                  <p className="mt-1 truncate text-sm font-medium text-muted">{current.artist}</p>
+                </div>
+                {canDownload ? (
+                  <button
+                    type="button"
+                    disabled={busyDl}
+                    onClick={() => {
+                      if (!current.videoId) return;
+                      setBusyDl(true);
+                      const op = downloaded ? removeDownload(current.videoId) : downloadTrack(current);
+                      void op
+                        .then(() => notify(downloaded ? "Download rimosso" : "Brano salvato offline"))
+                        .catch(() => notify("Download non riuscito"))
+                        .finally(() => setBusyDl(false));
+                    }}
+                    className={cn("size-10 flex items-center justify-center rounded-full text-muted hover:text-fg", downloaded && "text-primary")}
+                    aria-label={downloaded ? "Rimuovi download" : "Scarica"}
+                  >
+                    <Download className="size-5" />
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => toggleLike(current)}
+                  className={cn("size-10 flex items-center justify-center rounded-full", liked ? "text-primary" : "text-muted hover:text-fg")}
+                  aria-label="Mi piace"
+                >
+                  <Heart className={cn("size-6", liked && "fill-current")} />
+                </button>
+              </div>
 
-          <button
-            type="button"
-            onClick={prev}
-            className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
-            aria-label="Brano precedente"
-          >
-            <SkipBack className="size-7 fill-current" />
-          </button>
+              {/* Seek Bar */}
+              <input
+                type="range"
+                min={0}
+                max={duration || 1}
+                step={0.25}
+                value={Math.min(currentTime, duration || 1)}
+                onChange={(e) => seek(Number(e.target.value))}
+                className="mt-5 h-1.5 w-full appearance-none rounded-full bg-elevated cursor-pointer accent-primary"
+                style={{
+                  background: `linear-gradient(to right, var(--color-primary) ${progress}%, rgb(255 255 255 / 0.18) ${progress}%)`,
+                }}
+              />
+              <div className="mt-1.5 flex justify-between text-xs tabular-nums text-subtle">
+                <span>{formatTime(currentTime)}</span>
+                <span>{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
+              </div>
 
-          <button
-            type="button"
-            onClick={togglePlay}
-            className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg transition-transform active:scale-95 hover:scale-105"
-            aria-label="Play/Pausa"
-          >
-            {isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="size-7 fill-current ml-0.5" />}
-          </button>
+              {/* Controls */}
+              <div className="mt-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={toggleShuffle}
+                  className={cn("size-10 flex items-center justify-center rounded-full transition-colors", shuffle ? "text-primary" : "text-muted hover:text-fg")}
+                  aria-label="Shuffle"
+                >
+                  <Shuffle className="size-5" />
+                </button>
 
-          <button
-            type="button"
-            onClick={next}
-            className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
-            aria-label="Brano successivo"
-          >
-            <SkipForward className="size-7 fill-current" />
-          </button>
+                <button
+                  type="button"
+                  onClick={prev}
+                  className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
+                  aria-label="Brano precedente"
+                >
+                  <SkipBack className="size-7 fill-current" />
+                </button>
 
-          <button
-            type="button"
-            onClick={cycleRepeat}
-            className={cn("size-10 flex items-center justify-center rounded-full transition-colors", repeat !== "off" ? "text-primary" : "text-muted hover:text-fg")}
-            aria-label="Ripeti"
-          >
-            <RepeatIcon className="size-5" />
-          </button>
-        </div>
+                <button
+                  type="button"
+                  onClick={togglePlay}
+                  className="flex size-16 items-center justify-center rounded-full bg-primary text-primary-fg shadow-lg transition-transform active:scale-95 hover:scale-105"
+                  aria-label="Play/Pausa"
+                >
+                  {isPlaying ? <Pause className="size-7 fill-current" /> : <Play className="size-7 fill-current ml-0.5" />}
+                </button>
 
-        {/* Secondary Utility Pills */}
-        <div className="mt-4 flex items-center justify-between border-t border-border/40 pt-3 text-xs text-muted">
-          <button
-            type="button"
-            onClick={cycleRate}
-            className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
-          >
-            <Gauge className="size-3.5" />
-            {playbackRate}x
-          </button>
+                <button
+                  type="button"
+                  onClick={next}
+                  className="size-12 flex items-center justify-center rounded-full text-fg hover:bg-elevated/50 active:scale-95"
+                  aria-label="Brano successivo"
+                >
+                  <SkipForward className="size-7 fill-current" />
+                </button>
 
-          <button
-            type="button"
-            onClick={() => void startRadioMix()}
-            className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
-          >
-            <Radio className="size-3.5 text-primary" />
-            Radio brano
-          </button>
-        </div>
+                <button
+                  type="button"
+                  onClick={cycleRepeat}
+                  className={cn("size-10 flex items-center justify-center rounded-full transition-colors", repeat !== "off" ? "text-primary" : "text-muted hover:text-fg")}
+                  aria-label="Ripeti"
+                >
+                  <RepeatIcon className="size-5" />
+                </button>
+              </div>
+
+              {/* Utility Row */}
+              <div className="mt-3 flex items-center justify-between border-t border-border/30 pt-2 text-xs text-muted">
+                <button
+                  type="button"
+                  onClick={cycleRate}
+                  className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
+                >
+                  <Gauge className="size-3.5" />
+                  {playbackRate}x
+                </button>
+
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setShowSleepMenu(!showSleepMenu)}
+                    className={cn("flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg", sleepEndsAt && "text-primary")}
+                  >
+                    <Moon className="size-3.5" />
+                    {sleepEndsAt ? "Timer attivo" : "Timer"}
+                  </button>
+                  {showSleepMenu ? (
+                    <div className="absolute bottom-9 right-0 z-50 min-w-36 rounded-xl bg-elevated/95 p-2 shadow-2xl backdrop-blur-md ring-1 ring-border text-xs space-y-1">
+                      <p className="px-2 py-1 font-bold text-muted uppercase tracking-wider text-[10px]">Timer sonno</p>
+                      {[
+                        [null, "Disattivato"],
+                        [15, "15 minuti"],
+                        [30, "30 minuti"],
+                        [45, "45 minuti"],
+                        [60, "1 ora"],
+                      ].map(([mins, label]) => (
+                        <button
+                          key={String(mins)}
+                          type="button"
+                          onClick={() => {
+                            setSleep(mins as number | null);
+                            setShowSleepMenu(false);
+                          }}
+                          className="block w-full rounded-lg px-2 py-1.5 text-left font-medium hover:bg-surface active:bg-primary active:text-primary-fg"
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => void startRadioMix()}
+                  className="flex items-center gap-1 rounded-full bg-elevated/60 px-2.5 py-1 font-semibold hover:text-fg"
+                >
+                  <Radio className="size-3.5 text-primary" />
+                  Radio brano
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -462,6 +462,30 @@
     border-radius var(--duration-slow) var(--ease-out);
 }
 
+
+.player-ambient {
+  filter: blur(56px) saturate(1.45);
+  transform: scale(1.32);
+  opacity: 0.78;
+}
+
+.player-glass {
+  background: color-mix(in oklab, var(--color-elevated) 46%, transparent);
+  backdrop-filter: blur(28px) saturate(1.55);
+  -webkit-backdrop-filter: blur(28px) saturate(1.55);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+.player-art-float {
+  box-shadow:
+    0 28px 80px rgb(0 0 0 / 0.55),
+    0 0 90px color-mix(in oklab, var(--player-glow, #1ed760) 38%, transparent);
+}
+
+.player-full {
+  --player-glow: #1ed760;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flow-enter,
   .flow-enter > *,
@@ -494,6 +518,7 @@
 
   .player-full,
   .player-stagger,
+  .player-ambient,
   .mini-player,
   .now-bar,
   .sheet-panel,

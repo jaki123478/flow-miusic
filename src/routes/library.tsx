@@ -1,17 +1,36 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Copy, Heart, Play, Plus, Trash2 } from "lucide-react";
+import { Copy, Heart, Play, Plus, Trash2, Upload } from "lucide-react";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { importSpotify } from "@/lib/music/import-playlists";
 import { publishPlaylist } from "@/lib/music/share";
+import {
+  canDownloadTrack,
+  clearAllDownloads,
+  downloadTracks,
+  formatBytes,
+  removeDownload,
+  useCacheStats,
+  useOfflineDownloads,
+  type CacheStats,
+} from "@/lib/music/offline-audio";
+import {
+  downloadText,
+  parsePlaylistFile,
+  seedsToTracks,
+  slugFile,
+  tracksToCsv,
+  tracksToM3u,
+  unresolvedToText,
+} from "@/lib/music/library-io";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
 import type { Track } from "@/lib/music/types";
 
 export const Route = createFileRoute("/library")({ component: LibraryPage });
 
-type Tab = "liked" | "recents" | "playlists";
+type Tab = "liked" | "recents" | "playlists" | "downloads";
 
 function LibraryPage() {
   const liked = useFlowStore((s) => s.liked);
@@ -28,12 +47,16 @@ function LibraryPage() {
   const setPlaylistPublic = useFlowStore((s) => s.setPlaylistPublic);
   const clearRecents = useFlowStore((s) => s.clearRecents);
   const user = useCurrentUser();
+  const downloads = useOfflineDownloads();
+  const cache = useCacheStats();
+  const notify = useFlowStore((s) => s.notify);
   const [tab, setTab] = useState<Tab>("liked");
   const [title, setTitle] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [spotUrl, setSpotUrl] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState<string | null>(null);
+  const [dlBusy, setDlBusy] = useState("");
 
   const openTracks: Track[] = useMemo(() => {
     if (!openId) return [];
@@ -46,6 +69,7 @@ function LibraryPage() {
     { id: "liked", label: "Preferiti", count: liked.length },
     { id: "recents", label: "Recenti", count: recents.length },
     { id: "playlists", label: "Playlist", count: playlists.length },
+    { id: "downloads", label: "Scaricati", count: downloads.length },
   ];
 
   return (
@@ -105,14 +129,43 @@ function LibraryPage() {
                 <p className="text-xs font-bold uppercase">Playlist</p>
                 <h2 className="mt-1 font-heading text-3xl font-bold tracking-tight sm:text-5xl">Brani che ti piacciono</h2>
                 <p className="mt-2 text-sm text-muted">{liked.length} brani</p>
-                <button
-                  type="button"
-                  onClick={() => playQueue(liked, 0)}
-                  className="play-fab mt-4 flex size-14 items-center justify-center rounded-full bg-primary text-primary-fg"
-                  aria-label="Riproduci"
-                >
-                  <Play className="ml-0.5 size-6 fill-current" />
-                </button>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => playQueue(liked, 0)}
+                    className="play-fab flex size-14 items-center justify-center rounded-full bg-primary text-primary-fg"
+                    aria-label="Riproduci"
+                  >
+                    <Play className="ml-0.5 size-6 fill-current" />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={Boolean(dlBusy) || !liked.some(canDownloadTrack)}
+                    onClick={() => {
+                      setDlBusy("liked");
+                      void downloadTracks(liked, () => {})
+                        .then((r) => notify(r.fail ? `Salvati ${r.ok + r.skipped}, ${r.fail} errori` : `${r.ok + r.skipped} brani in cache`))
+                        .finally(() => setDlBusy(""));
+                    }}
+                    className="h-11 rounded-full bg-elevated px-4 text-sm font-medium disabled:opacity-50"
+                  >
+                    {dlBusy === "liked" ? "Scarico…" : "Scarica playlist"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadText("preferiti.csv", tracksToCsv(liked), "text/csv;charset=utf-8")}
+                    className="h-11 rounded-full bg-elevated px-4 text-sm font-medium"
+                  >
+                    Esporta CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => downloadText("preferiti.m3u", tracksToM3u(liked, "Preferiti"))}
+                    className="h-11 rounded-full bg-elevated px-4 text-sm font-medium"
+                  >
+                    Esporta M3U
+                  </button>
+                </div>
               </div>
             </div>
             {liked.map((t, i) => (
@@ -137,6 +190,49 @@ function LibraryPage() {
             </button>
             {recents.map((t, i) => (
               <TrackRow key={t.id} track={t} queue={recents} index={i} />
+            ))}
+          </>
+        )
+      ) : null}
+
+
+      {tab === "downloads" ? (
+        downloads.length === 0 ? (
+          <>
+            <CacheBanner stats={cache} empty />
+            <Empty text="Nessun brano salvato offline. Dal menu di una traccia scegli Scarica offline." />
+          </>
+        ) : (
+          <>
+            <CacheBanner
+              stats={cache}
+              onClear={() => {
+                if (!window.confirm("Vuoi svuotare la cache offline? I brani in Scaricati verranno rimossi.")) return;
+                void clearAllDownloads().then(() => notify("Cache svuotata"));
+              }}
+            />
+            <SectionHeader
+              title="Scaricati"
+              action="Riproduci"
+              onAction={() => playQueue(downloads, 0)}
+            />
+            {downloads.map((t, i) => (
+              <div key={t.id} className="flex items-center gap-1">
+                <div className="min-w-0 flex-1">
+                  <TrackRow track={t} queue={downloads} index={i} />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!t.videoId) return;
+                    void removeDownload(t.videoId).then(() => notify("Download rimosso"));
+                  }}
+                  className="flex size-11 shrink-0 items-center justify-center text-subtle"
+                  aria-label="Rimuovi download"
+                >
+                  <Trash2 className="size-4" />
+                </button>
+              </div>
             ))}
           </>
         )
@@ -212,7 +308,81 @@ function LibraryPage() {
               </button>
             </div>
             {importMsg ? <p className="text-xs text-muted">{importMsg}</p> : null}
+            <label className="mt-1 inline-flex h-10 cursor-pointer items-center gap-2 rounded-full bg-elevated px-3 text-xs font-medium">
+              <Upload className="size-3.5" />
+              File M3U / CSV
+              <input
+                type="file"
+                accept=".m3u,.m3u8,.csv,.txt,text/csv,audio/x-mpegurl"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  e.currentTarget.value = "";
+                  if (!file) return;
+                  setImporting(true);
+                  setImportMsg(null);
+                  void file
+                    .text()
+                    .then(async (raw) => {
+                      const parsed = parsePlaylistFile(raw, file.name);
+                      const { tracks, unresolved } = seedsToTracks(parsed.seeds);
+                      let extra: Track[] = [];
+                      if (unresolved.length) {
+                        const res = await importSpotify({ data: { url: unresolvedToText(unresolved) } });
+                        extra = res.tracks;
+                        if (res.error && !tracks.length && !extra.length) {
+                          setImportMsg(res.error);
+                          return;
+                        }
+                      }
+                      const seen = new Set<string>();
+                      const all = [...tracks, ...extra].filter((t) => {
+                        if (seen.has(t.id)) return false;
+                        seen.add(t.id);
+                        return true;
+                      });
+                      if (!all.length) {
+                        setImportMsg("Nessun brano nel file.");
+                        return;
+                      }
+                      const name = parsed.title && parsed.title !== "Playlist importata" ? parsed.title : file.name.replace(/\.[^.]+$/, "");
+                      const id = createPlaylistWithTracks(name, all);
+                      setImportMsg(`Importate ${all.length} tracce da file`);
+                      if (id) setOpenId(id);
+                    })
+                    .catch(() => setImportMsg("File non letto"))
+                    .finally(() => setImporting(false));
+                }}
+              />
+            </label>
           </form>
+          {playlists.length > 0 ? (
+            <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  const all = playlists.flatMap((pl) => pl.trackIds.map((id) => trackMap[id]).filter(Boolean));
+                  downloadText("libreria-flow.csv", tracksToCsv(all), "text/csv;charset=utf-8");
+                }}
+                className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+              >
+                Esporta libreria CSV
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const chunks = playlists.map((pl) => {
+                    const tracks = pl.trackIds.map((id) => trackMap[id]).filter(Boolean);
+                    return tracksToM3u(tracks, pl.title);
+                  });
+                  downloadText("libreria-flow.m3u", chunks.join("\n\n"));
+                }}
+                className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+              >
+                Esporta libreria M3U
+              </button>
+            </div>
+          ) : null}
           {playlists.length === 0 ? (
             <Empty text="Crea una playlist e aggiungi brani dal menu di ogni traccia." />
           ) : (
@@ -303,11 +473,49 @@ function Empty({ text }: { text: string }) {
   return <p className="rounded-xl bg-surface px-4 py-10 text-center text-sm text-muted ring-1 ring-border">{text}</p>;
 }
 
-function download(name: string, body: string) {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([body], { type: "text/plain" }));
-  a.download = name;
-  a.click();
+function CacheBanner({ stats, onClear, empty }: { stats: CacheStats; onClear?: () => void; empty?: boolean }) {
+  const quota = stats.quota ? formatBytes(stats.quota) : null;
+  const used = stats.bytes ? formatBytes(stats.bytes) : formatBytes(stats.usage || 0);
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-surface px-4 py-3 text-sm ring-1 ring-border">
+      <p className="text-muted">
+        {empty
+          ? "Cache vuota. I brani scaricati restano nella scheda Scaricati."
+          : `${stats.count} brani · ${used}${quota ? ` su ${quota} disponibili` : ""}`}
+      </p>
+      {onClear && stats.count ? (
+        <button type="button" onClick={onClear} className="h-8 rounded-full bg-elevated px-3 text-xs font-medium">
+          Svuota cache
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+function DownloadPlaylistBtn({ tracks }: { tracks: Track[] }) {
+  const notify = useFlowStore((s) => s.notify);
+  const [busy, setBusy] = useState(false);
+  const [prog, setProg] = useState("");
+  const n = tracks.filter(canDownloadTrack).length;
+  return (
+    <button
+      type="button"
+      disabled={busy || n === 0}
+      onClick={() => {
+        setBusy(true);
+        setProg("");
+        void downloadTracks(tracks, (done, total) => setProg(`${done}/${total}`))
+          .then((r) => notify(r.fail ? `Salvati ${r.ok + r.skipped}, ${r.fail} errori` : `${r.ok + r.skipped} brani in cache`))
+          .finally(() => {
+            setBusy(false);
+            setProg("");
+          });
+      }}
+      className="h-9 rounded-full bg-primary px-3 text-xs font-bold text-primary-fg disabled:opacity-50"
+    >
+      {busy ? prog || "Scarico…" : "Scarica playlist"}
+    </button>
+  );
 }
 
 function PlaylistTools({
@@ -340,21 +548,24 @@ function PlaylistTools({
       >
         Cartella
       </button>
+      <DownloadPlaylistBtn tracks={tracks} />
       <button
         type="button"
-        onClick={() => {
-          const m3u = ["#EXTM3U", ...tracks.map((t) => `#EXTINF:${t.duration},${t.artist} - ${t.title}\nhttps://www.youtube.com/watch?v=${t.videoId || t.id}`)].join(
-            "\n",
-          );
-          download(`${pl.title}.m3u`, m3u);
-        }}
+        onClick={() => downloadText(`${slugFile(pl.title)}.m3u`, tracksToM3u(tracks, pl.title))}
         className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
       >
         Esporta M3U
       </button>
       <button
         type="button"
-        onClick={() => download(`${pl.title}.json`, JSON.stringify(tracks, null, 2))}
+        onClick={() => downloadText(`${slugFile(pl.title)}.csv`, tracksToCsv(tracks), "text/csv;charset=utf-8")}
+        className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
+      >
+        Esporta CSV
+      </button>
+      <button
+        type="button"
+        onClick={() => downloadText(`${slugFile(pl.title)}.json`, JSON.stringify(tracks, null, 2), "application/json")}
         className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
       >
         Esporta JSON

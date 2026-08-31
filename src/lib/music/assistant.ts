@@ -224,9 +224,9 @@ export const chatTurn = createServerFn({ method: "POST" })
 
       if (intent === "lyrics") {
         if (!title) return result("Avvia un brano e ti mostro il testo.", "lyrics");
-        const lines = await getTrackLyrics({ data: { title, artist } });
-        if (!lines.length) return result("Non ho trovato il testo di questo brano.", "lyrics");
-        const snippet = lines
+        const lyrics = await getTrackLyrics({ data: { title, artist } });
+        if (!lyrics.lines.length) return result("Non ho trovato il testo di questo brano.", "lyrics");
+        const snippet = lyrics.lines
           .map((l) => l.text)
           .filter(Boolean)
           .slice(0, 8)
