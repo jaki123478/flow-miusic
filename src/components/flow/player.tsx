@@ -85,42 +85,23 @@ export function AudioEngine() {
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
-    // Reloading src while hidden kills Android audio (play() is rejected; Range stream dies).
-    if (document.hidden) {
+    if (lastSrc.current === src) {
       applyOutput(audio);
       if (play && audio.paused) void audio.play().catch(() => {});
       return;
     }
-    if (lastSrc.current === src) {
-      applyOutput(audio);
-      if (play) void audio.play().catch(() => {});
-      return;
-    }
     const playing = !audio.paused && !audio.error;
     const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
-    // Mid-play blob swap calls load() and drops Chrome Android audio focus.
+    // Mid-play blob swap while playing interrupts playback and drops Chrome Android audio focus
     if (playing && blobUpgrade) return;
-    if (playing && !force) return;
-    const keep = audio.currentTime || 0;
+    if (document.hidden && playing && !force) return;
+
     lastSrc.current = src;
     audio.src = src;
-    audio.load();
-    if (keep > 0.4) {
-      audio.addEventListener(
-        "loadedmetadata",
-        () => {
-          try {
-            audio.currentTime = keep;
-          } catch {
-            /* ignore */
-          }
-          if (play || useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
-        },
-        { once: true },
-      );
-    }
     applyOutput(audio);
-    if (play) void audio.play().catch(() => {});
+    if (play) {
+      void audio.play().catch(() => {});
+    }
   };
 
   const recover = (id: string, time: number) => {
