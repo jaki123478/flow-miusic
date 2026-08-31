@@ -650,7 +650,7 @@ export function FullPlayer() {
           </button>
           <div className="flex flex-col items-center">
             <p className="text-[10px] font-bold tracking-widest text-muted uppercase">In Riproduzione</p>
-            <span className="text-[11px] font-medium text-primary">Lyra Audio Engine</span>
+            <span className="text-[11px] font-medium text-primary">Flow Audio Engine</span>
           </div>
           <div className="flex items-center gap-0.5">
             {showLyrics && (

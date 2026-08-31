@@ -1,0 +1,17 @@
+{
+	"appId": "com.socialflow.app",
+	"appName": "Flow",
+	"webDir": "out",
+	"server": {
+		"androidScheme": "https"
+	},
+	"android": {
+		"backgroundColor": "#000000",
+		"allowMixedContent": true
+	},
+	"cordova": {
+		"preferences": {
+			"KeepRunning": "true"
+		}
+	}
+}

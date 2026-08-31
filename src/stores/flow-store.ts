@@ -97,7 +97,11 @@ interface FlowState {
   voiceDuck: boolean;
   plays: Record<string, number>;
   followedArtists: string[];
+  profileName: string;
+  hasSeenOnboarding: boolean;
 
+  setProfileName: (name: string) => void;
+  dismissOnboarding: () => void;
   playTrack: (track: Track, queue?: Track[]) => void;
   playQueue: (tracks: Track[], startIndex?: number) => void;
   playNext: (track: Track) => void;
@@ -174,7 +178,7 @@ function remember(track: Track, recents: Track[], privateSession: boolean): Trac
 }
 
 function sanitizeTrack(track: Track): Track {
-  if (track.artist && track.artist !== "YouTube Music" && track.artist !== "SimpMusic") return track;
+  if (track.artist && track.artist !== "YouTube Music" && track.artist !== "Flow" && track.artist !== "Flow Music") return track;
   const dash = track.title.match(/^(.{2,48}?)\s+[-–—]\s+(.+)$/);
   if (dash) return { ...track, artist: dash[1].trim(), title: dash[2].trim() };
   return { ...track, artist: track.artist === "YouTube Music" ? "Artista" : track.artist };
@@ -214,6 +218,18 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   voiceDuck: false,
   plays: {},
   followedArtists: [],
+  profileName: "Flow User",
+  hasSeenOnboarding: true,
+
+  setProfileName: (name: string) => {
+    writeJson("flow_profile_name", name);
+    set({ profileName: name });
+  },
+
+  dismissOnboarding: () => {
+    writeJson("flow_onboarding_done", true);
+    set({ hasSeenOnboarding: true });
+  },
 
   hydrate: () => {
     const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
@@ -224,9 +240,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const listenMs = readJson<number>(STATS_KEY, 0);
     const plays = readJson<Record<string, number>>(PLAYS_KEY, {});
     const followedArtists = readJson<string[]>(ARTISTS_KEY, []);
+    const profileName = readJson<string>("flow_profile_name", "Flow User");
+    const hasSeenOnboarding = readJson<boolean>("flow_onboarding_done", false);
     const trackMap: Record<string, Track> = {};
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
-    set({ liked, recents, playlists, volume, trackMap, settings, listenMs, plays, followedArtists });
+    set({ liked, recents, playlists, volume, trackMap, settings, listenMs, plays, followedArtists, profileName, hasSeenOnboarding });
   },
 
   playTrack: (track, queue) => {

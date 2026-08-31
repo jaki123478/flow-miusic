@@ -220,7 +220,7 @@ function SettingsPage() {
       <section className="space-y-4 rounded-lg bg-surface px-4 py-3">
         <div>
           <p className="text-sm font-medium">Equalizzatore Audio</p>
-          <p className="text-xs text-muted">Preset e regolazione frequenze (stile Lyra Music).</p>
+          <p className="text-xs text-muted">Preset e regolazione frequenze (Flow Hi-Fi).</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {EQ_PRESETS.map((p) => {
