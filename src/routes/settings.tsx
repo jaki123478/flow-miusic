@@ -1,5 +1,13 @@
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ChromeBackgroundCard } from "@/components/flow/background-audio";
+import {
+  EMPTY_LASTFM,
+  lastFmHandshake,
+  readLastFmConfig,
+  writeLastFmConfig,
+  type LastFmConfig,
+} from "@/lib/music/lastfm";
 import { useFlowStore, DEFAULT_SETTINGS, type FlowSettings } from "@/stores/flow-store";
 
 export const Route = createFileRoute("/settings")({ component: SettingsPage });
@@ -203,6 +211,8 @@ function SettingsPage() {
         </ul>
       </section>
 
+      <LastFmCard notify={notify} />
+
       <button
         type="button"
         onClick={() => {
@@ -214,5 +224,109 @@ function SettingsPage() {
         Ripristina predefinite
       </button>
     </div>
+  );
+}
+
+
+function LastFmCard({ notify }: { notify: (msg: string) => void }) {
+  const [cfg, setCfg] = useState<LastFmConfig>(EMPTY_LASTFM);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    setCfg(readLastFmConfig());
+  }, []);
+
+  const save = (next: LastFmConfig) => {
+    setCfg(next);
+    writeLastFmConfig(next);
+  };
+
+  return (
+    <section className="space-y-3 rounded-lg bg-surface px-4 py-3">
+      <p className="text-sm font-medium">Last.fm</p>
+      <p className="text-xs text-muted">
+        Scrobble con la tua API key e sessione. Crea una chiave su last.fm/api, poi collega l&apos;account. Discord RPC e Shazam non sono disponibili sul web.
+      </p>
+      <Toggle
+        label="Abilita scrobble"
+        hint="Invia brani ascoltati a Last.fm (min. 30s o 50% del brano)"
+        on={cfg.enabled}
+        onChange={(v) => save({ ...cfg, enabled: v })}
+      />
+      <label className="block text-xs text-muted">
+        API key
+        <input
+          value={cfg.apiKey}
+          onChange={(e) => save({ ...cfg, apiKey: e.target.value })}
+          className="mt-1 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none ring-1 ring-border"
+          autoComplete="off"
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        Shared secret
+        <input
+          type="password"
+          value={cfg.apiSecret}
+          onChange={(e) => save({ ...cfg, apiSecret: e.target.value })}
+          className="mt-1 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none ring-1 ring-border"
+          autoComplete="off"
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        Session key (opzionale se usi utente e password)
+        <input
+          value={cfg.sessionKey}
+          onChange={(e) => save({ ...cfg, sessionKey: e.target.value })}
+          className="mt-1 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none ring-1 ring-border"
+          autoComplete="off"
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        Utente Last.fm
+        <input
+          value={cfg.username}
+          onChange={(e) => save({ ...cfg, username: e.target.value })}
+          className="mt-1 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none ring-1 ring-border"
+        />
+      </label>
+      <label className="block text-xs text-muted">
+        Password (solo per ottenere la sessione, non viene salvata)
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="mt-1 h-11 w-full rounded-lg bg-elevated px-3 text-sm text-fg outline-none ring-1 ring-border"
+        />
+      </label>
+      <button
+        type="button"
+        disabled={busy}
+        onClick={() => {
+          setBusy(true);
+          void lastFmHandshake({
+            data: {
+              apiKey: cfg.apiKey,
+              apiSecret: cfg.apiSecret,
+              username: cfg.username,
+              password,
+            },
+          })
+            .then((res) => {
+              if (!res.ok) {
+                notify(res.error);
+                return;
+              }
+              save({ ...cfg, sessionKey: res.sessionKey, username: res.username, enabled: true });
+              setPassword("");
+              notify("Last.fm collegato");
+            })
+            .finally(() => setBusy(false));
+        }}
+        className="h-11 rounded-full bg-fg px-4 text-sm font-bold text-bg disabled:opacity-60"
+      >
+        {busy ? "Collego…" : cfg.sessionKey ? "Ricollega Last.fm" : "Collega Last.fm"}
+      </button>
+      {cfg.sessionKey ? <p className="text-xs text-primary">Sessione attiva{cfg.username ? ` · ${cfg.username}` : ""}</p> : null}
+    </section>
   );
 }

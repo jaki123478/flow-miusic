@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Compass, Pause, Play, Sparkles } from "lucide-react";
-import { getHomeFeed, stationToTrack } from "@/lib/music/catalog";
+import { getDiscoverMix, getHomeFeed, stationToTrack, type CatalogCollection } from "@/lib/music/catalog";
 import { GENRES, MOODS } from "@/lib/music/types";
 import { cn, greetingIt, hashHue } from "@/lib/utils";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useFlowStore } from "@/stores/flow-store";
 import { CollectionCard, HScroll, QuickTile, SectionHeader, TrackArt, TrackCard, TrackRow } from "@/components/flow/tracks";
 
@@ -12,20 +13,62 @@ export const Route = createFileRoute("/")({
     try {
       return await getHomeFeed();
     } catch {
-      return { trending: [], hitsMix: [], independent: [], radios: [] };
+      return {
+        trending: [],
+        hitsMix: [],
+        independent: [],
+        radios: [],
+        discoverWeekly: [],
+        curated: [] as CatalogCollection[],
+        dailyPlaylists: [] as CatalogCollection[],
+      };
     }
   },
   component: Home,
 });
 
 function Home() {
-  const { trending, hitsMix, independent, radios } = Route.useLoaderData();
+  const feed = Route.useLoaderData();
+  const { trending, hitsMix, independent, radios } = feed;
+  const discoverWeekly = feed.discoverWeekly || [];
+  const curated = feed.curated || [];
+  const dailyPlaylists = feed.dailyPlaylists || [];
+  const user = useCurrentUser();
   const [hello, setHello] = useState("Ciao");
   useEffect(() => {
-    setHello(greetingIt());
-  }, []);
+    const greet = greetingIt();
+    const first = (user?.displayName || "").trim().split(/\s+/)[0];
+    setHello(first && !user?.isDevFallback ? `${greet}, ${first}` : greet);
+  }, [user?.displayName, user?.isDevFallback]);
   const recents = useFlowStore((s) => s.recents);
   const liked = useFlowStore((s) => s.liked);
+  const followed = useFlowStore((s) => s.followedArtists);
+  const [weekly, setWeekly] = useState(discoverWeekly);
+  const [weeklyPersonal, setWeeklyPersonal] = useState(false);
+  useEffect(() => {
+    const artists = [...followed, ...liked.map((t) => t.artist), ...recents.map((t) => t.artist)]
+      .map((a) => a.trim())
+      .filter((a, i, arr) => a && arr.indexOf(a) === i)
+      .slice(0, 6);
+    if (!artists.length) {
+      setWeekly(discoverWeekly);
+      setWeeklyPersonal(false);
+      return;
+    }
+    let cancelled = false;
+    void getDiscoverMix({ data: { artists } })
+      .then((tracks) => {
+        if (cancelled || !tracks.length) return;
+        setWeekly(tracks);
+        setWeeklyPersonal(true);
+      })
+      .catch(() => {
+        /* keep catalog mix from PR #2 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [discoverWeekly, followed, liked, recents]);
   const playTrack = useFlowStore((s) => s.playTrack);
   const playQueue = useFlowStore((s) => s.playQueue);
   const current = useFlowStore((s) => s.current);
@@ -35,7 +78,7 @@ function Home() {
   const playlists = useFlowStore((s) => s.playlists);
   const trackMap = useFlowStore((s) => s.trackMap);
   const navigate = useNavigate();
-  const [filter, setFilter] = useState<"all" | "music" | "radio">("all");
+  const [filter, setFilter] = useState<"all" | "music" | "radio" | "playlists">("all");
 
   const hero = trending[0];
   const quick = (recents.length ? recents : trending).slice(0, 6);
@@ -57,11 +100,12 @@ function Home() {
     <div className="flow-enter space-y-8 pb-4">
       <header className="pt-2">
         <h1 className="text-3xl font-bold tracking-tight md:text-4xl">{hello}</h1>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex gap-2 overflow-x-auto scrollbar-none pb-1">
           {(
             [
               ["all", "Tutto"],
               ["music", "Musica"],
+              ["playlists", "Playlist"],
               ["radio", "Radio"],
             ] as const
           ).map(([id, label]) => (
@@ -71,7 +115,7 @@ function Home() {
               onClick={() => setFilter(id)}
               className={cn(
                 "chip h-8 rounded-full px-4 text-sm font-medium",
-                filter === id ? "bg-fg text-bg" : "bg-elevated text-fg",
+                filter === id ? "bg-[#D4E84B] text-[#111827]" : "bg-elevated/90 text-fg",
               )}
             >
               {label}
@@ -90,7 +134,95 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" ? (
+      {filter !== "radio" && weekly.length > 0 ? (
+        <section>
+          <SectionHeader title="Scoperta della settimana" action="Riproduci" onAction={() => playQueue(weekly, 0)} />
+          <p className="mb-3 text-xs text-muted">
+            {weeklyPersonal
+              ? "Mix personalizzato dai tuoi ascolti e artisti seguiti."
+              : "Selezione reale dal catalogo YouTube Music, non una playlist inventata."}
+          </p>
+          <HScroll>
+            {weekly.slice(0, 12).map((t) => (
+              <TrackCard key={t.id} track={t} queue={weekly} />
+            ))}
+          </HScroll>
+        </section>
+      ) : null}
+
+      {filter !== "radio" && curated.length > 0 ? (
+        <section>
+          <SectionHeader title="In evidenza" />
+          <HScroll>
+            {curated.map((col) => (
+              <button
+                key={col.id}
+                type="button"
+                onClick={() => col.tracks.length && playQueue(col.tracks, 0)}
+                className="relative h-44 w-[min(86vw,20rem)] shrink-0 overflow-hidden rounded-[1.6rem] text-left"
+              >
+                <img
+                  src={col.tracks[0]?.artwork}
+                  alt=""
+                  referrerPolicy="no-referrer"
+                  className="absolute inset-0 size-full object-cover"
+                />
+                <span className="absolute inset-0 bg-gradient-to-r from-black/80 via-black/45 to-transparent" />
+                <span className="relative flex h-full flex-col justify-between p-4">
+                  <span>
+                    <span className="block text-lg font-bold tracking-tight">{col.title}</span>
+                    <span className="mt-1 block text-xs text-white/75">{col.subtitle}</span>
+                  </span>
+                  <span className="flex size-10 items-center justify-center rounded-full bg-[#D4E84B] text-[#111827]">
+                    <Play className="ml-0.5 size-4 fill-current" />
+                  </span>
+                </span>
+              </button>
+            ))}
+          </HScroll>
+        </section>
+      ) : null}
+
+      {filter !== "music" && filter !== "radio" && dailyPlaylists.length > 0 ? (
+        <section>
+          <SectionHeader title="Playlist del giorno" action="Classifiche" onAction={() => void navigate({ to: "/charts" })} />
+          <div className="space-y-1">
+            {dailyPlaylists.map((col) => {
+              const cover = col.tracks[0];
+              return (
+                <div key={col.id} className="flex items-center gap-3 rounded-xl px-1 py-2">
+                  <button
+                    type="button"
+                    onClick={() => col.tracks.length && playQueue(col.tracks, 0)}
+                    className="flex min-w-0 flex-1 items-center gap-3 text-left"
+                  >
+                    <span className="size-14 shrink-0 overflow-hidden rounded-xl bg-elevated">
+                      <TrackArt src={cover?.artwork} alt="" />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-bold">{col.title}</span>
+                      <span className="block truncate text-xs text-muted">
+                        {col.subtitle} · {col.tracks.length} brani
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => col.tracks.length && playQueue(col.tracks, 0)}
+                    className="flex size-9 items-center justify-center rounded-full bg-elevated"
+                    aria-label={`Riproduci ${col.title}`}
+                  >
+                    <Play className="ml-0.5 size-4 fill-current" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
+
+
+      {filter !== "radio" && filter !== "playlists" ? (
         <section>
           <SectionHeader title="Fatto per te" />
           <HScroll>
@@ -149,7 +281,7 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" && hero ? (
+      {filter !== "radio" && filter !== "playlists" && hero ? (
         <section className="relative overflow-hidden rounded-lg">
           <div className="pointer-events-none absolute inset-0 opacity-40">
             <img src={hero.artwork} alt="" referrerPolicy="no-referrer" className="size-full scale-110 object-cover blur-3xl" />
@@ -188,7 +320,7 @@ function Home() {
         </p>
       )}
 
-      {filter !== "radio" && daily.length > 0 ? (
+      {filter !== "radio" && filter !== "playlists" && daily.length > 0 ? (
         <section>
           <SectionHeader title="Mix del giorno" action="Riproduci" onAction={() => playQueue(daily, 0)} />
           <div className="rounded-md bg-elevated/50 p-2">
@@ -199,7 +331,7 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" && trending.length > 0 ? (
+      {filter !== "radio" && filter !== "playlists" && trending.length > 0 ? (
         <section>
           <SectionHeader title="Tendenze del momento" action="Riproduci" onAction={() => playQueue(trending, 0)} />
           <HScroll>
@@ -210,7 +342,7 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" ? (
+      {filter !== "radio" && filter !== "playlists" ? (
         <section>
           <SectionHeader title="Mood" />
           <div className="flex flex-wrap gap-2">
@@ -242,7 +374,7 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" && hitsMix.length > 0 ? (
+      {filter !== "radio" && filter !== "playlists" && hitsMix.length > 0 ? (
         <section>
           <SectionHeader title="In evidenza" action="Riproduci" onAction={() => playQueue(hitsMix, 0)} />
           <div className="rounded-xl bg-surface p-2 ring-1 ring-border sm:p-3">
@@ -253,7 +385,7 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" && independent.length > 0 ? (
+      {filter !== "radio" && filter !== "playlists" && independent.length > 0 ? (
         <section>
           <SectionHeader title="Nuove uscite" />
           <HScroll>

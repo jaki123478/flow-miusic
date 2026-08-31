@@ -94,15 +94,31 @@ export function stationToTrack(station: RadioStation): Track {
   };
 }
 
+export type CatalogCollection = {
+  id: string;
+  title: string;
+  subtitle: string;
+  tracks: Track[];
+};
+
+const HOME_PLAYLISTS: { id: string; title: string; subtitle: string; playlistId: string }[] = [
+  { id: "hits", title: "Hit del momento", subtitle: "Dal catalogo YouTube Music", playlistId: "PL4fGSI1pDJn77aK7sAW2AT0oOzo5inWY8" },
+  { id: "viral", title: "Virali", subtitle: "Cosa sta esplodendo", playlistId: "PL4fGSI1pDJn61unMfmrUSz68RT8IFFnks" },
+  { id: "global", title: "Global Top", subtitle: "Classifica ufficiale", playlistId: "PL4fGSI1pDJn69On1f-8NAvX_CYlx7QyZc" },
+  { id: "latino", title: "Latino", subtitle: "Reggaeton e oltre", playlistId: "PL4fGSI1pDJn5O8siDeZuI_4hbk6JWtTX1" },
+];
+
 export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () => {
   const yt = await import("./ytmusic.server");
   const settled = await Promise.allSettled([
     yt.searchYtMusic("top hits official audio 2026", 16),
     yt.searchYtMusic("hit italia canzone official audio", 12),
-    yt.getPlaylistTracks("PL4fGSI1pDJn77aK7sAW2AT0oOzo5inWY8", 16),
-    yt.getPlaylistTracks("PL4fGSI1pDJn61unMfmrUSz68RT8IFFnks", 12),
+    yt.getPlaylistTracks(HOME_PLAYLISTS[0].playlistId, 16),
+    yt.getPlaylistTracks(HOME_PLAYLISTS[1].playlistId, 12),
     radioBrowser("/json/stations/search?hidebroken=true&order=clickcount&reverse=true&limit=40"),
     yt.getExploreTracks(),
+    yt.getPlaylistTracks(HOME_PLAYLISTS[2].playlistId, 12),
+    yt.getPlaylistTracks(HOME_PLAYLISTS[3].playlistId, 12),
   ]);
   const hits = settled[0].status === "fulfilled" ? settled[0].value : [];
   const italy = settled[1].status === "fulfilled" ? settled[1].value : [];
@@ -110,13 +126,27 @@ export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () =>
   const viral = settled[3].status === "fulfilled" ? settled[3].value : [];
   const radiosRaw = settled[4].status === "fulfilled" ? settled[4].value : [];
   const explore = settled[5].status === "fulfilled" ? settled[5].value : { trending: [], fresh: [] };
+  const global = settled[6].status === "fulfilled" ? settled[6].value : [];
+  const latino = settled[7].status === "fulfilled" ? settled[7].value : [];
   const stations = radiosRaw.map(toStation).filter((s): s is RadioStation => Boolean(s)).slice(0, 18);
   const trending = uniqueTracks([...hits, ...pop, ...explore.trending]).slice(0, 24);
+  const playlistTracks = [pop, viral, global, latino];
+  const curated: CatalogCollection[] = HOME_PLAYLISTS.map((spec, i) => ({
+    id: spec.id,
+    title: spec.title,
+    subtitle: spec.subtitle,
+    tracks: uniqueTracks(playlistTracks[i] || []).slice(0, 16),
+  })).filter((c) => c.tracks.length >= 4);
+  const discoverWeekly = uniqueTracks([...explore.trending, ...hits, ...viral]).slice(0, 20);
+  const dailyPlaylists = curated;
   return {
     trending,
     hitsMix: uniqueTracks(italy.length ? italy : viral).slice(0, 16),
     independent: uniqueTracks([...explore.fresh, ...viral]).slice(0, 16),
     radios: stations,
+    discoverWeekly,
+    curated,
+    dailyPlaylists,
   };
 });
 

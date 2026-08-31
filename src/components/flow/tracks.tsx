@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import {
+  Download,
   Heart,
   ListMusic,
   ListPlus,
@@ -15,6 +16,7 @@ import {
 } from "lucide-react";
 import { FALLBACK_ART, type Track } from "@/lib/music/types";
 import { getRelatedTracks } from "@/lib/music/catalog";
+import { downloadTrack, removeDownload, useIsDownloaded } from "@/lib/music/offline-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -405,6 +407,9 @@ export function ActionSheet() {
               onClick={() => toggleLike(view)}
             />
             <SheetBtn icon={ListPlus} label="Aggiungi a playlist" onClick={() => setPicking(true)} />
+            {view.videoId && !view.isLive && view.source !== "radio" ? (
+              <DownloadSheetBtn track={view} onDone={close} />
+            ) : null}
             <SheetBtn icon={Share2} label="Condividi" onClick={() => { void shareTrack(view); close(); }} />
             <SheetBtn
               icon={Search}
@@ -436,6 +441,31 @@ export function ActionSheet() {
         )}
       </div>
     </div>
+  );
+}
+
+
+function DownloadSheetBtn({ track, onDone }: { track: Track; onDone: () => void }) {
+  const downloaded = useIsDownloaded(track.videoId);
+  const notify = useFlowStore((s) => s.notify);
+  const [busy, setBusy] = useState(false);
+  return (
+    <SheetBtn
+      icon={Download}
+      label={busy ? "Attendi…" : downloaded ? "Rimuovi download" : "Scarica offline"}
+      onClick={() => {
+        if (!track.videoId || busy) return;
+        setBusy(true);
+        const op = downloaded ? removeDownload(track.videoId) : downloadTrack(track);
+        void op
+          .then(() => {
+            notify(downloaded ? "Download rimosso" : "Brano salvato offline");
+            onDone();
+          })
+          .catch(() => notify("Download non riuscito"))
+          .finally(() => setBusy(false));
+      }}
+    />
   );
 }
 

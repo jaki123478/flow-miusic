@@ -5,6 +5,35 @@ export interface LyricLine {
   text: string;
 }
 
+export type LyricsSource = "lrclib" | "kugou" | "simpmusic" | "";
+
+export type LyricsPayload = {
+  videoId: string;
+  lines: LyricLine[];
+  synced: boolean;
+  source: LyricsSource;
+};
+
+const EMPTY: LyricsPayload = { videoId: "", lines: [], synced: false, source: "" };
+
+const cache = new Map<string, LyricsPayload>();
+const MAX_CACHE = 64;
+
+function cacheGet(key: string): LyricsPayload | undefined {
+  return cache.get(key);
+}
+
+function cacheSet(key: string, value: LyricsPayload) {
+  if (!key) return;
+  if (cache.has(key)) cache.delete(key);
+  cache.set(key, value);
+  while (cache.size > MAX_CACHE) {
+    const oldest = cache.keys().next().value;
+    if (!oldest) break;
+    cache.delete(oldest);
+  }
+}
+
 function parseSynced(raw: string): LyricLine[] {
   const lines: LyricLine[] = [];
   for (const line of raw.split("\n")) {
@@ -25,6 +54,15 @@ function parsePlain(raw: string): LyricLine[] {
     .split("\n")
     .map((text, i) => ({ timeMs: i * 4000, text: text.trim() }))
     .filter((l) => l.text && l.text !== "♪");
+}
+
+function fromRaw(raw: string | undefined | null, source: LyricsSource, videoId: string): LyricsPayload | null {
+  if (!raw) return null;
+  const synced = parseSynced(raw);
+  if (synced.length) return { videoId, lines: synced, synced: true, source };
+  const plain = parsePlain(raw);
+  if (plain.length) return { videoId, lines: plain, synced: false, source };
+  return null;
 }
 
 type SimpEntry = {
@@ -51,57 +89,148 @@ async function simpGet(path: string): Promise<SimpEntry | null> {
   }
 }
 
-function linesFromSimp(entry: SimpEntry | null): LyricLine[] {
-  if (!entry) return [];
+function fromSimp(entry: SimpEntry | null, videoId: string): LyricsPayload | null {
+  if (!entry) return null;
   const synced = entry.syncedLyrics || entry.syncedLyric;
-  if (synced) {
-    const lines = parseSynced(synced);
-    if (lines.length) return lines;
-  }
-  if (entry.plainLyric) return parsePlain(entry.plainLyric);
-  return [];
+  const hit = fromRaw(synced, "simpmusic", videoId || entry.videoId || "");
+  if (hit) return hit;
+  return fromRaw(entry.plainLyric, "simpmusic", videoId || entry.videoId || "");
 }
 
-async function lrclib(title: string, artist: string): Promise<LyricLine[]> {
+async function lrclib(
+  title: string,
+  artist: string,
+  album: string | undefined,
+  duration: number | undefined,
+  videoId: string,
+): Promise<LyricsPayload | null> {
+  const params = new URLSearchParams({ track_name: title, artist_name: artist || "" });
+  if (album) params.set("album_name", album);
+  if (duration && duration > 20) params.set("duration", String(Math.round(duration)));
   try {
-    const url = `https://lrclib.net/api/get?track_name=${encodeURIComponent(title)}&artist_name=${encodeURIComponent(artist || "")}`;
-    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { syncedLyrics?: string; plainLyrics?: string };
-    if (data.syncedLyrics) {
-      const lines = parseSynced(data.syncedLyrics);
-      if (lines.length) return lines;
+    const res = await fetch(`https://lrclib.net/api/get?${params}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (res.ok) {
+      const data = (await res.json()) as { syncedLyrics?: string; plainLyrics?: string };
+      const hit = fromRaw(data.syncedLyrics, "lrclib", videoId) || fromRaw(data.plainLyrics, "lrclib", videoId);
+      if (hit) return hit;
     }
-    if (data.plainLyrics) return parsePlain(data.plainLyrics);
+  } catch {
+    /* search fallback */
+  }
+  try {
+    const q = new URLSearchParams({ track_name: title });
+    if (artist) q.set("artist_name", artist);
+    const res = await fetch(`https://lrclib.net/api/search?${q}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const list = (await res.json()) as { syncedLyrics?: string; plainLyrics?: string }[];
+    if (!Array.isArray(list)) return null;
+    for (const data of list.slice(0, 4)) {
+      const hit = fromRaw(data.syncedLyrics, "lrclib", videoId) || fromRaw(data.plainLyrics, "lrclib", videoId);
+      if (hit) return hit;
+    }
   } catch {
     /* ignore */
   }
-  return [];
+  return null;
+}
+
+async function kugou(title: string, artist: string, duration: number | undefined, videoId: string): Promise<LyricsPayload | null> {
+  const keyword = [title, artist].filter(Boolean).join(" ").trim();
+  if (!keyword) return null;
+  try {
+    const durMs = duration && duration > 20 ? Math.round(duration * 1000) : 0;
+    const search = new URLSearchParams({
+      ver: "1",
+      man: "yes",
+      client: "pc",
+      keyword,
+      hash: "",
+    });
+    if (durMs) search.set("duration", String(durMs));
+    const res = await fetch(`https://lyrics.kugou.com/search?${search}`, {
+      headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) return null;
+    const body = (await res.json()) as {
+      candidates?: { id: number | string; accesskey: string }[];
+    };
+    const cand = body.candidates?.[0];
+    if (!cand?.id || !cand.accesskey) return null;
+    const dl = await fetch(
+      `https://lyrics.kugou.com/download?ver=1&client=pc&id=${encodeURIComponent(String(cand.id))}&accesskey=${encodeURIComponent(cand.accesskey)}&fmt=lrc&charset=utf8`,
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(8000) },
+    );
+    if (!dl.ok) return null;
+    const data = (await dl.json()) as { content?: string };
+    if (!data.content) return null;
+    const raw = Buffer.from(data.content, "base64").toString("utf8");
+    return fromRaw(raw, "kugou", videoId);
+  } catch {
+    return null;
+  }
 }
 
 export const getTrackLyrics = createServerFn({ method: "GET" })
-  .validator((d: { videoId?: string; title: string; artist: string }) => d)
+  .validator((d: { videoId?: string; title: string; artist: string; album?: string; duration?: number }) => d)
   .handler(async ({ data }) => {
     const videoId = (data.videoId || "").trim();
     const title = (data.title || "").trim();
     const artist = (data.artist || "").trim();
+    const album = (data.album || "").trim() || undefined;
+    const duration = typeof data.duration === "number" && data.duration > 0 ? data.duration : undefined;
+    const cacheKey = videoId || `${title}|${artist}`.toLowerCase();
+
+    const cached = cacheGet(cacheKey);
+    if (cached) return cached;
+
+    if (title) {
+      const fromLrc = await lrclib(title, artist, album, duration, videoId);
+      if (fromLrc?.lines.length) {
+        cacheSet(cacheKey, fromLrc);
+        return fromLrc;
+      }
+    }
 
     if (videoId) {
-      const byId = linesFromSimp(await simpGet(`/${encodeURIComponent(videoId)}`));
-      if (byId.length) return byId;
+      const byId = fromSimp(await simpGet(`/${encodeURIComponent(videoId)}`), videoId);
+      if (byId?.lines.length) {
+        cacheSet(cacheKey, byId);
+        return byId;
+      }
+    }
+
+    if (title) {
+      const fromKugou = await kugou(title, artist, duration, videoId);
+      if (fromKugou?.lines.length) {
+        cacheSet(cacheKey, fromKugou);
+        return fromKugou;
+      }
     }
 
     const q = [title, artist].filter(Boolean).join(" ");
     if (q) {
       const hit = await simpGet(`/search?q=${encodeURIComponent(q)}&limit=1`);
       if (hit?.videoId) {
-        const full = linesFromSimp(await simpGet(`/${encodeURIComponent(hit.videoId)}`));
-        if (full.length) return full;
+        const full = fromSimp(await simpGet(`/${encodeURIComponent(hit.videoId)}`), videoId || hit.videoId);
+        if (full?.lines.length) {
+          cacheSet(cacheKey, full);
+          return full;
+        }
       }
-      const fromHit = linesFromSimp(hit);
-      if (fromHit.length) return fromHit;
+      const fromHit = fromSimp(hit, videoId);
+      if (fromHit?.lines.length) {
+        cacheSet(cacheKey, fromHit);
+        return fromHit;
+      }
     }
 
-    if (title) return lrclib(title, artist);
-    return [] as LyricLine[];
+    cacheSet(cacheKey, { ...EMPTY, videoId });
+    return { ...EMPTY, videoId };
   });
