@@ -1,8 +1,8 @@
 import { o as __toESM } from "../_runtime.mjs";
 import { H as require_react, S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
-import { I as useFlowStore, W as listFriendsFeed } from "./router-CInPgx50.mjs";
-import { n as SignedOut, t as SignedIn } from "./gates-BaaI07QO.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/friends-CCo8Wfvu.js
+import { I as useFlowStore, W as listFriendsFeed } from "./router-BM3nyifV.mjs";
+import { n as SignedOut, t as SignedIn } from "./gates-DlajWhqg.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/friends-BaB1nNTZ.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function FriendsPage() {

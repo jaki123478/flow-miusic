@@ -7,7 +7,7 @@ import { L as string, N as number, P as object, R as union, j as literal } from 
 import { i as signOut, t as authClient } from "./client-BjgLBM44.mjs";
 import { t as authMiddleware } from "./middleware-DuFXNrDi.mjs";
 import { n as auth } from "./server-BrgPxt8O.mjs";
-import { t as getAudioUrl } from "./ytmusic.server-DNnXosk4.mjs";
+import { t as getAudioUrl } from "./ytmusic.server-AtvP1arJ.mjs";
 import { A as House, C as Moon, D as ListPlus, I as Compass, L as ChevronDown, M as Gauge, N as Ellipsis, O as ListMusic, P as Download, R as Bot, S as Pause, T as MicVocal, _ as Repeat, b as Plus, d as SkipBack, f as Shuffle, g as Search, h as Send, i as Volume2, j as Heart, k as Library, l as Sparkles, m as Settings, n as VolumeX, o as Trophy, p as Share2, r as VolumeOff, s as TriangleAlert, t as X, u as SkipForward, v as Repeat1, w as Mic, x as Play, y as Radio } from "../_libs/lucide-react.mjs";
 import { t as clsx } from "../_libs/clsx.mjs";
 import { t as twMerge } from "../_libs/tailwind-merge.mjs";
@@ -21,7 +21,7 @@ var followUser = createServerFn({ method: "POST" }).middleware([authMiddleware])
 createServerFn({ method: "POST" }).middleware([authMiddleware]).validator((d) => d).handler(createSsrRpc("2c5986bfbbc1fec6871fbfb28bb0e161830c733aab33519ddc02a3fe26bff3bd"));
 var listFriendsFeed = createServerFn({ method: "GET" }).middleware([authMiddleware]).handler(createSsrRpc("348717c0bc10e27730f609890bfe31e7973d38f21f4d1e318fb4699d08d7b865"));
 //#endregion
-//#region node_modules/.nitro/vite/services/ssr/assets/router-CInPgx50.js
+//#region node_modules/.nitro/vite/services/ssr/assets/router-BM3nyifV.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function AppErrorComponent({ error }) {
@@ -4767,7 +4767,7 @@ var Route$20 = createRootRoute({
 		})]
 	})
 });
-var $$splitComponentImporter$15 = () => import("./routes-CFcC6-0X.mjs");
+var $$splitComponentImporter$15 = () => import("./routes-BPj9x-m7.mjs");
 var Route$19 = createFileRoute("/")({
 	loader: async () => {
 		try {
@@ -4786,7 +4786,7 @@ var Route$19 = createFileRoute("/")({
 	},
 	component: lazyRouteComponent($$splitComponentImporter$15, "component")
 });
-var $$splitComponentImporter$14 = () => import("./charts-DeF7EZsa.mjs");
+var $$splitComponentImporter$14 = () => import("./charts-DHsDffLO.mjs");
 var Route$18 = createFileRoute("/charts")({
 	validateSearch: (search) => ({ id: typeof search.id === "string" ? search.id : void 0 }),
 	loaderDeps: ({ search }) => ({ id: search.id }),
@@ -4803,9 +4803,9 @@ var Route$18 = createFileRoute("/charts")({
 	},
 	component: lazyRouteComponent($$splitComponentImporter$14, "component")
 });
-var $$splitComponentImporter$13 = () => import("./discover-BrlVU9X4.mjs");
+var $$splitComponentImporter$13 = () => import("./discover-CrGt6oK-.mjs");
 var Route$17 = createFileRoute("/discover")({ component: lazyRouteComponent($$splitComponentImporter$13, "component") });
-var $$splitComponentImporter$12 = () => import("./explore-DLpYPide.mjs");
+var $$splitComponentImporter$12 = () => import("./explore-Cl2uXfls.mjs");
 var Route$16 = createFileRoute("/explore")({
 	validateSearch: (search) => ({ genre: typeof search.genre === "string" ? search.genre : void 0 }),
 	loaderDeps: ({ search }) => ({ genre: search.genre }),
@@ -4819,13 +4819,13 @@ var Route$16 = createFileRoute("/explore")({
 	},
 	component: lazyRouteComponent($$splitComponentImporter$12, "component")
 });
-var $$splitComponentImporter$11 = () => import("./fresh-CftEkPuG.mjs");
+var $$splitComponentImporter$11 = () => import("./fresh-BO6jVomh.mjs");
 var Route$15 = createFileRoute("/fresh")({ component: lazyRouteComponent($$splitComponentImporter$11, "component") });
-var $$splitComponentImporter$10 = () => import("./friends-CCo8Wfvu.mjs");
+var $$splitComponentImporter$10 = () => import("./friends-BaB1nNTZ.mjs");
 var Route$14 = createFileRoute("/friends")({ component: lazyRouteComponent($$splitComponentImporter$10, "component") });
-var $$splitComponentImporter$9 = () => import("./library-DOWFQvIi.mjs");
+var $$splitComponentImporter$9 = () => import("./library-BBl84SRu.mjs");
 var Route$13 = createFileRoute("/library")({ component: lazyRouteComponent($$splitComponentImporter$9, "component") });
-var $$splitComponentImporter$8 = () => import("./login-DRqUhaxd.mjs");
+var $$splitComponentImporter$8 = () => import("./login-nEyKxN0C.mjs");
 var Route$12 = createFileRoute("/login")({
 	validateSearch: (search) => ({
 		mode: search.mode === "up" ? "up" : search.mode === "in" ? "in" : void 0,
@@ -4833,7 +4833,7 @@ var Route$12 = createFileRoute("/login")({
 	}),
 	component: lazyRouteComponent($$splitComponentImporter$8, "component")
 });
-var $$splitComponentImporter$7 = () => import("./mix-Bnin7XXx.mjs");
+var $$splitComponentImporter$7 = () => import("./mix-D9ey-qyx.mjs");
 var Route$11 = createFileRoute("/mix")({
 	validateSearch: (search) => ({
 		mood: typeof search.mood === "string" ? search.mood : void 0,
@@ -4841,7 +4841,7 @@ var Route$11 = createFileRoute("/mix")({
 	}),
 	component: lazyRouteComponent($$splitComponentImporter$7, "component")
 });
-var $$splitComponentImporter$6 = () => import("./radio-CGdEIjP6.mjs");
+var $$splitComponentImporter$6 = () => import("./radio-Buq0E8UU.mjs");
 var Route$10 = createFileRoute("/radio")({
 	validateSearch: (search) => ({ c: typeof search.c === "string" ? search.c : void 0 }),
 	loaderDeps: ({ search }) => ({ c: search.c || "IT" }),
@@ -4854,14 +4854,14 @@ var Route$10 = createFileRoute("/radio")({
 	},
 	component: lazyRouteComponent($$splitComponentImporter$6, "component")
 });
-var $$splitComponentImporter$5 = () => import("./search-B5YZOeEA.mjs");
+var $$splitComponentImporter$5 = () => import("./search-CcI2hadX.mjs");
 var Route$9 = createFileRoute("/search")({
 	validateSearch: (search) => ({ q: typeof search.q === "string" ? search.q : void 0 }),
 	component: lazyRouteComponent($$splitComponentImporter$5, "component")
 });
-var $$splitComponentImporter$4 = () => import("./settings-C-zAmZ9W.mjs");
+var $$splitComponentImporter$4 = () => import("./settings-DZyG8fEc.mjs");
 var Route$8 = createFileRoute("/settings")({ component: lazyRouteComponent($$splitComponentImporter$4, "component") });
-var $$splitComponentImporter$3 = () => import("./stats-CHfxU4nB.mjs");
+var $$splitComponentImporter$3 = () => import("./stats-CzeABhOs.mjs");
 var Route$7 = createFileRoute("/stats")({ component: lazyRouteComponent($$splitComponentImporter$3, "component") });
 var Route$6 = createFileRoute("/api/play")({ server: { handlers: { GET: async ({ request }) => {
 	const id = new URL(request.url).searchParams.get("v") || "";
@@ -4947,9 +4947,10 @@ async function handleStream(request) {
 	const parsed = new URL(request.url);
 	const id = parsed.searchParams.get("v") || "";
 	if (!/^[\w-]{11}$/.test(id)) return new Response("Bad request", { status: 400 });
-	if ((parsed.searchParams.has("src") || (request.headers.get("accept") || "").includes("application/json")) && parsed.searchParams.has("src")) {
-		let target = await resolveUrl(id, false);
-		if (!target) target = await resolveUrl(id, true);
+	const wantSrc = parsed.searchParams.has("src") || (request.headers.get("accept") || "").includes("application/json");
+	let target = await resolveUrl(id, false);
+	if (!target) target = await resolveUrl(id, true);
+	if (wantSrc) {
 		if (!target) return Response.json({ url: null }, {
 			status: 404,
 			headers: {
@@ -4965,60 +4966,31 @@ async function handleStream(request) {
 			Vary: "Accept"
 		} });
 	}
-	const play = async (force) => {
-		const target = await resolveUrl(id, force);
-		if (!target) return null;
-		const headers = new Headers();
-		const range = request.headers.get("range");
-		if (range) headers.set("Range", range);
-		headers.set("User-Agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1");
-		headers.set("Accept", "*/*");
-		headers.set("Referer", "https://www.youtube.com/");
-		return fetch(target, {
-			headers,
-			redirect: "follow"
-		});
-	};
-	let upstream = await play(false);
-	if (!upstream || upstream.status === 403 || upstream.status === 410) {
-		cache.delete(id);
-		upstream = await play(true);
-	}
-	if (!upstream) return new Response("No stream", { status: 404 });
-	const out = new Headers();
-	for (const key of [
-		"content-type",
-		"content-length",
-		"content-range",
-		"accept-ranges"
-	]) {
-		const v = upstream.headers.get(key);
-		if (v) out.set(key, v);
-	}
-	if (!out.has("accept-ranges")) out.set("Accept-Ranges", "bytes");
-	if (!out.has("content-type")) out.set("Content-Type", "audio/mp4");
-	out.set("Cache-Control", "private, max-age=120");
-	out.set("Vary", "Accept, Range");
-	return new Response(request.method === "HEAD" ? null : upstream.body, {
-		status: upstream.status,
-		headers: out
+	if (target) return new Response(null, {
+		status: 302,
+		headers: {
+			Location: target,
+			"Access-Control-Allow-Origin": "*",
+			"Cache-Control": "private, max-age=1800"
+		}
 	});
+	return new Response("No stream", { status: 404 });
 }
 var Route$4 = createFileRoute("/api/stream")({ server: { handlers: {
 	GET: async ({ request }) => handleStream(request),
 	HEAD: async ({ request }) => handleStream(request)
 } } });
-var $$splitComponentImporter$2 = () => import("./p._id-DqI6Sm-C.mjs");
+var $$splitComponentImporter$2 = () => import("./p._id-D7H_kCdF.mjs");
 var Route$3 = createFileRoute("/p/$id")({
 	loader: async ({ params }) => getSharedPlaylist({ data: { id: params.id } }),
 	component: lazyRouteComponent($$splitComponentImporter$2, "component")
 });
-var $$splitComponentImporter$1 = () => import("./t._id-BO7D5rDK.mjs");
+var $$splitComponentImporter$1 = () => import("./t._id-DUbNhoED.mjs");
 var Route$2 = createFileRoute("/t/$id")({
 	loader: async ({ params }) => getVideoTrack({ data: { id: params.id } }),
 	component: lazyRouteComponent($$splitComponentImporter$1, "component")
 });
-var $$splitComponentImporter = () => import("./u._id-BO3AlFN_.mjs");
+var $$splitComponentImporter = () => import("./u._id-dZeiQr1j.mjs");
 var Route$1 = createFileRoute("/u/$id")({
 	loader: async ({ params }) => listUserPlaylists({ data: { userId: params.id } }),
 	component: lazyRouteComponent($$splitComponentImporter, "component")

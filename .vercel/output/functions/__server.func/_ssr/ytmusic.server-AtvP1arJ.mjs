@@ -1,7 +1,7 @@
 import { c as __exportAll } from "./ssr.mjs";
 import { n as FALLBACK_ART } from "./types-CuQ6ClJX.mjs";
 import { t as Innertube } from "../_libs/youtubei.js.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/ytmusic.server-DNnXosk4.js
+//#region node_modules/.nitro/vite/services/ssr/assets/ytmusic.server-AtvP1arJ.js
 var ytmusic_server_exports = /* @__PURE__ */ __exportAll({
 	getAudioUrl: () => getAudioUrl,
 	getExploreTracks: () => getExploreTracks,
@@ -25,18 +25,36 @@ async function getTube() {
 async function getAudioUrl(videoId) {
 	const id = videoId.trim();
 	if (!/^[\w-]{11}$/.test(id)) return null;
-	const yt = await getTube();
-	for (const client of [
-		"IOS",
-		"ANDROID",
-		"YTMUSIC"
-	]) try {
-		const format = (await yt.getBasicInfo(id, { client })).chooseFormat({
-			type: "audio",
-			quality: "bestefficiency"
+	try {
+		const yt = await getTube();
+		for (const client of [
+			"IOS",
+			"ANDROID",
+			"YTMUSIC",
+			"WEB_REMIX"
+		]) try {
+			const format = (await yt.getBasicInfo(id, { client })).chooseFormat({
+				type: "audio",
+				quality: "bestefficiency"
+			});
+			const url = format.url || await format.decipher(yt.session.player).catch(() => "");
+			if (url) return url;
+		} catch {}
+	} catch {}
+	const fallbackUrls = [
+		`https://pipedapi.kavin.rocks/streams/${id}`,
+		`https://api.piped.private.coffee/streams/${id}`,
+		`https://inv.nadeko.net/api/v1/videos/${id}`
+	];
+	for (const ep of fallbackUrls) try {
+		const res = await fetch(ep, {
+			headers: { Accept: "application/json" },
+			signal: AbortSignal.timeout(3500)
 		});
-		const url = format.url || await format.decipher(yt.session.player).catch(() => "");
-		if (url) return url;
+		if (!res.ok) continue;
+		const data = await res.json();
+		const streams = data.audioStreams || (data.adaptiveFormats || []).filter((f) => (f.type || f.mimeType || "").startsWith("audio"));
+		if (streams && streams.length && streams[0]?.url) return streams[0].url;
 	} catch {}
 	return null;
 }

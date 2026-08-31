@@ -3,8 +3,8 @@ import { H as require_react, S as require_jsx_runtime } from "../_libs/@tanstack
 import { i as MOODS } from "./types-CuQ6ClJX.mjs";
 import { t as createMoodMix } from "./lyrics-DWcjsahh.mjs";
 import { E as LoaderCircle, l as Sparkles } from "../_libs/lucide-react.mjs";
-import { D as TrackRow, I as useFlowStore, s as Route$11, w as SectionHeader } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/mix-Bnin7XXx.js
+import { D as TrackRow, I as useFlowStore, s as Route$11, w as SectionHeader } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/mix-D9ey-qyx.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function MixPage() {

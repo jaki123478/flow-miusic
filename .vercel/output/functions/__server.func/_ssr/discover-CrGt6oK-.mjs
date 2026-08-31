@@ -2,8 +2,8 @@ import { o as __toESM } from "../_runtime.mjs";
 import { H as require_react, S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
 import { a as getDiscoverMix } from "./lyrics-DWcjsahh.mjs";
 import { E as LoaderCircle } from "../_libs/lucide-react.mjs";
-import { D as TrackRow, I as useFlowStore, w as SectionHeader } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/discover-BrlVU9X4.js
+import { D as TrackRow, I as useFlowStore, w as SectionHeader } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/discover-CrGt6oK-.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function DiscoverPage() {

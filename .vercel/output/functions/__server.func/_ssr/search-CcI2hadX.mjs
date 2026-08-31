@@ -3,8 +3,8 @@ import { H as require_react, S as require_jsx_runtime, b as useNavigate, v as Li
 import { r as GENRES } from "./types-CuQ6ClJX.mjs";
 import { m as stationToTrack, p as searchCatalog } from "./lyrics-DWcjsahh.mjs";
 import { E as LoaderCircle, g as Search, t as X, w as Mic } from "../_libs/lucide-react.mjs";
-import { D as TrackRow, E as TrackCard, S as HScroll, a as Route$9, w as SectionHeader, z as hashHue } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/search-B5YZOeEA.js
+import { D as TrackRow, E as TrackCard, S as HScroll, a as Route$9, w as SectionHeader, z as hashHue } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/search-CcI2hadX.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function SearchPage() {

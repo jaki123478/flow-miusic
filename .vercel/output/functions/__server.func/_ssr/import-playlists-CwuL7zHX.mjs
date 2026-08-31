@@ -1,6 +1,6 @@
 import { r as createServerFn } from "./ssr.mjs";
 import { t as createServerRpc } from "./createServerRpc-CcvdN_gc.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/import-playlists-D5bcH2jS.js
+//#region node_modules/.nitro/vite/services/ssr/assets/import-playlists-CwuL7zHX.js
 function parseSpotifyRef(raw) {
 	const text = raw.trim();
 	const uri = text.match(/^spotify:(playlist|album|track):([A-Za-z0-9]+)$/i);
@@ -86,7 +86,7 @@ var importSpotify = createServerFn({ method: "POST" }).validator((d) => d).handl
 	const ytList = raw.match(/[?&]list=([A-Za-z0-9_-]+)/);
 	const ytWatch = raw.match(/(?:youtu\.be\/|v=)([A-Za-z0-9_-]{11})/);
 	if (ytList || ytWatch && /youtube|youtu\.be/i.test(raw)) {
-		const yt = await import("./ytmusic.server-DNnXosk4.mjs").then((n) => n.n);
+		const yt = await import("./ytmusic.server-AtvP1arJ.mjs").then((n) => n.n);
 		if (ytList) {
 			const tracks = await yt.getPlaylistTracks(ytList[1], 50).catch(() => []);
 			return {
@@ -126,7 +126,7 @@ var importSpotify = createServerFn({ method: "POST" }).validator((d) => d).handl
 		}
 		const uniqueSeeds = seedsA.filter((s, i, a) => a.findIndex((x) => x.title === s.title) === i).slice(0, 40);
 		if (uniqueSeeds.length) {
-			const yt = await import("./ytmusic.server-DNnXosk4.mjs").then((n) => n.n);
+			const yt = await import("./ytmusic.server-AtvP1arJ.mjs").then((n) => n.n);
 			const tracks = [];
 			const seen = /* @__PURE__ */ new Set();
 			for (let i = 0; i < uniqueSeeds.length; i += 5) {
@@ -173,7 +173,7 @@ var importSpotify = createServerFn({ method: "POST" }).validator((d) => d).handl
 		missing: 0,
 		error: "Nessun brano trovato. La playlist è pubblica?"
 	};
-	const yt = await import("./ytmusic.server-DNnXosk4.mjs").then((n) => n.n);
+	const yt = await import("./ytmusic.server-AtvP1arJ.mjs").then((n) => n.n);
 	const tracks = [];
 	const seen = /* @__PURE__ */ new Set();
 	for (let i = 0; i < seeds.length; i += 5) {

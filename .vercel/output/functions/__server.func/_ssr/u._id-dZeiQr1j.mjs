@@ -1,6 +1,6 @@
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
-import { B as useCurrentUser, I as useFlowStore, U as followUser, n as Route$1 } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/u._id-BO3AlFN_.js
+import { B as useCurrentUser, I as useFlowStore, U as followUser, n as Route$1 } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/u._id-dZeiQr1j.js
 var import_jsx_runtime = require_jsx_runtime();
 function ProfilePage() {
 	const items = Route$1.useLoaderData();

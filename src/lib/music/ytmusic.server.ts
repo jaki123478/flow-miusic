@@ -21,18 +21,45 @@ export async function getTube(): Promise<Innertube> {
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
-  const yt = await getTube();
-  const clients = ["IOS", "ANDROID", "YTMUSIC"] as const;
-  for (const client of clients) {
+
+  // 1. Innertube direct resolution
+  try {
+    const yt = await getTube();
+    const clients = ["IOS", "ANDROID", "YTMUSIC", "WEB_REMIX"] as const;
+    for (const client of clients) {
+      try {
+        const info = await yt.getBasicInfo(id, { client });
+        const format = info.chooseFormat({ type: "audio", quality: "bestefficiency" });
+        const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
+        if (url) return url;
+      } catch {
+        /* next client */
+      }
+    }
+  } catch {
+    /* fallback */
+  }
+
+  // 2. Multi-instance fallback
+  const fallbackUrls = [
+    `https://pipedapi.kavin.rocks/streams/${id}`,
+    `https://api.piped.private.coffee/streams/${id}`,
+    `https://inv.nadeko.net/api/v1/videos/${id}`,
+  ];
+  for (const ep of fallbackUrls) {
     try {
-      const info = await yt.getBasicInfo(id, { client });
-      const format = info.chooseFormat({ type: "audio", quality: "bestefficiency" });
-      const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
-      if (url) return url;
+      const res = await fetch(ep, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(3500) });
+      if (!res.ok) continue;
+      const data = (await res.json()) as { audioStreams?: { url?: string }[]; adaptiveFormats?: { url?: string; type?: string; mimeType?: string }[] };
+      const streams = data.audioStreams || (data.adaptiveFormats || []).filter((f) => (f.type || f.mimeType || "").startsWith("audio"));
+      if (streams && streams.length && streams[0]?.url) {
+        return streams[0].url;
+      }
     } catch {
-      /* next client */
+      /* continue */
     }
   }
+
   return null;
 }
 

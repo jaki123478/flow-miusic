@@ -1,7 +1,7 @@
 import { o as __toESM } from "../_runtime.mjs";
 import { H as require_react, S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
-import { F as DEFAULT_SETTINGS, I as useFlowStore, N as useCacheStats, _ as detectOem, b as isAppleMobile, f as EMPTY_LASTFM, g as androidBackgroundTips, h as writeLastFmConfig, j as formatBytes, k as clearAllDownloads, m as readLastFmConfig, p as lastFmHandshake, v as oemBatteryIntents, y as isAndroid } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/settings-C-zAmZ9W.js
+import { F as DEFAULT_SETTINGS, I as useFlowStore, N as useCacheStats, _ as detectOem, b as isAppleMobile, f as EMPTY_LASTFM, g as androidBackgroundTips, h as writeLastFmConfig, j as formatBytes, k as clearAllDownloads, m as readLastFmConfig, p as lastFmHandshake, v as oemBatteryIntents, y as isAndroid } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/settings-DZyG8fEc.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 function openHref(href) {

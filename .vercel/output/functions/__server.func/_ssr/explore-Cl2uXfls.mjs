@@ -1,7 +1,7 @@
 import { S as require_jsx_runtime, v as Link } from "../_libs/@tanstack/react-router+[...].mjs";
 import { i as MOODS, r as GENRES } from "./types-CuQ6ClJX.mjs";
-import { D as TrackRow, I as useFlowStore, l as Route$16, w as SectionHeader } from "./router-CInPgx50.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/explore-DLpYPide.js
+import { D as TrackRow, I as useFlowStore, l as Route$16, w as SectionHeader } from "./router-BM3nyifV.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/explore-Cl2uXfls.js
 var import_jsx_runtime = require_jsx_runtime();
 function ExplorePage() {
 	const { genre } = Route$16.useSearch();

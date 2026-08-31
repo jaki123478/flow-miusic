@@ -3,9 +3,9 @@ import { H as require_react, S as require_jsx_runtime, v as Link } from "../_lib
 import { r as createServerFn } from "./ssr.mjs";
 import { n as createSsrRpc } from "./lyrics-DWcjsahh.mjs";
 import { F as Copy, a as Upload, b as Plus, c as Trash2, j as Heart, x as Play } from "../_libs/lucide-react.mjs";
-import { A as downloadTracks, B as useCurrentUser, D as TrackRow, G as publishPlaylist, I as useFlowStore, M as removeDownload, N as useCacheStats, O as canDownloadTrack, P as useOfflineDownloads, j as formatBytes, k as clearAllDownloads, w as SectionHeader } from "./router-CInPgx50.mjs";
-import { n as SignedOut } from "./gates-BaaI07QO.mjs";
-//#region node_modules/.nitro/vite/services/ssr/assets/library-DOWFQvIi.js
+import { A as downloadTracks, B as useCurrentUser, D as TrackRow, G as publishPlaylist, I as useFlowStore, M as removeDownload, N as useCacheStats, O as canDownloadTrack, P as useOfflineDownloads, j as formatBytes, k as clearAllDownloads, w as SectionHeader } from "./router-BM3nyifV.mjs";
+import { n as SignedOut } from "./gates-DlajWhqg.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/library-BBl84SRu.js
 var import_react = /* @__PURE__ */ __toESM(require_react());
 var import_jsx_runtime = require_jsx_runtime();
 var importSpotify = createServerFn({ method: "POST" }).validator((d) => d).handler(createSsrRpc("ea6a09f743b9ccfc3ea1b144fd1fce5ad9dbc05c4b6411ca82670d5d56620830"));
