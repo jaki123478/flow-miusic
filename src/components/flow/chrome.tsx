@@ -8,6 +8,7 @@ import { installWebSocketGuard } from "@/lib/net/websocket";
 import { useT } from "@/lib/i18n";
 import { useFlowStore } from "@/stores/flow-store";
 import { PlaybackWatch } from "./playback-watch";
+import { ProfileModal } from "./profile-modal";
 
 export function HelpOverlay() {
   const show = useFlowStore((s) => s.showHelp);
@@ -91,31 +92,34 @@ export function InstallHint() {
 
 export function AuthChip() {
   const { user, isPending } = useCurrentUserState();
-  const [signingOut, setSigningOut] = useState(false);
+  const profileName = useFlowStore((s) => s.profileName);
+  const [showProfile, setShowProfile] = useState(false);
   const t = useT();
+
   if (isPending) return <div className="size-8 shrink-0 animate-pulse rounded-full bg-elevated" />;
-  if (!user) {
-    return (
-      <Link to="/login" className="rounded-full bg-fg px-4 py-1.5 text-sm font-bold text-bg">
-        {t("login")}
-      </Link>
-    );
-  }
-  const label = user.displayName ?? user.primaryEmail ?? "Account";
+
+  const label = user?.displayName ?? user?.primaryEmail ?? profileName ?? "Flow User";
+
   return (
-    <div className="flex items-center gap-2">
-      {user.profileImageUrl ? (
-        <img src={user.profileImageUrl} alt="" className="size-8 rounded-full object-cover" />
-      ) : (
-        <span className="grid size-8 place-items-center rounded-full bg-primary text-sm font-bold text-primary-fg">
-          {label.charAt(0).toUpperCase()}
-        </span>
-      )}
-      <span className="hidden max-w-[8rem] truncate text-sm font-medium md:inline">{label}</span>
-      <button type="button" disabled={signingOut} onClick={() => { setSigningOut(true); void signOut().catch(() => setSigningOut(false)); }} className="text-xs font-medium text-muted hover:text-fg">
-        {signingOut ? "…" : t("logout")}
+    <>
+      <button
+        type="button"
+        onClick={() => setShowProfile(true)}
+        className="flex items-center gap-2 rounded-full bg-surface/90 px-2.5 py-1 text-xs font-semibold ring-1 ring-border/50 hover:bg-elevated transition-all"
+        title="Apri Profilo & Impostazioni"
+      >
+        {user?.profileImageUrl ? (
+          <img src={user.profileImageUrl} alt="" className="size-6 rounded-full object-cover" />
+        ) : (
+          <span className="grid size-6 place-items-center rounded-full bg-gradient-to-tr from-primary to-emerald-400 text-[11px] font-bold text-bg">
+            {label.charAt(0).toUpperCase()}
+          </span>
+        )}
+        <span className="max-w-[7rem] truncate text-fg sm:max-w-[10rem]">{label}</span>
       </button>
-    </div>
+
+      <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
+    </>
   );
 }
 

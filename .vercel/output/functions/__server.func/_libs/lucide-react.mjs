@@ -138,6 +138,21 @@ var ChevronDown = createLucideIcon("chevron-down", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Clock = createLucideIcon("clock", [["circle", {
+	cx: "12",
+	cy: "12",
+	r: "10",
+	key: "1mglay"
+}], ["polyline", {
+	points: "12 6 12 12 16 14",
+	key: "68esgv"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Compass = createLucideIcon("compass", [["path", {
 	d: "m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z",
 	key: "9ktpf1"
@@ -346,6 +361,52 @@ var LoaderCircle = createLucideIcon("loader-circle", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var LogIn = createLucideIcon("log-in", [
+	["path", {
+		d: "M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4",
+		key: "u53s6r"
+	}],
+	["polyline", {
+		points: "10 17 15 12 10 7",
+		key: "1ail0h"
+	}],
+	["line", {
+		x1: "15",
+		x2: "3",
+		y1: "12",
+		y2: "12",
+		key: "v6grx8"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var LogOut = createLucideIcon("log-out", [
+	["path", {
+		d: "M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4",
+		key: "1uf3rs"
+	}],
+	["polyline", {
+		points: "16 17 21 12 16 7",
+		key: "1gabdz"
+	}],
+	["line", {
+		x1: "21",
+		x2: "9",
+		y1: "12",
+		y2: "12",
+		key: "1uyos4"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var MicVocal = createLucideIcon("mic-vocal", [
 	["path", {
 		d: "m11 7.601-5.994 8.19a1 1 0 0 0 .1 1.298l.817.818a1 1 0 0 0 1.314.087L15.09 12",
@@ -430,6 +491,16 @@ var Pause = createLucideIcon("pause", [["rect", {
 	height: "16",
 	rx: "1",
 	key: "1okwgv"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Pen = createLucideIcon("pen", [["path", {
+	d: "M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z",
+	key: "1a8usu"
 }]]);
 /**
 * @license lucide-react v0.510.0 - ISC
@@ -810,6 +881,52 @@ var Sparkles = createLucideIcon("sparkles", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Sun = createLucideIcon("sun", [
+	["circle", {
+		cx: "12",
+		cy: "12",
+		r: "4",
+		key: "4exip2"
+	}],
+	["path", {
+		d: "M12 2v2",
+		key: "tus03m"
+	}],
+	["path", {
+		d: "M12 20v2",
+		key: "1lh1kg"
+	}],
+	["path", {
+		d: "m4.93 4.93 1.41 1.41",
+		key: "149t6j"
+	}],
+	["path", {
+		d: "m17.66 17.66 1.41 1.41",
+		key: "ptbguv"
+	}],
+	["path", {
+		d: "M2 12h2",
+		key: "1t8f8n"
+	}],
+	["path", {
+		d: "M20 12h2",
+		key: "1q8mjw"
+	}],
+	["path", {
+		d: "m6.34 17.66-1.41 1.41",
+		key: "1m8zz5"
+	}],
+	["path", {
+		d: "m19.07 4.93-1.41 1.41",
+		key: "1shlcs"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Trash2 = createLucideIcon("trash-2", [
 	["path", {
 		d: "M3 6h18",
@@ -1042,4 +1159,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Mic as A, Download as B, Repeat1 as C, Pause as D, Play as E, Library as F, Bot as G, Compass as H, House as I, Heart as L, LoaderCircle as M, ListPlus as N, Music2 as O, ListMusic as P, Gauge as R, Repeat as S, Plus as T, ChevronDown as U, Copy as V, Check as W, Settings as _, User as a, RotateCw as b, Trophy as c, Sparkles as d, SlidersVertical as f, Share2 as g, Shuffle as h, Volume2 as i, MicVocal as j, Moon as k, TriangleAlert as l, SkipBack as m, VolumeX as n, Upload as o, SkipForward as p, VolumeOff as r, Type as s, X as t, Trash2 as u, Send as v, Radio as w, RotateCcw as x, Search as y, Ellipsis as z };
+export { Music2 as A, House as B, Repeat as C, Play as D, Plus as E, LogIn as F, Copy as G, Gauge as H, LoaderCircle as I, ChevronDown as J, Compass as K, ListPlus as L, Mic as M, MicVocal as N, Pen as O, LogOut as P, ListMusic as R, RotateCcw as S, Radio as T, Ellipsis as U, Heart as V, Download as W, Bot as X, Check as Y, Share2 as _, User as a, Search as b, Trophy as c, Sun as d, Sparkles as f, Shuffle as g, SkipBack as h, Volume2 as i, Moon as j, Pause as k, TriangleAlert as l, SkipForward as m, VolumeX as n, Upload as o, SlidersVertical as p, Clock as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Settings as v, Repeat1 as w, RotateCw as x, Send as y, Library as z };
