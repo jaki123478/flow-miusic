@@ -563,6 +563,74 @@ var Plus = createLucideIcon("plus", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var QrCode = createLucideIcon("qr-code", [
+	["rect", {
+		width: "5",
+		height: "5",
+		x: "3",
+		y: "3",
+		rx: "1",
+		key: "1tu5fj"
+	}],
+	["rect", {
+		width: "5",
+		height: "5",
+		x: "16",
+		y: "3",
+		rx: "1",
+		key: "1v8r4q"
+	}],
+	["rect", {
+		width: "5",
+		height: "5",
+		x: "3",
+		y: "16",
+		rx: "1",
+		key: "1x03jg"
+	}],
+	["path", {
+		d: "M21 16h-3a2 2 0 0 0-2 2v3",
+		key: "177gqh"
+	}],
+	["path", {
+		d: "M21 21v.01",
+		key: "ents32"
+	}],
+	["path", {
+		d: "M12 7v3a2 2 0 0 1-2 2H7",
+		key: "8crl2c"
+	}],
+	["path", {
+		d: "M3 12h.01",
+		key: "nlz23k"
+	}],
+	["path", {
+		d: "M12 3h.01",
+		key: "n36tog"
+	}],
+	["path", {
+		d: "M12 16v.01",
+		key: "133mhm"
+	}],
+	["path", {
+		d: "M16 12h1",
+		key: "1slzba"
+	}],
+	["path", {
+		d: "M21 12v.01",
+		key: "1lwtk9"
+	}],
+	["path", {
+		d: "M12 21v-1",
+		key: "1880an"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Radio = createLucideIcon("radio", [
 	["path", {
 		d: "M4.9 19.1C1 15.2 1 8.8 4.9 4.9",
@@ -885,6 +953,24 @@ var SlidersVertical = createLucideIcon("sliders-vertical", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Smartphone = createLucideIcon("smartphone", [["rect", {
+	width: "14",
+	height: "20",
+	x: "5",
+	y: "2",
+	rx: "2",
+	ry: "2",
+	key: "1yt0o3"
+}], ["path", {
+	d: "M12 18h.01",
+	key: "mhygvu"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Sparkles = createLucideIcon("sparkles", [
 	["path", {
 		d: "M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z",
@@ -1191,4 +1277,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Music2 as A, Languages as B, Repeat as C, Play as D, Plus as E, LogIn as F, Download as G, Heart as H, LoaderCircle as I, Clock as J, Copy as K, ListPlus as L, Mic as M, MicVocal as N, Pen as O, LogOut as P, ListMusic as R, RotateCcw as S, Radio as T, Gauge as U, House as V, Ellipsis as W, Check as X, ChevronDown as Y, Bot as Z, Share2 as _, User as a, Search as b, Trophy as c, Sun as d, Sparkles as f, Shuffle as g, SkipBack as h, Volume2 as i, Moon as j, Pause as k, TriangleAlert as l, SkipForward as m, VolumeX as n, Upload as o, SlidersVertical as p, Compass as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Settings as v, Repeat1 as w, RotateCw as x, Send as y, Library as z };
+export { Bot as $, Pen as A, ListMusic as B, RotateCcw as C, QrCode as D, Radio as E, MicVocal as F, Gauge as G, Languages as H, LogOut as I, Copy as J, Ellipsis as K, LogIn as L, Music2 as M, Moon as N, Plus as O, Mic as P, Check as Q, LoaderCircle as R, RotateCw as S, Repeat1 as T, House as U, Library as V, Heart as W, Clock as X, Compass as Y, ChevronDown as Z, Shuffle as _, User as a, Send as b, Trophy as c, Sun as d, Sparkles as f, SkipBack as g, SkipForward as h, Volume2 as i, Pause as j, Play as k, TriangleAlert as l, SlidersVertical as m, VolumeX as n, Upload as o, Smartphone as p, Download as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Share2 as v, Repeat as w, Search as x, Settings as y, ListPlus as z };

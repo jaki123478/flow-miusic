@@ -96,10 +96,13 @@ interface FlowState {
   stationOn: boolean;
   voiceDuck: boolean;
   plays: Record<string, number>;
-  followedArtists: string[];
   profileName: string;
   hasSeenOnboarding: boolean;
+  qrTarget: { title: string; subtitle: string; url: string; artwork?: string } | null;
+  showVisualizer: boolean;
 
+  setQrTarget: (target: { title: string; subtitle: string; url: string; artwork?: string } | null) => void;
+  toggleVisualizer: () => void;
   setProfileName: (name: string) => void;
   dismissOnboarding: () => void;
   playTrack: (track: Track, queue?: Track[]) => void;
@@ -220,6 +223,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   followedArtists: [],
   profileName: "Flow User",
   hasSeenOnboarding: true,
+  qrTarget: null,
+  showVisualizer: false,
+
+  setQrTarget: (target) => set({ qrTarget: target }),
+  toggleVisualizer: () => set((s) => ({ showVisualizer: !s.showVisualizer })),
 
   setProfileName: (name: string) => {
     writeJson("flow_profile_name", name);

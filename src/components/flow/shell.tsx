@@ -10,6 +10,7 @@ import { ActionSheet, TrackArt } from "./tracks";
 import { HelpOverlay, InstallHint, AuthChip, CloudSync, Prefs, StationEngine } from "./chrome";
 import { ToastHost } from "./toast";
 import { OnboardingModal } from "./onboarding-modal";
+import { QrModal } from "./qr-modal";
 import { ChatPanel } from "./chat-panel";
 import { ChatFab, ChatToggle } from "./chat-fab";
 
@@ -360,6 +361,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <ToastHost />
       <HelpOverlay />
       <OnboardingModal />
+      <QrModal />
     </div>
   );
 }

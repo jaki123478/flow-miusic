@@ -11,6 +11,7 @@ import {
   Radio,
   Search,
   Share2,
+  QrCode,
   SkipForward,
   X,
 } from "lucide-react";
@@ -315,6 +316,7 @@ export function ActionSheet() {
     s.actionTrack ? s.followedArtists.includes(s.actionTrack.artist) : false,
   );
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
+  const setQrTarget = useFlowStore((s) => s.setQrTarget);
   const [picking, setPicking] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const last = useRef(track);
@@ -410,6 +412,19 @@ export function ActionSheet() {
             {view.videoId && !view.isLive && view.source !== "radio" ? (
               <DownloadSheetBtn track={view} onDone={close} />
             ) : null}
+            <SheetBtn
+              icon={QrCode}
+              label="Condividi con QR Code"
+              onClick={() => {
+                setQrTarget({
+                  title: view.title,
+                  subtitle: view.artist,
+                  url: `${window.location.origin}/?track=${view.videoId || view.id}`,
+                  artwork: view.artwork,
+                });
+                close();
+              }}
+            />
             <SheetBtn icon={Share2} label="Condividi" onClick={() => { void shareTrack(view); close(); }} />
             <SheetBtn
               icon={Search}

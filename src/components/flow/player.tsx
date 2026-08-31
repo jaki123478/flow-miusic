@@ -23,11 +23,13 @@ import {
   Sparkles,
   Type,
   Languages,
+  QrCode,
   Volume2,
   VolumeX,
 } from "lucide-react";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore, type FlowSettings } from "@/stores/flow-store";
+import { AudioVisualizer } from "./visualizer";
 
 const EQ_PRESETS = [
   { id: "flat", label: "Flat", bass: 0, treble: 0 },
@@ -475,6 +477,7 @@ export function FullPlayer() {
   const setShowFullPlayer = useFlowStore((s) => s.setShowFullPlayer);
   const setShowQueue = useFlowStore((s) => s.setShowQueue);
   const setShowLyrics = useFlowStore((s) => s.setShowLyrics);
+  const setQrTarget = useFlowStore((s) => s.setQrTarget);
   const notify = useFlowStore((s) => s.notify);
 
   const downloaded = useIsDownloaded(current?.videoId);
@@ -705,6 +708,22 @@ export function FullPlayer() {
             )}
             <button
               type="button"
+              onClick={() => {
+                setQrTarget({
+                  title: current.title,
+                  subtitle: current.artist,
+                  url: `${window.location.origin}/?track=${current.videoId || current.id}`,
+                  artwork: current.artwork,
+                });
+              }}
+              className="flex size-10 items-center justify-center rounded-full text-fg/80 hover:text-primary hover:bg-elevated/60 transition-colors"
+              title="Condividi con QR Code"
+              aria-label="QR Code"
+            >
+              <QrCode className="size-4" />
+            </button>
+            <button
+              type="button"
               onClick={runShare}
               disabled={sharing}
               className={cn("flex size-10 items-center justify-center rounded-full transition-colors", sharing ? "text-primary" : "text-fg/80 hover:text-primary hover:bg-elevated/60")}
@@ -832,16 +851,21 @@ export function FullPlayer() {
               <div
                 onTouchStart={handleTouchStart}
                 onTouchEnd={handleTouchEnd}
-                className="flex min-h-0 flex-1 items-center justify-center py-2"
+                className="flex min-h-0 flex-1 flex-col items-center justify-center py-2"
               >
                 <button
                   type="button"
                   onClick={() => setShowLyrics(true)}
-                  className="player-art-float aspect-square w-[min(100%-1rem,22rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15 transition-transform active:scale-95"
+                  className="player-art-float aspect-square w-[min(100%-1rem,21rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15 transition-transform active:scale-95"
                   aria-label="Mostra testi"
                 >
                   <TrackArt src={current.artwork} alt={current.title} />
                 </button>
+
+                {/* Live Neon Audio Visualizer */}
+                <div className="mt-3 flex items-center justify-center">
+                  <AudioVisualizer barCount={28} />
+                </div>
               </div>
             )}
 
