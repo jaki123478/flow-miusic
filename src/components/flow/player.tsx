@@ -60,10 +60,14 @@ export function AudioEngine() {
   const lastPos = useRef(0);
   const recovering = useRef("");
   const primed = useRef("");
-  const wakeRef = useRef<WakeLockSentinel | null>(null);
-
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
+    // Reloading src while hidden kills Android audio (play() is rejected; Range stream dies).
+    if (document.hidden) {
+      applyOutput(audio);
+      if (play && audio.paused) void audio.play().catch(() => {});
+      return;
+    }
     const going = !audio.paused && audio.currentTime > 0.4;
     const toBlob = src.startsWith("blob:");
     const fromNet = lastSrc.current.includes("/api/stream");
@@ -100,6 +104,7 @@ export function AudioEngine() {
         const audio = audioRef.current;
         const s = useFlowStore.getState();
         if (!audio || s.current?.videoId !== id) return;
+        if (document.hidden) return;
         if (String(audio.src).startsWith("blob:")) return;
         applySrc(audio, url, s.isPlaying, true);
       })
@@ -111,6 +116,7 @@ export function AudioEngine() {
   const recover = (id: string, time: number) => {
     const audio = audioRef.current;
     if (!audio || recovering.current === id) return;
+    if (document.hidden) return;
     recovering.current = id;
     const ready = cachedAudioUrl(id);
     if (ready) {
@@ -207,16 +213,9 @@ export function AudioEngine() {
     applyOutput(audio);
     if (isPlaying) {
       void audio.play().catch(() => {});
-      if (current?.videoId) armLocal(current.videoId);
-      if ("wakeLock" in navigator) {
-        void navigator.wakeLock.request("screen").then((lock) => {
-          wakeRef.current = lock;
-        }).catch(() => {});
-      }
+      if (current?.videoId && !document.hidden) armLocal(current.videoId);
     } else {
       audio.pause();
-      void wakeRef.current?.release().catch(() => {});
-      wakeRef.current = null;
     }
     if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
   }, [isPlaying, current]);
@@ -240,9 +239,9 @@ export function AudioEngine() {
       const s = useFlowStore.getState();
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
-      if (document.hidden && s.current.videoId) {
-        const blob = cachedAudioUrl(s.current.videoId);
-        if (blob && !String(audio.src).startsWith("blob:")) applySrc(audio, blob, true, true);
+      if (document.hidden) {
+        if (audio.paused && s.isPlaying) void audio.play().catch(() => {});
+        return;
       }
       if (audio.paused) void audio.play().catch(() => {});
       const t = audio.currentTime || 0;
