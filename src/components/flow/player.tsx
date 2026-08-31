@@ -382,22 +382,22 @@ export function MiniPlayer() {
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
   const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
   return (
-    <div className={cn("now-bar pointer-events-auto bg-elevated md:bg-bg", (!open || showFull) && "is-away")}>
+    <div className={cn("now-bar pointer-events-auto bg-elevated/95 md:bg-bg", (!open || showFull) && "is-away")}>
       <div className="md:hidden">
-        <div className="mx-2 mb-1 overflow-hidden rounded-lg bg-elevated">
-          <div className="flex items-center gap-2 px-2 py-1.5">
-            <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-              <span className="size-11 shrink-0 overflow-hidden rounded-md bg-surface"><TrackArt src={current.artwork} alt="" /></span>
+        <div className="mx-2.5 mb-1 overflow-hidden rounded-2xl bg-[#14171E]/95 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
+          <div className="flex items-center gap-2 px-2.5 py-2">
+            <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.99] transition-transform">
+              <span className="size-11 shrink-0 overflow-hidden rounded-xl bg-surface shadow-md ring-1 ring-white/10"><TrackArt src={current.artwork} alt="" /></span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">{current.title}</span>
+                <span className="block truncate text-sm font-semibold text-fg">{current.title}</span>
                 <span className="block truncate text-xs text-muted">{current.artist}</span>
               </span>
             </button>
-            <button type="button" onClick={togglePlay} className="flex size-11 items-center justify-center" aria-label="Play">
-              {isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current" />}
+            <button type="button" onClick={togglePlay} className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary hover:bg-white/5 active:scale-90 transition-transform" aria-label="Play">
+              {isPlaying ? <Pause className="size-5 fill-current" /> : <Play className="size-5 fill-current ml-0.5" />}
             </button>
           </div>
-          <div className="h-0.5 w-full bg-subtle/40"><div className="h-full bg-primary" style={{ width: `${progress}%` }} /></div>
+          <div className="h-1 w-full bg-white/5"><div className="h-full bg-primary transition-all duration-150" style={{ width: `${progress}%` }} /></div>
         </div>
       </div>
       <div className="hidden h-[90px] items-center gap-4 px-4 md:flex">
@@ -800,8 +800,8 @@ export function FullPlayer() {
               </div>
             )}
 
-            {/* Lyra Material You Meta & Controls Glass Island */}
-            <div className="player-glass mt-auto rounded-3xl px-5 py-4 shadow-2xl">
+            {/* Flow Material You Meta & Controls Glass Island */}
+            <div className="player-glass mt-auto rounded-3xl px-5 pt-4 pb-[max(1.1rem,env(safe-area-inset-bottom))] shadow-2xl">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <h1 className="truncate text-xl font-bold tracking-tight text-fg md:text-2xl">{current.title}</h1>
