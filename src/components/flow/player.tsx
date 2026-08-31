@@ -22,6 +22,7 @@ import {
   Sliders,
   Sparkles,
   Type,
+  Languages,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -51,7 +52,7 @@ import {
   removeDownload,
   useIsDownloaded,
 } from "@/lib/music/offline-audio";
-import { getTrackLyrics, type LyricsPayload } from "@/lib/music/lyrics";
+import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/music/lyrics";
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
@@ -482,6 +483,9 @@ export function FullPlayer() {
   const [queueProg, setQueueProg] = useState("");
   const [lyrics, setLyrics] = useState<LyricsPayload | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
+  const [showTranslate, setShowTranslate] = useState(false);
+  const [translatedLines, setTranslatedLines] = useState<string[]>([]);
+  const [translating, setTranslating] = useState(false);
   const [glow, setGlow] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   const [showSleepMenu, setShowSleepMenu] = useState(false);
@@ -490,6 +494,11 @@ export function FullPlayer() {
   const lyricsBox = useRef<HTMLDivElement | null>(null);
 
   const { mounted, open } = useOpenTransition(show, 260);
+
+  useEffect(() => {
+    setTranslatedLines([]);
+    setShowTranslate(false);
+  }, [current?.id]);
 
   useEffect(() => {
     if (!current?.artwork) {
@@ -654,14 +663,45 @@ export function FullPlayer() {
           </div>
           <div className="flex items-center gap-0.5">
             {showLyrics && (
-              <button
-                type="button"
-                onClick={cycleLyricsFontSize}
-                className="flex size-10 items-center justify-center rounded-full text-fg/80 hover:text-primary hover:bg-elevated/60 transition-colors text-xs font-bold"
-                title="Cambia dimensione caratteri"
-              >
-                <Type className="size-4" />
-              </button>
+              <>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (showTranslate) {
+                      setShowTranslate(false);
+                      return;
+                    }
+                    setShowTranslate(true);
+                    if (translatedLines.length || !lyrics?.lines.length) return;
+                    setTranslating(true);
+                    void getTranslatedLyrics({
+                      data: {
+                        lines: lyrics.lines.map((l) => l.text),
+                        targetLang: "it",
+                      },
+                    })
+                      .then((res) => {
+                        if (res && res.length) setTranslatedLines(res);
+                      })
+                      .finally(() => setTranslating(false));
+                  }}
+                  className={cn(
+                    "flex size-10 items-center justify-center rounded-full transition-colors text-xs font-bold",
+                    showTranslate ? "text-primary bg-primary/15" : "text-fg/80 hover:text-primary hover:bg-elevated/60",
+                  )}
+                  title="Traduci testi in italiano"
+                >
+                  <Languages className="size-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={cycleLyricsFontSize}
+                  className="flex size-10 items-center justify-center rounded-full text-fg/80 hover:text-primary hover:bg-elevated/60 transition-colors text-xs font-bold"
+                  title="Cambia dimensione caratteri"
+                >
+                  <Type className="size-4" />
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -777,7 +817,12 @@ export function FullPlayer() {
                             : "text-muted/60 hover:text-fg/90",
                         )}
                       >
-                        {line.text}
+                        <span className="block">{line.text}</span>
+                        {showTranslate && translatedLines[i] && (
+                          <span className="block text-xs font-medium text-emerald-400/90 mt-1 tracking-wide animate-in fade-in duration-200">
+                            {translatedLines[i]}
+                          </span>
+                        )}
                       </button>
                     );
                   })

@@ -186,3 +186,28 @@ export const getTrackLyrics = createServerFn({ method: "GET" })
     cacheSet(cacheKey, { ...EMPTY, videoId });
     return { ...EMPTY, videoId };
   });
+
+export const getTranslatedLyrics = createServerFn({ method: "POST" })
+  .validator((d: { lines: string[]; targetLang?: string }) => d)
+  .handler(async ({ data }) => {
+    const target = data.targetLang || "it";
+    const text = data.lines.join("\n");
+    if (!text.trim()) return [];
+
+    try {
+      const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${target}&dt=t&q=${encodeURIComponent(text)}`;
+      const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+      if (res.ok) {
+        const json = (await res.json()) as unknown[];
+        if (Array.isArray(json) && Array.isArray(json[0])) {
+          const translatedFull = (json[0] as unknown[][])
+            .map((chunk) => (typeof chunk[0] === "string" ? chunk[0] : ""))
+            .join("");
+          return translatedFull.split("\n");
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+    return [];
+  });

@@ -271,6 +271,38 @@ var House = createLucideIcon("house", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Languages = createLucideIcon("languages", [
+	["path", {
+		d: "m5 8 6 6",
+		key: "1wu5hv"
+	}],
+	["path", {
+		d: "m4 14 6-6 2-3",
+		key: "1k1g8d"
+	}],
+	["path", {
+		d: "M2 5h12",
+		key: "or177f"
+	}],
+	["path", {
+		d: "M7 2h1",
+		key: "1t2jsx"
+	}],
+	["path", {
+		d: "m22 22-5-10-5 10",
+		key: "don7ne"
+	}],
+	["path", {
+		d: "M14 18h6",
+		key: "1m8k6r"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Library = createLucideIcon("library", [
 	["path", {
 		d: "m16 6 4 14",
@@ -1159,4 +1191,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Music2 as A, House as B, Repeat as C, Play as D, Plus as E, LogIn as F, Copy as G, Gauge as H, LoaderCircle as I, ChevronDown as J, Compass as K, ListPlus as L, Mic as M, MicVocal as N, Pen as O, LogOut as P, ListMusic as R, RotateCcw as S, Radio as T, Ellipsis as U, Heart as V, Download as W, Bot as X, Check as Y, Share2 as _, User as a, Search as b, Trophy as c, Sun as d, Sparkles as f, Shuffle as g, SkipBack as h, Volume2 as i, Moon as j, Pause as k, TriangleAlert as l, SkipForward as m, VolumeX as n, Upload as o, SlidersVertical as p, Clock as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Settings as v, Repeat1 as w, RotateCw as x, Send as y, Library as z };
+export { Music2 as A, Languages as B, Repeat as C, Play as D, Plus as E, LogIn as F, Download as G, Heart as H, LoaderCircle as I, Clock as J, Copy as K, ListPlus as L, Mic as M, MicVocal as N, Pen as O, LogOut as P, ListMusic as R, RotateCcw as S, Radio as T, Gauge as U, House as V, Ellipsis as W, Check as X, ChevronDown as Y, Bot as Z, Share2 as _, User as a, Search as b, Trophy as c, Sun as d, Sparkles as f, Shuffle as g, SkipBack as h, Volume2 as i, Moon as j, Pause as k, TriangleAlert as l, SkipForward as m, VolumeX as n, Upload as o, SlidersVertical as p, Compass as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Settings as v, Repeat1 as w, RotateCw as x, Send as y, Library as z };
