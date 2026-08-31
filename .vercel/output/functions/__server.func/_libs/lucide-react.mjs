@@ -187,6 +187,19 @@ var Ellipsis = createLucideIcon("ellipsis", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Gauge = createLucideIcon("gauge", [["path", {
+	d: "m12 14 4-4",
+	key: "9kzdfg"
+}], ["path", {
+	d: "M3.34 19a10 10 0 1 1 17.32 0",
+	key: "19p75a"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Heart = createLucideIcon("heart", [["path", {
 	d: "M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z",
 	key: "c3ymky"
@@ -300,6 +313,28 @@ var LoaderCircle = createLucideIcon("loader-circle", [["path", {
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var MicVocal = createLucideIcon("mic-vocal", [
+	["path", {
+		d: "m11 7.601-5.994 8.19a1 1 0 0 0 .1 1.298l.817.818a1 1 0 0 0 1.314.087L15.09 12",
+		key: "80a601"
+	}],
+	["path", {
+		d: "M16.5 21.174C15.5 20.5 14.372 20 13 20c-2.058 0-3.928 2.356-6 2-2.072-.356-2.775-3.369-1.5-4.5",
+		key: "j0ngtp"
+	}],
+	["circle", {
+		cx: "16",
+		cy: "7",
+		r: "5",
+		key: "d08jfb"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Mic = createLucideIcon("mic", [
 	["path", {
 		d: "M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z",
@@ -317,6 +352,16 @@ var Mic = createLucideIcon("mic", [
 		key: "x3vr5v"
 	}]
 ]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
+var Moon = createLucideIcon("moon", [["path", {
+	d: "M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z",
+	key: "a7tn18"
+}]]);
 /**
 * @license lucide-react v0.510.0 - ISC
 *
@@ -788,4 +833,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Copy as A, LoaderCircle as C, House as D, Library as E, ChevronDown as M, Bot as N, Heart as O, Mic as S, ListMusic as T, Repeat1 as _, Trophy as a, Play as b, Sparkles as c, Shuffle as d, Share2 as f, Repeat as g, Search as h, Volume2 as i, Compass as j, Ellipsis as k, SkipForward as l, Send as m, VolumeX as n, TriangleAlert as o, Settings as p, VolumeOff as r, Trash2 as s, X as t, SkipBack as u, Radio as v, ListPlus as w, Pause as x, Plus as y };
+export { Heart as A, Mic as C, ListMusic as D, ListPlus as E, ChevronDown as F, Bot as I, Ellipsis as M, Copy as N, Library as O, Compass as P, Moon as S, LoaderCircle as T, Repeat1 as _, Trophy as a, Play as b, Sparkles as c, Shuffle as d, Share2 as f, Repeat as g, Search as h, Volume2 as i, Gauge as j, House as k, SkipForward as l, Send as m, VolumeX as n, TriangleAlert as o, Settings as p, VolumeOff as r, Trash2 as s, X as t, SkipBack as u, Radio as v, MicVocal as w, Pause as x, Plus as y };

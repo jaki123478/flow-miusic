@@ -117,7 +117,7 @@ var HEADERS = { TSS_SHELL: "X-TSS_SHELL" };
 * the dev styles URL for route-scoped CSS collection.
 */
 async function getStartManifest(matchedRoutes) {
-	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-6NQrltB6.mjs");
+	const { tsrStartManifest } = await import("../_tanstack-start-manifest_v-RhUDwgxn.mjs");
 	const startManifest = tsrStartManifest();
 	let routes = startManifest.routes;
 	routes[rootRouteId];
@@ -171,7 +171,7 @@ var manifest = {
 	},
 	"73277765d67cecebc5623e3d311b5ab07b43284d7a420c462a42185468509542": {
 		functionName: "chatTurn_createServerFn_handler",
-		importer: () => import("./assistant-CY4VaxLo.mjs")
+		importer: () => import("./assistant-DdsC4pdG.mjs")
 	},
 	"73f83a45f51d7430d01c6ba65abb1226397cf20c8962951e26bac99785823176": {
 		functionName: "getGenreMix_createServerFn_handler",
@@ -208,6 +208,10 @@ var manifest = {
 	"b3740a781b8c2931661ba664483641862702a657b02d31b78df7cf3880636cc4": {
 		functionName: "addSharedTrack_createServerFn_handler",
 		importer: () => import("./share-D9sbOXKn.mjs")
+	},
+	"ce8a487e4cbefbdf4ec0ffa79cb9704d62902152f43f9d7d07bca5a65759f7c5": {
+		functionName: "getTrackLyrics_createServerFn_handler",
+		importer: () => import("./lyrics-BYeTUFjK.mjs")
 	},
 	"d10a7b663b69d3e1af86f8323b415e9018c2157846c363d760b3b1d7cc8ba126": {
 		functionName: "followUser_createServerFn_handler",
@@ -1497,7 +1501,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-2cWS5y1K.mjs").then((n) => n.t),
+		import("./router-B9rxu5c1.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);
