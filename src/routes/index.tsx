@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Compass, Pause, Play, Sparkles } from "lucide-react";
-import { getHomeFeed, stationToTrack, type CatalogCollection } from "@/lib/music/catalog";
+import { getDiscoverMix, getHomeFeed, stationToTrack, type CatalogCollection } from "@/lib/music/catalog";
 import { GENRES, MOODS } from "@/lib/music/types";
 import { cn, greetingIt, hashHue } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -42,6 +42,33 @@ function Home() {
   }, [user?.displayName, user?.isDevFallback]);
   const recents = useFlowStore((s) => s.recents);
   const liked = useFlowStore((s) => s.liked);
+  const followed = useFlowStore((s) => s.followedArtists);
+  const [weekly, setWeekly] = useState(discoverWeekly);
+  const [weeklyPersonal, setWeeklyPersonal] = useState(false);
+  useEffect(() => {
+    const artists = [...followed, ...liked.map((t) => t.artist), ...recents.map((t) => t.artist)]
+      .map((a) => a.trim())
+      .filter((a, i, arr) => a && arr.indexOf(a) === i)
+      .slice(0, 6);
+    if (!artists.length) {
+      setWeekly(discoverWeekly);
+      setWeeklyPersonal(false);
+      return;
+    }
+    let cancelled = false;
+    void getDiscoverMix({ data: { artists } })
+      .then((tracks) => {
+        if (cancelled || !tracks.length) return;
+        setWeekly(tracks);
+        setWeeklyPersonal(true);
+      })
+      .catch(() => {
+        /* keep catalog mix from PR #2 */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [discoverWeekly, followed, liked, recents]);
   const playTrack = useFlowStore((s) => s.playTrack);
   const playQueue = useFlowStore((s) => s.playQueue);
   const current = useFlowStore((s) => s.current);
@@ -107,13 +134,17 @@ function Home() {
         </section>
       ) : null}
 
-      {filter !== "radio" && discoverWeekly.length > 0 ? (
+      {filter !== "radio" && weekly.length > 0 ? (
         <section>
-          <SectionHeader title="Scoperta della settimana" action="Riproduci" onAction={() => playQueue(discoverWeekly, 0)} />
-          <p className="mb-3 text-xs text-muted">Selezione reale dal catalogo YouTube Music, non una playlist inventata.</p>
+          <SectionHeader title="Scoperta della settimana" action="Riproduci" onAction={() => playQueue(weekly, 0)} />
+          <p className="mb-3 text-xs text-muted">
+            {weeklyPersonal
+              ? "Mix personalizzato dai tuoi ascolti e artisti seguiti."
+              : "Selezione reale dal catalogo YouTube Music, non una playlist inventata."}
+          </p>
           <HScroll>
-            {discoverWeekly.slice(0, 12).map((t) => (
-              <TrackCard key={t.id} track={t} queue={discoverWeekly} />
+            {weekly.slice(0, 12).map((t) => (
+              <TrackCard key={t.id} track={t} queue={weekly} />
             ))}
           </HScroll>
         </section>

@@ -146,6 +146,44 @@ export async function downloadTrack(track: Track): Promise<void> {
   writeMeta(meta);
 }
 
+export function canDownloadTrack(track: Track): boolean {
+  return Boolean(track.videoId) && !track.isLive && track.source !== "radio";
+}
+
+export async function downloadTracks(
+  tracks: Track[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<{ ok: number; fail: number; skipped: number }> {
+  const list = tracks.filter(canDownloadTrack);
+  const total = list.length;
+  let ok = 0;
+  let fail = 0;
+  let skipped = 0;
+  let done = 0;
+  const pending = [...list];
+  const worker = async () => {
+    while (pending.length) {
+      const track = pending.shift();
+      if (!track?.videoId) continue;
+      try {
+        if (isDownloaded(track.videoId)) skipped += 1;
+        else {
+          await downloadTrack(track);
+          ok += 1;
+        }
+      } catch {
+        fail += 1;
+      } finally {
+        done += 1;
+        onProgress?.(done, total);
+      }
+    }
+  };
+  const n = Math.min(2, pending.length);
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return { ok, fail, skipped };
+}
+
 export async function removeDownload(id: string): Promise<void> {
   if (!id) return;
   const store = await cacheApi();
@@ -181,4 +219,59 @@ export function useIsDownloaded(id: string | undefined) {
     return () => window.removeEventListener(EVENT, refresh);
   }, [id]);
   return on;
+}
+
+export function formatBytes(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return "0 B";
+  if (n < 1024) return `${Math.round(n)} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(n < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+export type CacheStats = { bytes: number; count: number; quota?: number; usage?: number };
+
+export async function cacheStats(): Promise<CacheStats> {
+  const items = listDownloads();
+  let bytes = items.reduce((sum, t) => sum + (t.bytes || 0), 0);
+  if (!bytes) {
+    const store = await cacheApi();
+    if (store) {
+      const keys = await store.keys();
+      for (const req of keys) {
+        const hit = await store.match(req);
+        if (!hit) continue;
+        const len = Number(hit.headers.get("content-length") || 0);
+        bytes += len || 0;
+      }
+    }
+  }
+  let quota: number | undefined;
+  let usage: number | undefined;
+  try {
+    const est = await navigator.storage?.estimate?.();
+    quota = est?.quota;
+    usage = est?.usage;
+  } catch {
+    /* ignore */
+  }
+  return { bytes, count: items.length, quota, usage };
+}
+
+export async function clearAllDownloads(): Promise<void> {
+  const ids = Object.keys(readMeta());
+  for (const id of ids) await removeDownload(id);
+}
+
+export function useCacheStats() {
+  const [stats, setStats] = useState<CacheStats>({ bytes: 0, count: 0 });
+  useEffect(() => {
+    const refresh = () => {
+      void cacheStats().then(setStats);
+    };
+    refresh();
+    window.addEventListener(EVENT, refresh);
+    return () => window.removeEventListener(EVENT, refresh);
+  }, []);
+  return stats;
 }
