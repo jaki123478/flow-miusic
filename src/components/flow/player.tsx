@@ -170,17 +170,13 @@ export function AudioEngine() {
     if (useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
   };
 
-  const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
+  const applySrc = (audio: HTMLAudioElement, src: string, play: boolean) => {
     if (!src) return;
     if (lastSrc.current === src) {
       applyOutput(audio);
       if (play && audio.paused) void audio.play().catch(() => {});
       return;
     }
-    const playing = !audio.paused && !audio.error;
-    const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
-    if (playing && blobUpgrade) return;
-    if (document.hidden && playing && !force) return;
 
     lastSrc.current = src;
     audio.src = src;
@@ -227,18 +223,12 @@ export function AudioEngine() {
       play: () => {
         unlockAudioSession();
         useFlowStore.getState().resume();
-        const s = useFlowStore.getState();
-        if (s.current?.videoId && ytPlayerRef.current?.playVideo) {
-          ytPlayerRef.current.playVideo();
-          void audioRef.current?.play().catch(() => {});
-        } else {
-          void audioRef.current?.play().catch(() => {});
-        }
+        void audioRef.current?.play().catch(() => {});
       },
       pause: () => {
         useFlowStore.getState().pause();
-        ytPlayerRef.current?.pauseVideo?.();
         audioRef.current?.pause();
+        ytPlayerRef.current?.pauseVideo?.();
       },
       prev: () => useFlowStore.getState().prev(),
       next: () => useFlowStore.getState().next(),
@@ -246,8 +236,8 @@ export function AudioEngine() {
       skip: (d) => useFlowStore.getState().skipBy(d),
       stop: () => {
         useFlowStore.getState().pause();
-        ytPlayerRef.current?.pauseVideo?.();
         audioRef.current?.pause();
+        ytPlayerRef.current?.pauseVideo?.();
       },
     });
     return () => {
@@ -270,18 +260,9 @@ export function AudioEngine() {
 
     const streamSource = current.streamUrl || (current.videoId ? `/api/stream?v=${current.videoId}` : fallbackSrc(current));
 
-    // Try resolving direct CDN audio url for ultra-low latency background streaming
-    if (current.videoId && !current.streamUrl) {
-      void resolveDirectUrl(current.videoId).then((directUrl) => {
-        if (directUrl && audioRef.current && useFlowStore.getState().current?.id === current.id) {
-          applySrc(audioRef.current, directUrl, useFlowStore.getState().isPlaying, false);
-        }
-      });
-    }
-
     if (audio) {
       audio.loop = false;
-      applySrc(audio, streamSource, wantPlay, true);
+      applySrc(audio, streamSource, wantPlay);
     }
 
     claimAudioFocus();
