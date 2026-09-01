@@ -38,11 +38,8 @@ export function unlockAudioSession() {
         keepAliveNode = osc;
       }
     }
-    const el = (window as unknown as { __FLOW_AUDIO_EL__?: HTMLAudioElement }).__FLOW_AUDIO_EL__;
-    if (el && el.paused && !el.src) {
-      el.src = "/silence.wav";
-      void el.play().catch(() => {});
-    }
+    // Do not assign /silence.wav to the media element — it steals Android
+    // audio focus from the real stream. If there is no real src, leave it.
   } catch {
     /* ignore */
   }
