@@ -164,37 +164,41 @@ export const getTrackLyrics = createServerFn({ method: "GET" })
     const duration = typeof data.duration === "number" && data.duration > 0 ? data.duration : undefined;
     const cacheKey = videoId || `${title}|${artist}`.toLowerCase();
 
-    const cached = cacheGet(cacheKey);
-    if (cached) return cached;
+    try {
+      const cached = cacheGet(cacheKey);
+      if (cached) return cached;
 
-    if (title) {
-      const fromLrc = await lrclib(title, artist, album, duration, videoId);
-      if (fromLrc?.lines.length) {
-        cacheSet(cacheKey, fromLrc);
-        return fromLrc;
+      if (title) {
+        const fromLrc = await lrclib(title, artist, album, duration, videoId).catch(() => null);
+        if (fromLrc?.lines.length) {
+          cacheSet(cacheKey, fromLrc);
+          return fromLrc;
+        }
       }
-    }
 
-    if (title) {
-      const fromKugou = await kugou(title, artist, duration, videoId);
-      if (fromKugou?.lines.length) {
-        cacheSet(cacheKey, fromKugou);
-        return fromKugou;
+      if (title) {
+        const fromKugou = await kugou(title, artist, duration, videoId).catch(() => null);
+        if (fromKugou?.lines.length) {
+          cacheSet(cacheKey, fromKugou);
+          return fromKugou;
+        }
       }
-    }
 
-    cacheSet(cacheKey, { ...EMPTY, videoId });
-    return { ...EMPTY, videoId };
+      cacheSet(cacheKey, { ...EMPTY, videoId });
+      return { ...EMPTY, videoId };
+    } catch {
+      return { ...EMPTY, videoId };
+    }
   });
 
 export const getTranslatedLyrics = createServerFn({ method: "POST" })
   .validator((d: { lines: string[]; targetLang?: string }) => d)
   .handler(async ({ data }) => {
-    const target = data.targetLang || "it";
-    const text = data.lines.join("\n");
-    if (!text.trim()) return [];
-
     try {
+      const target = data.targetLang || "it";
+      const text = (data.lines || []).join("\n");
+      if (!text.trim()) return [];
+
       const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${target}&dt=t&q=${encodeURIComponent(text)}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
