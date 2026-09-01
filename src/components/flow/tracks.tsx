@@ -18,6 +18,7 @@ import {
 import { FALLBACK_ART, type Track } from "@/lib/music/types";
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { downloadTrack, prefetchAudio, removeDownload, useIsDownloaded } from "@/lib/music/offline-audio";
+import { directPlayTrack } from "@/lib/music/native-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -96,6 +97,7 @@ export function TrackRow({
   const active = current?.id === track.id;
 
   const onPlay = () => {
+    directPlayTrack(track);
     if (active) togglePlay();
     else playTrack(track, queue);
   };
