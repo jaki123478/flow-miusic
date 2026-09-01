@@ -22,6 +22,45 @@ async function resolveUrl(id: string, force = false): Promise<string | null> {
   return null;
 }
 
+const bufferCache = new Map<string, { buffer: Uint8Array; contentType: string; length: number; exp: number }>();
+
+async function getBufferedAudio(id: string): Promise<{ buffer: Uint8Array; contentType: string; length: number } | null> {
+  const cached = bufferCache.get(id);
+  if (cached && cached.exp > Date.now()) return cached;
+
+  const url = await resolveUrl(id);
+  if (!url) return null;
+
+  try {
+    const upstream = await fetch(url, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+      },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!upstream.ok) return null;
+    const arrayBuf = await upstream.arrayBuffer();
+    const u8 = new Uint8Array(arrayBuf);
+    const contentType = upstream.headers.get("content-type") || "audio/mp4";
+    const entry = {
+      buffer: u8,
+      contentType,
+      length: u8.byteLength,
+      exp: Date.now() + 60 * 60_000,
+    };
+    bufferCache.set(id, entry);
+    if (bufferCache.size > 25) {
+      const oldest = bufferCache.keys().next().value;
+      if (oldest) bufferCache.delete(oldest);
+    }
+    return entry;
+  } catch (err) {
+    console.error("[getBufferedAudio error]", id, err);
+    return null;
+  }
+}
+
 async function handleStream(request: Request): Promise<Response> {
   const parsed = new URL(request.url);
   const id = parsed.searchParams.get("v") || "";
@@ -61,6 +100,42 @@ async function handleStream(request: Request): Promise<Response> {
     );
   }
 
+  // High speed buffered delivery from PC RAM
+  const audioEntry = await getBufferedAudio(id);
+  if (audioEntry) {
+    const { buffer, contentType, length } = audioEntry;
+    const range = request.headers.get("range");
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10) || 0;
+      const end = parts[1] ? parseInt(parts[1], 10) : length - 1;
+      const chunk = buffer.subarray(start, end + 1);
+
+      return new Response(chunk as unknown as BodyInit, {
+        status: 206,
+        headers: {
+          "Content-Type": contentType,
+          "Content-Range": `bytes ${start}-${end}/${length}`,
+          "Content-Length": String(chunk.byteLength),
+          "Accept-Ranges": "bytes",
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=86400, immutable",
+        },
+      });
+    }
+
+    return new Response(buffer as unknown as BodyInit, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        "Content-Length": String(length),
+        "Accept-Ranges": "bytes",
+        "Access-Control-Allow-Origin": "*",
+        "Cache-Control": "public, max-age=86400, immutable",
+      },
+    });
+  }
+
   if (target) {
     try {
       const range = request.headers.get("range") || "bytes=0-";
@@ -79,7 +154,7 @@ async function handleStream(request: Request): Promise<Response> {
         headers.set("Content-Type", upstream.headers.get("content-type") || "audio/mp4");
         headers.set("Accept-Ranges", "bytes");
         headers.set("Access-Control-Allow-Origin", "*");
-        headers.set("Cache-Control", "public, max-age=3600");
+        headers.set("Cache-Control", "public, max-age=86400");
 
         const contentRange = upstream.headers.get("content-range");
         if (contentRange) headers.set("Content-Range", contentRange);
@@ -100,7 +175,7 @@ async function handleStream(request: Request): Promise<Response> {
       status: 302,
       headers: {
         Location: target,
-        "Cache-Control": "public, max-age=3600",
+        "Cache-Control": "public, max-age=86400",
         "Access-Control-Allow-Origin": "*",
       },
     });
