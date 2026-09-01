@@ -3,7 +3,15 @@ self.addEventListener("install", (event) => {
 });
 
 self.addEventListener("activate", (event) => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil(
+    (async () => {
+      await self.clients.claim();
+      const keys = await caches.keys();
+      for (const k of keys) {
+        if (k !== "flow-audio-v2") await caches.delete(k);
+      }
+    })(),
+  );
 });
 
 self.addEventListener("fetch", (event) => {
