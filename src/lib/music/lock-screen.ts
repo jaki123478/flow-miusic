@@ -14,6 +14,34 @@ export function prefersNativeYtAudio() {
   return isAndroid() || isAppleMobile();
 }
 
+let audioContext: AudioContext | null = null;
+let keepAliveNode: AudioNode | null = null;
+
+export function unlockAudioSession() {
+  if (typeof window === "undefined") return;
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!audioContext || audioContext.state === "closed") {
+      audioContext = new AudioCtx();
+    }
+    if (audioContext.state === "suspended") {
+      void audioContext.resume();
+    }
+    if (!keepAliveNode && audioContext) {
+      const osc = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      gain.gain.value = 0.00001; // Inaudible keep-alive for iOS Safari background thread
+      osc.connect(gain);
+      gain.connect(audioContext.destination);
+      osc.start();
+      keepAliveNode = osc;
+    }
+  } catch {
+    /* ignore */
+  }
+}
+
 function artUrl(src: string) {
   if (!src || src.startsWith("data:") || src.startsWith("blob:")) return src;
   if (src.startsWith("/")) return `${window.location.origin}${src}`;

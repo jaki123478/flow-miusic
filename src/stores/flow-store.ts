@@ -96,6 +96,7 @@ interface FlowState {
   stationOn: boolean;
   voiceDuck: boolean;
   plays: Record<string, number>;
+  followedArtists: string[];
   profileName: string;
   hasSeenOnboarding: boolean;
   qrTarget: { title: string; subtitle: string; url: string; artwork?: string } | null;

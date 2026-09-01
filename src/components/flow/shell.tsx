@@ -16,6 +16,7 @@ import { ChatFab, ChatToggle } from "./chat-fab";
 
 const NAV = [
   { to: "/", label: "Home", icon: House },
+  { to: "/explore", label: "Esplora", icon: Compass },
   { to: "/search", label: "Cerca", icon: Search },
   { to: "/radio", label: "Radio", icon: Radio },
   { to: "/library", label: "Libreria", icon: Library },
@@ -335,25 +336,27 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="relative z-40 shrink-0">
         <MiniPlayer />
         <ChatFab />
-        <nav className="flex border-t border-border bg-bg pt-1 pb-[max(0.35rem,env(safe-area-inset-bottom))] md:hidden">
-          {NAV.map((item) => {
-            const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  "nav-link flex min-h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px] font-medium",
-                  active ? "is-active text-fg" : "text-muted",
-                )}
-              >
-                <Icon className="size-6" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <div className="px-3 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
+          <nav className="floating-nav flex items-center justify-around rounded-2xl border border-white/10 px-1 py-1 shadow-2xl">
+            {NAV.map((item) => {
+              const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
+              const Icon = item.icon;
+              return (
+                <Link
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    "floating-nav-pill flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-[11px] font-semibold transition-all",
+                    active ? "is-active text-primary" : "text-muted hover:text-fg",
+                  )}
+                >
+                  <Icon className={cn("size-5 transition-transform", active && "scale-110 text-primary")} />
+                  <span className={cn("tracking-tight", active ? "font-bold text-fg" : "text-muted")}>{item.label}</span>
+                </Link>
+              );
+            })}
+          </nav>
+        </div>
       </div>
 
       <FullPlayer />

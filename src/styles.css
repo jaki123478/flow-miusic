@@ -486,6 +486,21 @@
   --player-glow: #1ed760;
 }
 
+.floating-nav {
+  background: color-mix(in oklab, var(--color-elevated) 82%, transparent);
+  backdrop-filter: blur(24px) saturate(1.6);
+  -webkit-backdrop-filter: blur(24px) saturate(1.6);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 0.5), inset 0 1px 0 rgb(255 255 255 / 0.12);
+}
+
+.floating-nav-pill {
+  transition: all var(--duration-fast) var(--ease-out);
+}
+.floating-nav-pill.is-active {
+  color: var(--color-primary);
+  background: color-mix(in oklab, var(--color-primary) 14%, transparent);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .flow-enter,
   .flow-enter > *,

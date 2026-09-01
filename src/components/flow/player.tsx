@@ -43,7 +43,7 @@ const EQ_PRESETS = [
   { id: "electronic", label: "Electronic", bass: 6, treble: 5 },
 ] as const;
 import { TrackArt, TrackRow } from "./tracks";
-import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
+import { bindLockScreenActions, pushLockScreen, unlockAudioSession } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -182,9 +182,17 @@ export function AudioEngine() {
       el.setAttribute("playsinline", "true");
       el.setAttribute("webkit-playsinline", "true");
     }
+    const handleUserInteraction = () => {
+      unlockAudioSession();
+    };
+    window.addEventListener("pointerdown", handleUserInteraction, { passive: true, once: true });
+    window.addEventListener("touchstart", handleUserInteraction, { passive: true, once: true });
+    window.addEventListener("keydown", handleUserInteraction, { passive: true, once: true });
+
     claimAudioFocus();
     bindLockScreenActions({
       play: () => {
+        unlockAudioSession();
         useFlowStore.getState().resume();
         void audioRef.current?.play().catch(() => {});
       },
@@ -201,18 +209,24 @@ export function AudioEngine() {
         audioRef.current?.pause();
       },
     });
-    return bindAudioFocus({
-      onLost: () => {
-        if (document.hidden) return;
+    if (typeof window !== "undefined") {
+      (window as unknown as { __flowAudioPause?: () => void; __flowAudioResume?: () => void }).__flowAudioPause = () => {
         useFlowStore.getState().pause();
-      },
-      onGained: () => {
-        if (!shouldResumeAfterFocus()) return;
+        audioRef.current?.pause();
+      };
+      (window as unknown as { __flowAudioPause?: () => void; __flowAudioResume?: () => void }).__flowAudioResume = () => {
         const s = useFlowStore.getState();
-        if (s.current) s.resume();
-        void audioRef.current?.play().catch(() => {});
-      },
-    });
+        if (s.current) {
+          s.resume();
+          void audioRef.current?.play().catch(() => {});
+        }
+      };
+    }
+    return () => {
+      window.removeEventListener("pointerdown", handleUserInteraction);
+      window.removeEventListener("touchstart", handleUserInteraction);
+      window.removeEventListener("keydown", handleUserInteraction);
+    };
   }, []);
 
   useEffect(() => {
@@ -315,8 +329,15 @@ export function AudioEngine() {
           lastPos.current = t;
           lastMove.current = Date.now();
         }
-        const track = useFlowStore.getState().current;
+        const st = useFlowStore.getState();
+        const track = st.current;
         if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
+        if (el.duration > 0 && (t >= el.duration * 0.7 || el.duration - t <= 30)) {
+          const nxt = st.queue[st.queueIndex + 1];
+          if (nxt?.videoId && nxt.videoId !== track?.videoId) {
+            prefetchAudio(nxt.videoId);
+          }
+        }
       }}
       onDurationChange={(e) => {
         const d = e.currentTarget.duration;
@@ -332,27 +353,33 @@ export function AudioEngine() {
         }
       }}
       onPause={() => {
-        resumeElement(audioRef.current);
+        if (document.hidden && useFlowStore.getState().isPlaying) {
+          resumeElement(audioRef.current);
+        }
       }}
       onWaiting={() => {
-        if (document.hidden) resumeElement(audioRef.current);
+        if (document.hidden && useFlowStore.getState().isPlaying) resumeElement(audioRef.current);
       }}
       onError={() => {
         const s = useFlowStore.getState();
         const id = s.current?.videoId;
         const audio = audioRef.current;
         if (!id || !audio) return;
-        if (document.hidden) {
+        if (document.hidden && s.isPlaying) {
           resumeElement(audio);
           return;
         }
         const blob = cachedAudioUrl(id);
-        if (blob) applySrc(audio, blob, s.isPlaying, true);
-        else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
-        else if (s.isPlaying) recover(id, s.currentTime);
+        if (blob && audio.src !== blob) {
+          applySrc(audio, blob, s.isPlaying, true);
+        } else if (!audio.src.includes("/api/stream") && id) {
+          applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
+        } else if (s.isPlaying) {
+          recover(id, s.currentTime);
+        }
       }}
       onStalled={() => {
-        if (document.hidden) resumeElement(audioRef.current);
+        if (document.hidden && useFlowStore.getState().isPlaying) resumeElement(audioRef.current);
       }}
       onEnded={onEnded}
     />
