@@ -21,21 +21,27 @@ export function unlockAudioSession() {
   if (typeof window === "undefined") return;
   try {
     const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!AudioCtx) return;
-    if (!audioContext || audioContext.state === "closed") {
-      audioContext = new AudioCtx();
+    if (AudioCtx) {
+      if (!audioContext || audioContext.state === "closed") {
+        audioContext = new AudioCtx();
+      }
+      if (audioContext.state === "suspended") {
+        void audioContext.resume();
+      }
+      if (!keepAliveNode && audioContext) {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        gain.gain.value = 0.00001; // Inaudible keep-alive for iOS Safari background thread
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.start();
+        keepAliveNode = osc;
+      }
     }
-    if (audioContext.state === "suspended") {
-      void audioContext.resume();
-    }
-    if (!keepAliveNode && audioContext) {
-      const osc = audioContext.createOscillator();
-      const gain = audioContext.createGain();
-      gain.gain.value = 0.00001; // Inaudible keep-alive for iOS Safari background thread
-      osc.connect(gain);
-      gain.connect(audioContext.destination);
-      osc.start();
-      keepAliveNode = osc;
+    const el = (window as unknown as { __FLOW_AUDIO_EL__?: HTMLAudioElement }).__FLOW_AUDIO_EL__;
+    if (el && el.paused && !el.src) {
+      el.src = "/silence.wav";
+      void el.play().catch(() => {});
     }
   } catch {
     /* ignore */

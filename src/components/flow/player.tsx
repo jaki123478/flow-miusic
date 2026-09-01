@@ -208,6 +208,7 @@ export function AudioEngine() {
     }
     const el = audioRef.current;
     if (el) {
+      (window as unknown as { __FLOW_AUDIO_EL__?: HTMLAudioElement }).__FLOW_AUDIO_EL__ = el;
       el.setAttribute("playsinline", "true");
       el.setAttribute("webkit-playsinline", "true");
     }
