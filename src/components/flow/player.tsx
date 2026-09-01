@@ -81,6 +81,8 @@ function applyOutput(audio: HTMLAudioElement) {
 
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ytPlayerRef = useRef<any>(null);
+  const ytReadyRef = useRef(false);
   const current = useFlowStore((s) => s.current);
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const volume = useFlowStore((s) => s.volume);
@@ -99,6 +101,69 @@ export function AudioEngine() {
   const lastPos = useRef(0);
   const recovering = useRef("");
 
+  const isRadio = current?.source === "radio" || !current?.videoId;
+
+  // Initialize YouTube IFrame API
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const initYT = () => {
+      if ((window as any).YT && (window as any).YT.Player && !ytPlayerRef.current) {
+        try {
+          ytPlayerRef.current = new (window as any).YT.Player("flow-yt-player-frame", {
+            height: "100",
+            width: "100",
+            playerVars: {
+              autoplay: 1,
+              controls: 0,
+              disablekb: 1,
+              fs: 0,
+              modestbranding: 1,
+              playsinline: 1,
+              rel: 0,
+              origin: window.location.origin,
+            },
+            events: {
+              onReady: (e: any) => {
+                ytReadyRef.current = true;
+                const s = useFlowStore.getState();
+                if (s.current?.videoId) {
+                  e.target.loadVideoById(s.current.videoId, s.currentTime || 0);
+                  if (s.isPlaying) e.target.playVideo();
+                  else e.target.pauseVideo();
+                }
+              },
+              onStateChange: (e: any) => {
+                if (e.data === 0) {
+                  useFlowStore.getState().onEnded();
+                } else if (e.data === 1) {
+                  const d = e.target.getDuration();
+                  if (d > 0) useFlowStore.getState().setDuration(d);
+                  const track = useFlowStore.getState().current;
+                  if (track) {
+                    markPlayingForFocus(true);
+                    pushLockScreen(track, true, e.target.getCurrentTime() || 0, d || 0, 1);
+                  }
+                }
+              },
+            },
+          });
+        } catch {
+          /* ignore */
+        }
+      }
+    };
+
+    if (!(window as any).YT) {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag?.parentNode?.insertBefore(tag, firstScriptTag);
+      (window as any).onYouTubeIframeAPIReady = initYT;
+    } else {
+      initYT();
+    }
+  }, []);
+
   const resumeElement = (audio: HTMLAudioElement | null) => {
     if (!audio) return;
     if (useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
@@ -113,7 +178,6 @@ export function AudioEngine() {
     }
     const playing = !audio.paused && !audio.error;
     const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
-    // Mid-play blob swap while playing interrupts playback and drops Chrome Android audio focus
     if (playing && blobUpgrade) return;
     if (document.hidden && playing && !force) return;
 
@@ -141,54 +205,6 @@ export function AudioEngine() {
     }
   };
 
-  const recover = (id: string, time: number) => {
-    const audio = audioRef.current;
-    if (!audio || recovering.current === id) return;
-    if (document.hidden) {
-      resumeElement(audio);
-      return;
-    }
-    recovering.current = id;
-    const ready = cachedAudioUrl(id);
-    if (ready) {
-      applySrc(audio, ready, true, true);
-      audio.addEventListener(
-        "loadedmetadata",
-        () => {
-          try {
-            if (time > 0) audio.currentTime = time;
-          } catch {
-            /* ignore */
-          }
-          void audio.play().catch(() => {});
-        },
-        { once: true },
-      );
-      return;
-    }
-    void loadLocalAudio(id)
-      .then((url) => {
-        if (document.hidden) return;
-        if (useFlowStore.getState().current?.videoId !== id) return;
-        applySrc(audio, url, true, true);
-        audio.addEventListener(
-          "loadedmetadata",
-          () => {
-            try {
-              if (time > 0) audio.currentTime = time;
-            } catch {
-              /* ignore */
-            }
-            if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
-          },
-          { once: true },
-        );
-      })
-      .catch(() => {
-        if (recovering.current === id) recovering.current = "";
-      });
-  };
-
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
@@ -210,10 +226,16 @@ export function AudioEngine() {
       play: () => {
         unlockAudioSession();
         useFlowStore.getState().resume();
-        void audioRef.current?.play().catch(() => {});
+        const s = useFlowStore.getState();
+        if (s.current?.videoId && ytPlayerRef.current?.playVideo) {
+          ytPlayerRef.current.playVideo();
+        } else {
+          void audioRef.current?.play().catch(() => {});
+        }
       },
       pause: () => {
         useFlowStore.getState().pause();
+        ytPlayerRef.current?.pauseVideo?.();
         audioRef.current?.pause();
       },
       prev: () => useFlowStore.getState().prev(),
@@ -222,22 +244,10 @@ export function AudioEngine() {
       skip: (d) => useFlowStore.getState().skipBy(d),
       stop: () => {
         useFlowStore.getState().pause();
+        ytPlayerRef.current?.pauseVideo?.();
         audioRef.current?.pause();
       },
     });
-    if (typeof window !== "undefined") {
-      (window as unknown as { __flowAudioPause?: () => void; __flowAudioResume?: () => void }).__flowAudioPause = () => {
-        useFlowStore.getState().pause();
-        audioRef.current?.pause();
-      };
-      (window as unknown as { __flowAudioPause?: () => void; __flowAudioResume?: () => void }).__flowAudioResume = () => {
-        const s = useFlowStore.getState();
-        if (s.current) {
-          s.resume();
-          void audioRef.current?.play().catch(() => {});
-        }
-      };
-    }
     return () => {
       window.removeEventListener("pointerdown", handleUserInteraction);
       window.removeEventListener("touchstart", handleUserInteraction);
@@ -245,160 +255,135 @@ export function AudioEngine() {
     };
   }, []);
 
+  // Sync current track
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio || !current) return;
+    if (!current) return;
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
-    applySrc(audio, fallbackSrc(current), wantPlay, true);
+
+    if (current.videoId) {
+      // YouTube Track
+      audio?.pause();
+      if (ytPlayerRef.current?.loadVideoById) {
+        ytPlayerRef.current.loadVideoById(current.videoId, 0);
+        if (wantPlay) ytPlayerRef.current.playVideo();
+      }
+    } else if (audio) {
+      // Radio / Direct Track
+      ytPlayerRef.current?.pauseVideo?.();
+      applySrc(audio, fallbackSrc(current), wantPlay, true);
+    }
+
     claimAudioFocus();
     if (wantPlay) {
       markPlayingForFocus(true);
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
-    const st = useFlowStore.getState();
-    const nxt = st.queue[st.queueIndex + 1];
-    if (nxt?.videoId && nxt.videoId !== current.videoId) prefetchAudio(nxt.videoId);
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
+  // Sync isPlaying state
   useEffect(() => {
     const audio = audioRef.current;
-    if (!audio) return;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
-    applyOutput(audio);
-    if (isPlaying) {
-      void audio.play().catch(() => {});
-    } else {
-      audio.pause();
+    if (current?.videoId && ytPlayerRef.current) {
+      if (isPlaying) ytPlayerRef.current.playVideo?.();
+      else ytPlayerRef.current.pauseVideo?.();
+    } else if (audio) {
+      applyOutput(audio);
+      if (isPlaying) {
+        void audio.play().catch(() => {});
+      } else {
+        audio.pause();
+      }
     }
-    if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
+    if (current) pushLockScreen(current, isPlaying, currentTime || 0, current.duration || 0, 1);
   }, [isPlaying, current]);
 
+  // Sync Volume
   useEffect(() => {
+    const raw = isMuted ? 0 : volume;
+    const volPct = Math.round(Math.max(0, Math.min(100, raw * 100)));
+    ytPlayerRef.current?.setVolume?.(volPct);
     const audio = audioRef.current;
     if (audio) applyOutput(audio);
   }, [volume, isMuted, voiceDuck, playbackRate, normalize]);
 
+  // Sync Seek
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
-    const audio = audioRef.current;
-    if (!audio) return;
-    if (Math.abs(audio.currentTime - currentTime) > 0.4) audio.currentTime = currentTime;
-  }, [seekVersion, currentTime]);
+    if (current?.videoId && ytPlayerRef.current?.seekTo) {
+      ytPlayerRef.current.seekTo(currentTime, true);
+    } else if (audioRef.current) {
+      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.4) audioRef.current.currentTime = currentTime;
+    }
+  }, [seekVersion, currentTime, current?.videoId]);
 
+  // Real-time timeline ticker
   useEffect(() => {
-    const kick = () => {
-      const audio = audioRef.current;
+    const timer = window.setInterval(() => {
       const s = useFlowStore.getState();
-      if (!audio || !s.isPlaying || !s.current) return;
-      claimAudioFocus();
-      if (document.hidden) {
-        resumeElement(audio);
-        return;
+      if (!s.isPlaying || !s.current?.videoId || !ytPlayerRef.current?.getCurrentTime) return;
+      try {
+        const t = ytPlayerRef.current.getCurrentTime();
+        const d = ytPlayerRef.current.getDuration();
+        if (Number.isFinite(t) && t >= 0) {
+          s.setCurrentTime(t);
+        }
+        if (Number.isFinite(d) && d > 0) {
+          s.setDuration(d);
+        }
+      } catch {
+        /* ignore */
       }
-      resumeElement(audio);
-      const t = audio.currentTime || 0;
-      if (t > lastPos.current + 0.15) {
-        lastPos.current = t;
-        lastMove.current = Date.now();
-        return;
-      }
-      if (Date.now() - lastMove.current > 4000 && s.current.videoId && audio.error) {
-        recover(s.current.videoId, t || s.currentTime);
-      }
-    };
-    document.addEventListener("visibilitychange", kick);
-    window.addEventListener("pageshow", kick);
-    window.addEventListener("focus", kick);
-    window.addEventListener("freeze", kick);
-    window.addEventListener("resume", kick);
-    const watchdog = window.setInterval(kick, 2000);
-    return () => {
-      document.removeEventListener("visibilitychange", kick);
-      window.removeEventListener("pageshow", kick);
-      window.removeEventListener("focus", kick);
-      window.removeEventListener("freeze", kick);
-      window.removeEventListener("resume", kick);
-      window.clearInterval(watchdog);
-    };
+    }, 250);
+    return () => window.clearInterval(timer);
   }, []);
 
   return (
-    <audio
-      ref={audioRef}
-      playsInline
-      preload="auto"
-      className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
-      onTimeUpdate={(e) => {
-        const el = e.currentTarget;
-        const t = el.currentTime;
-        if (!Number.isFinite(t)) return;
-        setCurrentTime(t);
-        if (t > lastPos.current) {
-          lastPos.current = t;
-          lastMove.current = Date.now();
-        }
-        const st = useFlowStore.getState();
-        const track = st.current;
-        if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
-        if (el.duration > 0 && (t >= el.duration * 0.7 || el.duration - t <= 30)) {
-          const nxt = st.queue[st.queueIndex + 1];
-          if (nxt?.videoId && nxt.videoId !== track?.videoId) {
-            prefetchAudio(nxt.videoId);
+    <>
+      <audio
+        ref={audioRef}
+        playsInline
+        preload="auto"
+        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
+        onTimeUpdate={(e) => {
+          if (!isRadio) return;
+          const el = e.currentTarget;
+          const t = el.currentTime;
+          if (!Number.isFinite(t)) return;
+          setCurrentTime(t);
+          const st = useFlowStore.getState();
+          const track = st.current;
+          if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
+        }}
+        onDurationChange={(e) => {
+          if (!isRadio) return;
+          const d = e.currentTarget.duration;
+          if (Number.isFinite(d) && d > 0) setDuration(d);
+        }}
+        onPlaying={() => {
+          if (!isRadio) return;
+          const track = useFlowStore.getState().current;
+          if (track) {
+            markPlayingForFocus(true);
+            pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
           }
-        }
-      }}
-      onDurationChange={(e) => {
-        const d = e.currentTarget.duration;
-        if (Number.isFinite(d) && d > 0) setDuration(d);
-      }}
-      onPlaying={() => {
-        lastMove.current = Date.now();
-        recovering.current = "";
-        const track = useFlowStore.getState().current;
-        if (track) {
-          markPlayingForFocus(true);
-          pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
-        }
-      }}
-      onPause={() => {
-        if (document.hidden && useFlowStore.getState().isPlaying) {
-          resumeElement(audioRef.current);
-        }
-      }}
-      onWaiting={() => {
-        if (document.hidden && useFlowStore.getState().isPlaying) resumeElement(audioRef.current);
-      }}
-      onError={() => {
-        const s = useFlowStore.getState();
-        const id = s.current?.videoId;
-        const audio = audioRef.current;
-        if (!id || !audio) return;
-        if (document.hidden && s.isPlaying) {
-          resumeElement(audio);
-          return;
-        }
-        const blob = cachedAudioUrl(id);
-        if (blob && audio.src !== blob) {
-          applySrc(audio, blob, s.isPlaying, true);
-        } else if (!audio.src.includes("/api/stream") && id) {
-          applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
-        } else if (s.isPlaying) {
-          recover(id, s.currentTime);
-        }
-      }}
-      onStalled={() => {
-        if (document.hidden && useFlowStore.getState().isPlaying) resumeElement(audioRef.current);
-      }}
-      onEnded={onEnded}
-    />
+        }}
+        onEnded={onEnded}
+      />
+      <div
+        id="flow-yt-player-frame"
+        className="pointer-events-none fixed -bottom-96 -left-96 h-1 w-1 opacity-[0.01]"
+      />
+    </>
   );
 }
 
