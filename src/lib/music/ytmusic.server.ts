@@ -5,10 +5,7 @@ let tubePromise: Promise<Innertube> | null = null;
 
 export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
-    tubePromise = Innertube.create({
-      cache: new UniversalCache(false),
-      generate_session_locally: true,
-    }).catch((err) => {
+    tubePromise = Innertube.create().catch((err) => {
       tubePromise = null;
       throw err;
     });
