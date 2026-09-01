@@ -52,6 +52,40 @@ async function handleStream(request: Request): Promise<Response> {
   }
 
   if (target) {
+    try {
+      const range = request.headers.get("range") || "bytes=0-";
+      const upstream = await fetch(target, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1",
+          Range: range,
+          Accept: "*/*",
+        },
+        signal: AbortSignal.timeout(12000),
+      });
+
+      if (upstream.ok || upstream.status === 206) {
+        const headers = new Headers();
+        headers.set("Content-Type", upstream.headers.get("content-type") || "audio/mp4");
+        headers.set("Accept-Ranges", "bytes");
+        headers.set("Access-Control-Allow-Origin", "*");
+        headers.set("Cache-Control", "public, max-age=3600");
+
+        const contentRange = upstream.headers.get("content-range");
+        if (contentRange) headers.set("Content-Range", contentRange);
+
+        const contentLength = upstream.headers.get("content-length");
+        if (contentLength) headers.set("Content-Length", contentLength);
+
+        return new Response(upstream.body, {
+          status: upstream.status,
+          headers,
+        });
+      }
+    } catch {
+      /* fallback to redirect */
+    }
+
     return new Response(null, {
       status: 302,
       headers: {

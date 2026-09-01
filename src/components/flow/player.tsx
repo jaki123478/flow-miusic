@@ -320,6 +320,39 @@ export function AudioEngine() {
     }
   }, [seekVersion, currentTime, current?.videoId]);
 
+  // Universal real-time timeline ticker (syncs both <audio> and YouTube iframe)
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const s = useFlowStore.getState();
+      if (!s.isPlaying) return;
+
+      const audio = audioRef.current;
+      if (audio && !audio.paused && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
+        s.setCurrentTime(audio.currentTime);
+        if (Number.isFinite(audio.duration) && audio.duration > 0) {
+          s.setDuration(audio.duration);
+        }
+        return;
+      }
+
+      if (s.current?.videoId && ytPlayerRef.current?.getCurrentTime) {
+        try {
+          const t = ytPlayerRef.current.getCurrentTime();
+          const d = ytPlayerRef.current.getDuration();
+          if (Number.isFinite(t) && t >= 0) {
+            s.setCurrentTime(t);
+          }
+          if (Number.isFinite(d) && d > 0) {
+            s.setDuration(d);
+          }
+        } catch {
+          /* ignore */
+        }
+      }
+    }, 250);
+    return () => window.clearInterval(timer);
+  }, []);
+
   return (
     <>
       <audio
