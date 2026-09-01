@@ -14,18 +14,6 @@ export function prefersNativeYtAudio() {
   return isAndroid() || isAppleMobile();
 }
 
-import { getBackgroundPlayer } from "./background-audio";
-
-export function unlockAudioSession() {
-  if (typeof window === "undefined") return;
-  try {
-    const player = getBackgroundPlayer();
-    void player.unlock();
-  } catch {
-    /* ignore */
-  }
-}
-
 function artUrl(src: string) {
   if (!src || src.startsWith("data:") || src.startsWith("blob:")) return src;
   if (src.startsWith("/")) return `${window.location.origin}${src}`;
