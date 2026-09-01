@@ -272,6 +272,14 @@ export function AudioEngine() {
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
+
+    // Pre-warm next track for instant 0ms transition
+    const queue = useFlowStore.getState().queue;
+    const queueIndex = useFlowStore.getState().queueIndex;
+    const nextTrack = queue[queueIndex + 1];
+    if (nextTrack?.videoId) {
+      void prefetchAudio(nextTrack.videoId);
+    }
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   // Sync isPlaying state

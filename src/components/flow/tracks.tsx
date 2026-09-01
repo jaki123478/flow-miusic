@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { FALLBACK_ART, type Track } from "@/lib/music/types";
 import { getRelatedTracks } from "@/lib/music/catalog";
-import { downloadTrack, removeDownload, useIsDownloaded } from "@/lib/music/offline-audio";
+import { downloadTrack, prefetchAudio, removeDownload, useIsDownloaded } from "@/lib/music/offline-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
@@ -100,16 +100,23 @@ export function TrackRow({
     else playTrack(track, queue);
   };
 
+  const prewarm = () => {
+    if (track.videoId) void prefetchAudio(track.videoId);
+  };
+
   return (
     <div
       className={cn(
         "list-row flex min-h-14 items-center gap-3 rounded-md px-2 py-2",
         active ? "bg-highlight" : "hover:bg-highlight",
       )}
+      onMouseEnter={prewarm}
+      onPointerDown={prewarm}
     >
       <button
         type="button"
         onClick={onPlay}
+        onPointerDown={prewarm}
         className="flex min-w-0 flex-1 items-center gap-3 text-left"
         aria-label={active && isPlaying ? `Pausa ${track.title}` : `Riproduci ${track.title}`}
       >
