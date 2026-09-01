@@ -1,5 +1,6 @@
-﻿import http from 'node:http';
-import { Innertube } from 'youtubei.js';
+// @ts-nocheck
+import http from "node:http";
+import { Innertube } from "youtubei.js";
 
 const PORT = process.env.STREAM_PORT ? parseInt(process.env.STREAM_PORT, 10) : 3001;
 const cache = new Map();

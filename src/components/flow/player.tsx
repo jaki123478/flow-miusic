@@ -350,7 +350,8 @@ export function AudioEngine() {
         ref={audioRef}
         playsInline
         preload="auto"
-        className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
+        crossOrigin="anonymous"
+        style={{ position: "fixed", bottom: 0, left: 0, width: "10px", height: "10px", zIndex: -1, pointerEvents: "none" }}
         onTimeUpdate={(e) => {
           const el = e.currentTarget;
           const t = el.currentTime;
