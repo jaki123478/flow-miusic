@@ -5,7 +5,7 @@ import { useFlowStore } from "@/stores/flow-store";
 import { TrackRow } from "@/components/flow/tracks";
 
 export const Route = createFileRoute("/t/$id")({
-  loader: async ({ params }) => getVideoTrack({ data: { id: params.id } }),
+  loader: async ({ params }) => getVideoTrack({ data: { id: params.id } }).catch(() => null),
   component: TrackSharePage,
 });
 

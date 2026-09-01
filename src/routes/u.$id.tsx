@@ -4,7 +4,7 @@ import { followUser, listUserPlaylists } from "@/lib/music/share";
 import { useFlowStore } from "@/stores/flow-store";
 
 export const Route = createFileRoute("/u/$id")({
-  loader: async ({ params }) => listUserPlaylists({ data: { userId: params.id } }),
+  loader: async ({ params }) => listUserPlaylists({ data: { userId: params.id } }).catch(() => []),
   component: ProfilePage,
 });
 

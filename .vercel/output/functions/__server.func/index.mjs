@@ -417,27 +417,42 @@ function injectHeadStreaming(response, host) {
 	});
 }
 async function grokPwaMiddleware(event, next) {
-	if ((event.req.method ?? "GET").toUpperCase() !== "GET") return next();
-	const path = event.url.pathname;
-	const urlWithQuery = path + event.url.search;
-	if (path === "/__grok/manifest.webmanifest" || path === "/__grok/manifest.json") return new Response(renderWebManifest(requestHost(event)), { headers: {
-		"content-type": "application/manifest+json; charset=utf-8",
-		"cache-control": "no-cache"
-	} });
-	if (isInstallQuery(urlWithQuery) && isDocumentPath(path) && acceptsHtml(event.req.headers.get("accept"))) {
-		const html = renderInstallPageHtml(install_page_default, {
-			host: requestHost(event),
-			url: urlWithQuery
-		});
-		return new Response(html, { headers: {
-			"content-type": "text/html; charset=utf-8",
-			"cache-control": "no-cache"
-		} });
+	try {
+		if ((event.req.method ?? "GET").toUpperCase() !== "GET") return next();
+		const path = event.url.pathname;
+		const urlWithQuery = path + event.url.search;
+		if (path === "/__grok/manifest.webmanifest" || path === "/__grok/manifest.json") try {
+			return new Response(renderWebManifest(requestHost(event)), { headers: {
+				"content-type": "application/manifest+json; charset=utf-8",
+				"cache-control": "no-cache"
+			} });
+		} catch {
+			return next();
+		}
+		if (isInstallQuery(urlWithQuery) && isDocumentPath(path) && acceptsHtml(event.req.headers.get("accept"))) try {
+			const html = renderInstallPageHtml(install_page_default, {
+				host: requestHost(event),
+				url: urlWithQuery
+			});
+			return new Response(html, { headers: {
+				"content-type": "text/html; charset=utf-8",
+				"cache-control": "no-cache"
+			} });
+		} catch {
+			return next();
+		}
+		if (!isDocumentPath(path)) return next();
+		const result = await next();
+		if (result instanceof Response && result.body && String(result.headers.get("content-type") ?? "").includes("text/html") && !result.headers.get("content-encoding")) try {
+			return injectHeadStreaming(result, requestHost(event));
+		} catch {
+			return result;
+		}
+		return result;
+	} catch (err) {
+		console.error("[pwa-middleware]", err);
+		return next();
 	}
-	if (!isDocumentPath(path)) return next();
-	const result = await next();
-	if (result instanceof Response && result.body && String(result.headers.get("content-type") ?? "").includes("text/html") && !result.headers.get("content-encoding")) return injectHeadStreaming(result, requestHost(event));
-	return result;
 }
 //#endregion
 //#region #nitro/virtual/routing

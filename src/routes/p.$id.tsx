@@ -6,7 +6,7 @@ import { useFlowStore } from "@/stores/flow-store";
 import { TrackRow } from "@/components/flow/tracks";
 
 export const Route = createFileRoute("/p/$id")({
-  loader: async ({ params }) => getSharedPlaylist({ data: { id: params.id } }),
+  loader: async ({ params }) => getSharedPlaylist({ data: { id: params.id } }).catch(() => null),
   component: SharedPage,
 });
 
