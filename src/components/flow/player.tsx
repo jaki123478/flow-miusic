@@ -259,19 +259,11 @@ export function AudioEngine() {
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
 
-    if (current.videoId) {
-      if (audio) {
-        audio.loop = true;
-        applySrc(audio, "/silence.wav", wantPlay);
-      }
-      if (ytPlayerRef.current?.loadVideoById) {
-        ytPlayerRef.current.loadVideoById(current.videoId, 0);
-        if (wantPlay) ytPlayerRef.current.playVideo?.();
-      }
-    } else if (audio) {
+    const streamSource = current.streamUrl || (current.videoId ? `/api/stream?v=${current.videoId}` : fallbackSrc(current));
+
+    if (audio) {
       audio.loop = false;
-      ytPlayerRef.current?.pauseVideo?.();
-      applySrc(audio, current.streamUrl || "", wantPlay);
+      applySrc(audio, streamSource, wantPlay);
     }
 
     claimAudioFocus();
@@ -287,22 +279,7 @@ export function AudioEngine() {
     const audio = audioRef.current;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
-    if (current?.videoId) {
-      if (isPlaying) {
-        if (audio) {
-          audio.loop = true;
-          if (!audio.src.endsWith("/silence.wav")) {
-            applySrc(audio, "/silence.wav", true);
-          } else {
-            void audio.play().catch(() => {});
-          }
-        }
-        ytPlayerRef.current?.playVideo?.();
-      } else {
-        audio?.pause();
-        ytPlayerRef.current?.pauseVideo?.();
-      }
-    } else if (audio) {
+    if (audio) {
       applyOutput(audio);
       if (isPlaying) {
         void audio.play().catch(() => {});

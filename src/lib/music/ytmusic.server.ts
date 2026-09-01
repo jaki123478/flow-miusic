@@ -28,16 +28,19 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
       try {
         const info = await yt.getBasicInfo(id, { client });
         const format =
+          info.chooseFormat({ type: "audio" }) ||
           info.chooseFormat({ type: "audio", quality: "best" }) ||
           info.chooseFormat({ type: "audio", format: "mp4" }) ||
-          info.chooseFormat({ type: "audio" });
+          info.streaming_data?.adaptive_formats?.find((f) => (f.mime_type || "").startsWith("audio/")) ||
+          info.streaming_data?.formats?.find((f) => (f.mime_type || "").startsWith("audio/") || f.has_audio);
+
         if (format?.url) return format.url;
-        if (format && typeof format.decipher === "function") {
-          const u = await format.decipher(yt.session.player);
+        if (format && typeof (format as any).decipher === "function") {
+          const u = await (format as any).decipher(yt.session.player);
           if (u) return u;
         }
       } catch (e: any) {
-        console.error(`[getAudioUrl ${client} failed]`, id, e?.message || e);
+        /* try next client */
       }
     }
   } catch (err: any) {
