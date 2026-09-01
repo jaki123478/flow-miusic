@@ -170,20 +170,28 @@ export const searchCatalog = createServerFn({ method: "GET" })
 export const getChartTracks = createServerFn({ method: "GET" })
   .validator((d: { query: string; playlistId?: string }) => d)
   .handler(async ({ data }) => {
-    const yt = await import("./ytmusic.server");
-    const fromPl = data.playlistId ? await yt.getPlaylistTracks(data.playlistId, 40).catch(() => []) : [];
-    if (fromPl.length >= 8) return uniqueTracks(fromPl);
-    const query = (data.query || "").trim();
-    const tracks = query ? await yt.searchYtMusic(query, 30) : await yt.getExploreTracks().then((e) => e.trending);
-    return uniqueTracks([...fromPl, ...tracks]).slice(0, 40);
+    try {
+      const yt = await import("./ytmusic.server");
+      const fromPl = data.playlistId ? await yt.getPlaylistTracks(data.playlistId, 40).catch(() => []) : [];
+      if (fromPl.length >= 8) return uniqueTracks(fromPl);
+      const query = (data.query || "").trim();
+      const tracks = query ? await yt.searchYtMusic(query, 30).catch(() => []) : await yt.getExploreTracks().then((e) => e.trending).catch(() => []);
+      return uniqueTracks([...fromPl, ...tracks]).slice(0, 40);
+    } catch {
+      return [];
+    }
   });
 
 export const getGenreMix = createServerFn({ method: "GET" })
   .validator((d: { query: string }) => d)
   .handler(async ({ data }) => {
-    const yt = await import("./ytmusic.server");
-    const tracks = await yt.searchYtMusic(data.query, 30);
-    return uniqueTracks(tracks).slice(0, 30);
+    try {
+      const yt = await import("./ytmusic.server");
+      const tracks = await yt.searchYtMusic(data.query, 30).catch(() => []);
+      return uniqueTracks(tracks).slice(0, 30);
+    } catch {
+      return [];
+    }
   });
 
 export const getCountryRadios = createServerFn({ method: "GET" })
@@ -254,58 +262,78 @@ export const createMoodMix = createServerFn({ method: "POST" })
 export const getRelatedTracks = createServerFn({ method: "GET" })
   .validator((d: { artist: string; title: string; excludeId?: string }) => d)
   .handler(async ({ data }) => {
-    const yt = await import("./ytmusic.server");
-    const artist = (data.artist || "").trim();
-    const title = (data.title || "").trim();
-    const queries = [`${artist} ${title} mix official audio`, `${artist} radio mix official audio`, `${artist} similar songs official audio`].filter(
-      (q) => q.replace(/official audio|mix|radio|similar songs/gi, "").trim().length > 1,
-    );
-    const batches = await Promise.all(queries.map((q) => yt.searchYtMusic(q, 10).catch(() => [] as Track[])));
-    return uniqueTracks(batches.flat())
-      .filter((t) => t.id !== data.excludeId && t.videoId !== data.excludeId)
-      .slice(0, 24);
+    try {
+      const yt = await import("./ytmusic.server");
+      const artist = (data.artist || "").trim();
+      const title = (data.title || "").trim();
+      const queries = [`${artist} ${title} mix official audio`, `${artist} radio mix official audio`, `${artist} similar songs official audio`].filter(
+        (q) => q.replace(/official audio|mix|radio|similar songs/gi, "").trim().length > 1,
+      );
+      const batches = await Promise.all(queries.map((q) => yt.searchYtMusic(q, 10).catch(() => [] as Track[])));
+      return uniqueTracks(batches.flat())
+        .filter((t) => t.id !== data.excludeId && t.videoId !== data.excludeId)
+        .slice(0, 24);
+    } catch {
+      return [];
+    }
   });
 
 export const getDiscoverMix = createServerFn({ method: "POST" })
   .validator((d: { artists: string[] }) => d)
   .handler(async ({ data }) => {
-    const artists = (data.artists || []).map((a) => a.trim()).filter(Boolean).slice(0, 6);
-    const yt = await import("./ytmusic.server");
-    if (!artists.length) {
-      const explore = await yt.getExploreTracks();
-      return uniqueTracks([...explore.trending, ...explore.fresh]).slice(0, 24);
+    try {
+      const artists = (data.artists || []).map((a) => a.trim()).filter(Boolean).slice(0, 6);
+      const yt = await import("./ytmusic.server");
+      if (!artists.length) {
+        const explore = await yt.getExploreTracks();
+        return uniqueTracks([...explore.trending, ...explore.fresh]).slice(0, 24);
+      }
+      const batches = await Promise.all(artists.map((a) => yt.searchYtMusic(`${a} mix official audio`, 8).catch(() => [] as Track[])));
+      return uniqueTracks(batches.flat()).slice(0, 28);
+    } catch {
+      return [];
     }
-    const batches = await Promise.all(artists.map((a) => yt.searchYtMusic(`${a} mix official audio`, 8).catch(() => [] as Track[])));
-    return uniqueTracks(batches.flat()).slice(0, 28);
   });
 
 export const getFreshTracks = createServerFn({ method: "POST" })
   .validator((d: { artists: string[] }) => d)
   .handler(async ({ data }) => {
-    const yt = await import("./ytmusic.server");
-    const explore = await yt.getExploreTracks();
-    const artists = (data.artists || []).map((a) => a.trim()).filter(Boolean).slice(0, 5);
-    const year = new Date().getFullYear();
-    const batches = await Promise.all(artists.map((a) => yt.searchYtMusic(`${a} ${year} official audio`, 6).catch(() => [] as Track[])));
-    return uniqueTracks([...explore.fresh, ...batches.flat()]).slice(0, 28);
+    try {
+      const yt = await import("./ytmusic.server");
+      const explore = await yt.getExploreTracks();
+      const artists = (data.artists || []).map((a) => a.trim()).filter(Boolean).slice(0, 5);
+      const year = new Date().getFullYear();
+      const batches = await Promise.all(artists.map((a) => yt.searchYtMusic(`${a} ${year} official audio`, 6).catch(() => [] as Track[])));
+      return uniqueTracks([...explore.fresh, ...batches.flat()]).slice(0, 28);
+    } catch {
+      return [];
+    }
   });
 
 export const getVideoTrack = createServerFn({ method: "GET" })
   .validator((d: { id: string }) => d)
   .handler(async ({ data }) => {
-    const id = (data.id || "").trim();
-    if (!id) return null as Track | null;
-    const yt = await import("./ytmusic.server");
-    const hits = await yt.searchYtMusic(id, 6).catch(() => [] as Track[]);
-    return hits.find((t) => t.videoId === id || t.id === id) || hits[0] || null;
+    try {
+      const id = (data.id || "").trim();
+      if (!id) return null as Track | null;
+      const yt = await import("./ytmusic.server");
+      const hits = await yt.searchYtMusic(id, 6).catch(() => [] as Track[]);
+      return hits.find((t) => t.videoId === id || t.id === id) || hits[0] || null;
+    } catch {
+      return null;
+    }
   });
 
 export const getPlayUrl = createServerFn({ method: "GET" })
   .validator((d: { v: string }) => d)
   .handler(async ({ data }) => {
-    const id = (data.v || "").trim();
-    if (!/^[\w-]{11}$/.test(id)) return { url: null as string | null };
-    const yt = await import("./ytmusic.server");
-    const url = await yt.getAudioUrl(id);
-    return { url: url || null };
+    try {
+      const id = (data.v || "").trim();
+      if (!/^[\w-]{11}$/.test(id)) return { url: null as string | null };
+      const yt = await import("./ytmusic.server");
+      const url = await yt.getAudioUrl(id);
+      return { url: url || null };
+    } catch {
+      return { url: null };
+    }
   });

@@ -21,22 +21,35 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
-  // 1. Innertube direct resolution
+  // 1. Fast path: Innertube IOS client (direct AAC/m4a playable on all browsers without decipher)
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "YTMUSIC", "TV_EMBEDDED", "WEB"] as const;
-    for (const client of clients) {
-      try {
-        const info = await yt.getBasicInfo(id, { client });
-        const format = info.chooseFormat({ type: "audio", quality: "bestefficiency" });
-        if (format) {
-          const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
-          if (url) return url;
-        }
-      } catch {
-        /* next client */
-      }
+    try {
+      const info = await yt.getBasicInfo(id, { client: "IOS" });
+      const format =
+        info.chooseFormat({ type: "audio", format: "mp4" }) ||
+        info.chooseFormat({ type: "audio", quality: "bestefficiency" });
+      if (format?.url) return format.url;
+    } catch {
+      /* continue */
     }
+
+    // Parallel fallback across other clients
+    const fallbackClients = ["ANDROID", "YTMUSIC", "TV_EMBEDDED"] as const;
+    const url = await Promise.any(
+      fallbackClients.map(async (client) => {
+        const info = await yt.getBasicInfo(id, { client });
+        const format =
+          info.chooseFormat({ type: "audio", format: "mp4" }) ||
+          info.chooseFormat({ type: "audio", quality: "bestefficiency" });
+        if (!format) throw new Error("no format");
+        const u = format.url || (await format.decipher(yt.session.player));
+        if (!u) throw new Error("no url");
+        return u;
+      }),
+    ).catch(() => null);
+
+    if (url) return url;
   } catch {
     /* fallback */
   }
@@ -50,21 +63,18 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
     `https://invidious.nerdvpn.de/api/v1/videos/${id}`,
     `https://yt.artemislena.eu/api/v1/videos/${id}`,
   ];
-  for (const ep of fallbackUrls) {
-    try {
+  const pipedUrl = await Promise.any(
+    fallbackUrls.map(async (ep) => {
       const res = await fetch(ep, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(3500) });
-      if (!res.ok) continue;
+      if (!res.ok) throw new Error("bad res");
       const data = (await res.json()) as { audioStreams?: { url?: string }[]; adaptiveFormats?: { url?: string; type?: string; mimeType?: string }[] };
       const streams = data.audioStreams || (data.adaptiveFormats || []).filter((f) => (f.type || f.mimeType || "").startsWith("audio"));
-      if (streams && streams.length && streams[0]?.url) {
-        return streams[0].url;
-      }
-    } catch {
-      /* continue */
-    }
-  }
+      if (streams && streams.length && streams[0]?.url) return streams[0].url;
+      throw new Error("no stream");
+    }),
+  ).catch(() => null);
 
-  return null;
+  return pipedUrl;
 }
 
 function txt(value: unknown): string {
@@ -217,48 +227,60 @@ function isLikelySong(track: Track): boolean {
 export async function searchYtMusic(query: string, limit = 24): Promise<Track[]> {
   const q = query.trim();
   if (!q) return [];
-  const yt = await getTube();
-  const result = await yt.music.search(q);
-  const tracks: Track[] = [];
-  const seen = new Set<string>();
-  walkTracks(result, tracks, seen);
-  return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  try {
+    const yt = await getTube();
+    const result = await yt.music.search(q);
+    const tracks: Track[] = [];
+    const seen = new Set<string>();
+    walkTracks(result, tracks, seen);
+    return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  } catch {
+    return [];
+  }
 }
 
 export async function getExploreTracks(): Promise<{ trending: Track[]; fresh: Track[] }> {
-  const yt = await getTube();
-  const explore = await yt.music.getExplore();
-  const sections = (explore.sections || []) as {
-    header?: { title?: unknown };
-    title?: unknown;
-    contents?: unknown[];
-  }[];
-  const trending: Track[] = [];
-  const fresh: Track[] = [];
-  const seenT = new Set<string>();
-  const seenF = new Set<string>();
-  for (const section of sections) {
-    const title = `${txt(section.header?.title)} ${txt(section.title)}`.toLowerCase();
-    if (/puntat|podcast|episodio/.test(title)) continue;
-    const isMusic = /video musical|nuovi video|brani|hits|official/.test(title);
-    if (!isMusic && title.trim()) continue;
-    const bucket = /nuov/.test(title) ? fresh : trending;
-    const seen = bucket === fresh ? seenF : seenT;
-    walkTracks(section.contents, bucket, seen);
+  try {
+    const yt = await getTube();
+    const explore = await yt.music.getExplore();
+    const sections = (explore.sections || []) as {
+      header?: { title?: unknown };
+      title?: unknown;
+      contents?: unknown[];
+    }[];
+    const trending: Track[] = [];
+    const fresh: Track[] = [];
+    const seenT = new Set<string>();
+    const seenF = new Set<string>();
+    for (const section of sections) {
+      const title = `${txt(section.header?.title)} ${txt(section.title)}`.toLowerCase();
+      if (/puntat|podcast|episodio/.test(title)) continue;
+      const isMusic = /video musical|nuovi video|brani|hits|official/.test(title);
+      if (!isMusic && title.trim()) continue;
+      const bucket = /nuov/.test(title) ? fresh : trending;
+      const seen = bucket === fresh ? seenF : seenT;
+      walkTracks(section.contents, bucket, seen);
+    }
+    return {
+      trending: uniqueTracks(trending.filter(isLikelySong)).slice(0, 24),
+      fresh: uniqueTracks(fresh.filter(isLikelySong)).slice(0, 24),
+    };
+  } catch {
+    return { trending: [], fresh: [] };
   }
-  return {
-    trending: uniqueTracks(trending.filter(isLikelySong)).slice(0, 24),
-    fresh: uniqueTracks(fresh.filter(isLikelySong)).slice(0, 24),
-  };
 }
 
 export async function getPlaylistTracks(playlistId: string, limit = 30): Promise<Track[]> {
   const id = playlistId.replace(/^VL/, "");
   if (!id) return [];
-  const yt = await getTube();
-  const playlist = await yt.getPlaylist(id);
-  const tracks: Track[] = [];
-  const seen = new Set<string>();
-  walkTracks(playlist.items || playlist, tracks, seen);
-  return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  try {
+    const yt = await getTube();
+    const playlist = await yt.getPlaylist(id);
+    const tracks: Track[] = [];
+    const seen = new Set<string>();
+    walkTracks(playlist.items || playlist, tracks, seen);
+    return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  } catch {
+    return [];
+  }
 }

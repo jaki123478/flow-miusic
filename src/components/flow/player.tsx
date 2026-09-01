@@ -119,9 +119,25 @@ export function AudioEngine() {
 
     lastSrc.current = src;
     audio.src = src;
+    try {
+      audio.load();
+    } catch {
+      /* ignore */
+    }
     applyOutput(audio);
     if (play) {
-      void audio.play().catch(() => {});
+      const p = audio.play();
+      if (p !== undefined) {
+        p.catch(() => {
+          const onReady = () => {
+            if (useFlowStore.getState().isPlaying && audio.paused) {
+              audio.play().catch(() => {});
+            }
+          };
+          audio.addEventListener("canplay", onReady, { once: true });
+          audio.addEventListener("loadeddata", onReady, { once: true });
+        });
+      }
     }
   };
 
