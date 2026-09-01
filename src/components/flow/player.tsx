@@ -59,6 +59,7 @@ import {
 import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/music/lyrics";
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
+import { resolveDirectUrl } from "@/lib/music/play-src";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
@@ -267,21 +268,20 @@ export function AudioEngine() {
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
 
-    if (current.videoId) {
-      // YouTube Track - keep silent audio carrier active on native <audio> for iOS/Android background playback
-      if (audio) {
-        audio.loop = true;
-        applySrc(audio, "/silence.wav", wantPlay, true);
-      }
-      if (ytPlayerRef.current?.loadVideoById) {
-        ytPlayerRef.current.loadVideoById(current.videoId, 0);
-        if (wantPlay) ytPlayerRef.current.playVideo();
-      }
-    } else if (audio) {
-      // Radio / Direct Track
+    const streamSource = current.streamUrl || (current.videoId ? `/api/stream?v=${current.videoId}` : fallbackSrc(current));
+
+    // Try resolving direct CDN audio url for ultra-low latency background streaming
+    if (current.videoId && !current.streamUrl) {
+      void resolveDirectUrl(current.videoId).then((directUrl) => {
+        if (directUrl && audioRef.current && useFlowStore.getState().current?.id === current.id) {
+          applySrc(audioRef.current, directUrl, useFlowStore.getState().isPlaying, false);
+        }
+      });
+    }
+
+    if (audio) {
       audio.loop = false;
-      ytPlayerRef.current?.pauseVideo?.();
-      applySrc(audio, fallbackSrc(current), wantPlay, true);
+      applySrc(audio, streamSource, wantPlay, true);
     }
 
     claimAudioFocus();
@@ -297,27 +297,19 @@ export function AudioEngine() {
     const audio = audioRef.current;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
-    if (current?.videoId && ytPlayerRef.current) {
-      if (isPlaying) {
-        ytPlayerRef.current.playVideo?.();
-        if (audio) {
-          audio.loop = true;
-          if (!audio.src.endsWith("/silence.wav")) {
-            applySrc(audio, "/silence.wav", true, true);
-          } else {
-            void audio.play().catch(() => {});
-          }
-        }
-      } else {
-        ytPlayerRef.current.pauseVideo?.();
-        audio?.pause();
-      }
-    } else if (audio) {
+    if (audio) {
       applyOutput(audio);
       if (isPlaying) {
         void audio.play().catch(() => {});
       } else {
         audio.pause();
+      }
+    }
+    if (current?.videoId && ytPlayerRef.current) {
+      if (isPlaying) {
+        ytPlayerRef.current.playVideo?.();
+      } else {
+        ytPlayerRef.current.pauseVideo?.();
       }
     }
     if (current) pushLockScreen(current, isPlaying, currentTime || 0, current.duration || 0, 1);
@@ -336,33 +328,15 @@ export function AudioEngine() {
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
+    if (audioRef.current) {
+      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.4) {
+        audioRef.current.currentTime = currentTime;
+      }
+    }
     if (current?.videoId && ytPlayerRef.current?.seekTo) {
       ytPlayerRef.current.seekTo(currentTime, true);
-    } else if (audioRef.current) {
-      if (Math.abs(audioRef.current.currentTime - currentTime) > 0.4) audioRef.current.currentTime = currentTime;
     }
   }, [seekVersion, currentTime, current?.videoId]);
-
-  // Real-time timeline ticker
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      const s = useFlowStore.getState();
-      if (!s.isPlaying || !s.current?.videoId || !ytPlayerRef.current?.getCurrentTime) return;
-      try {
-        const t = ytPlayerRef.current.getCurrentTime();
-        const d = ytPlayerRef.current.getDuration();
-        if (Number.isFinite(t) && t >= 0) {
-          s.setCurrentTime(t);
-        }
-        if (Number.isFinite(d) && d > 0) {
-          s.setDuration(d);
-        }
-      } catch {
-        /* ignore */
-      }
-    }, 250);
-    return () => window.clearInterval(timer);
-  }, []);
 
   return (
     <>
@@ -372,7 +346,6 @@ export function AudioEngine() {
         preload="auto"
         className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
         onTimeUpdate={(e) => {
-          if (!isRadio) return;
           const el = e.currentTarget;
           const t = el.currentTime;
           if (!Number.isFinite(t)) return;
@@ -382,19 +355,26 @@ export function AudioEngine() {
           if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
         }}
         onDurationChange={(e) => {
-          if (!isRadio) return;
           const d = e.currentTarget.duration;
           if (Number.isFinite(d) && d > 0) setDuration(d);
         }}
         onPlaying={() => {
-          if (!isRadio) return;
           const track = useFlowStore.getState().current;
           if (track) {
             markPlayingForFocus(true);
             pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
           }
         }}
-        onEnded={onEnded}
+        onEnded={() => {
+          useFlowStore.getState().onEnded();
+        }}
+        onError={() => {
+          const st = useFlowStore.getState();
+          if (st.current?.videoId && ytPlayerRef.current?.loadVideoById) {
+            ytPlayerRef.current.loadVideoById(st.current.videoId, st.currentTime || 0);
+            if (st.isPlaying) ytPlayerRef.current.playVideo?.();
+          }
+        }}
       />
       <div
         id="flow-yt-player-frame"
