@@ -1,0 +1,53 @@
+import { o as __toESM } from "../_runtime.mjs";
+import { H as require_react, S as require_jsx_runtime } from "../_libs/@tanstack/react-router+[...].mjs";
+import { a as getDiscoverMix } from "./lyrics-BNyLFdmy.mjs";
+import { z as LoaderCircle } from "../_libs/lucide-react.mjs";
+import { P as TrackRow, U as useFlowStore, j as SectionHeader } from "./router-CES2qiM-.mjs";
+//#region node_modules/.nitro/vite/services/ssr/assets/discover-CGpBc9BV.js
+var import_react = /* @__PURE__ */ __toESM(require_react());
+var import_jsx_runtime = require_jsx_runtime();
+function DiscoverPage() {
+	const liked = useFlowStore((s) => s.liked);
+	const recents = useFlowStore((s) => s.recents);
+	const followed = useFlowStore((s) => s.followedArtists);
+	const playQueue = useFlowStore((s) => s.playQueue);
+	const [tracks, setTracks] = (0, import_react.useState)([]);
+	const [loading, setLoading] = (0, import_react.useState)(true);
+	(0, import_react.useEffect)(() => {
+		const artists = [
+			...followed,
+			...liked.map((t) => t.artist),
+			...recents.map((t) => t.artist)
+		].filter((a, i, arr) => a && arr.indexOf(a) === i).slice(0, 6);
+		getDiscoverMix({ data: { artists } }).then(setTracks).finally(() => setLoading(false));
+	}, []);
+	return /* @__PURE__ */ (0, import_jsx_runtime.jsxs)("div", {
+		className: "flow-enter space-y-6",
+		children: [/* @__PURE__ */ (0, import_jsx_runtime.jsxs)("header", { children: [/* @__PURE__ */ (0, import_jsx_runtime.jsx)("h1", {
+			className: "text-3xl font-bold tracking-tight",
+			children: "Scopri"
+		}), /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "mt-1 text-sm text-muted",
+			children: "Mix dai tuoi artisti e dai brani che ascolti."
+		})] }), loading ? /* @__PURE__ */ (0, import_jsx_runtime.jsx)(LoaderCircle, { className: "size-6 animate-spin text-muted" }) : tracks.length ? /* @__PURE__ */ (0, import_jsx_runtime.jsxs)(import_jsx_runtime.Fragment, { children: [
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)("button", {
+				type: "button",
+				onClick: () => playQueue(tracks, 0),
+				className: "h-11 rounded-full bg-primary px-5 text-sm font-bold text-primary-fg",
+				children: "Riproduci mix"
+			}),
+			/* @__PURE__ */ (0, import_jsx_runtime.jsx)(SectionHeader, { title: "Per te" }),
+			tracks.map((t, i) => /* @__PURE__ */ (0, import_jsx_runtime.jsx)(TrackRow, {
+				track: t,
+				queue: tracks,
+				index: i,
+				showIndex: true
+			}, t.id))
+		] }) : /* @__PURE__ */ (0, import_jsx_runtime.jsx)("p", {
+			className: "text-sm text-muted",
+			children: "Ascolta qualcosa e torna qui per un mix su misura."
+		})]
+	});
+}
+//#endregion
+export { DiscoverPage as component };

@@ -118,6 +118,34 @@ var Bot = createLucideIcon("bot", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var Car = createLucideIcon("car", [
+	["path", {
+		d: "M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2",
+		key: "5owen"
+	}],
+	["circle", {
+		cx: "7",
+		cy: "17",
+		r: "2",
+		key: "u2ysq9"
+	}],
+	["path", {
+		d: "M9 17h6",
+		key: "r8uit2"
+	}],
+	["circle", {
+		cx: "17",
+		cy: "17",
+		r: "2",
+		key: "axvx0g"
+	}]
+]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Check = createLucideIcon("check", [["path", {
 	d: "M20 6 9 17l-5-5",
 	key: "1gmf2c"
@@ -822,6 +850,19 @@ var Share2 = createLucideIcon("share-2", [
 * This source code is licensed under the ISC license.
 * See the LICENSE file in the root directory of this source tree.
 */
+var ShieldCheck = createLucideIcon("shield-check", [["path", {
+	d: "M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z",
+	key: "oel41y"
+}], ["path", {
+	d: "m9 12 2 2 4-4",
+	key: "dzmm74"
+}]]);
+/**
+* @license lucide-react v0.510.0 - ISC
+*
+* This source code is licensed under the ISC license.
+* See the LICENSE file in the root directory of this source tree.
+*/
 var Shuffle = createLucideIcon("shuffle", [
 	["path", {
 		d: "m18 14 4 4-4 4",
@@ -1277,4 +1318,4 @@ var X = createLucideIcon("x", [["path", {
 	key: "d8bk6v"
 }]]);
 //#endregion
-export { Bot as $, Pen as A, ListMusic as B, RotateCcw as C, QrCode as D, Radio as E, MicVocal as F, Gauge as G, Languages as H, LogOut as I, Copy as J, Ellipsis as K, LogIn as L, Music2 as M, Moon as N, Plus as O, Mic as P, Check as Q, LoaderCircle as R, RotateCw as S, Repeat1 as T, House as U, Library as V, Heart as W, Clock as X, Compass as Y, ChevronDown as Z, Shuffle as _, User as a, Send as b, Trophy as c, Sun as d, Sparkles as f, SkipBack as g, SkipForward as h, Volume2 as i, Pause as j, Play as k, TriangleAlert as l, SlidersVertical as m, VolumeX as n, Upload as o, Smartphone as p, Download as q, VolumeOff as r, Type as s, X as t, Trash2 as u, Share2 as v, Repeat as w, Search as x, Settings as y, ListPlus as z };
+export { Check as $, Play as A, ListPlus as B, RotateCw as C, Radio as D, Repeat1 as E, Mic as F, Heart as G, Library as H, MicVocal as I, Download as J, Gauge as K, LogOut as L, Pause as M, Music2 as N, QrCode as O, Moon as P, ChevronDown as Q, LogIn as R, Search as S, Repeat as T, Languages as U, ListMusic as V, House as W, Compass as X, Copy as Y, Clock as Z, Shuffle as _, User as a, Settings as b, Trophy as c, Sun as d, Car as et, Sparkles as f, SkipBack as g, SkipForward as h, Volume2 as i, Pen as j, Plus as k, TriangleAlert as l, SlidersVertical as m, VolumeX as n, Upload as o, Smartphone as p, Ellipsis as q, VolumeOff as r, Type as s, X as t, Bot as tt, Trash2 as u, ShieldCheck as v, RotateCcw as w, Send as x, Share2 as y, LoaderCircle as z };

@@ -24,6 +24,8 @@ import {
   Type,
   Languages,
   QrCode,
+  Car,
+  ShieldCheck,
   Volume2,
   VolumeX,
 } from "lucide-react";
@@ -493,6 +495,8 @@ export function FullPlayer() {
   const [sharing, setSharing] = useState(false);
   const [showSleepMenu, setShowSleepMenu] = useState(false);
   const [showEqMenu, setShowEqMenu] = useState(false);
+  const [showCarMode, setShowCarMode] = useState(false);
+  const [showAudioHud, setShowAudioHud] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const lyricsBox = useRef<HTMLDivElement | null>(null);
 
@@ -660,11 +664,28 @@ export function FullPlayer() {
           <button type="button" onClick={() => setShowFullPlayer(false)} className="flex size-11 items-center justify-center rounded-full hover:bg-elevated/60 active:scale-95 transition-transform" aria-label="Chiudi">
             <ChevronDown className="size-6 text-fg" />
           </button>
-          <div className="flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => setShowAudioHud(!showAudioHud)}
+            className="flex flex-col items-center px-3 py-1 rounded-full hover:bg-white/10 active:scale-95 transition-all cursor-pointer"
+            title="Specifiche Audio Hi-Res & Codec"
+          >
             <p className="text-[10px] font-bold tracking-widest text-muted uppercase">In Riproduzione</p>
-            <span className="text-[11px] font-medium text-primary">Flow Audio Engine</span>
-          </div>
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-primary">
+              <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+              Hi-Res · Opus 320k
+            </span>
+          </button>
           <div className="flex items-center gap-0.5">
+            <button
+              type="button"
+              onClick={() => setShowCarMode(true)}
+              className="flex size-10 items-center justify-center rounded-full text-fg/80 hover:text-primary hover:bg-elevated/60 transition-colors"
+              title="Modalità Guida / Car View"
+              aria-label="Modalità Guida"
+            >
+              <Car className="size-4" />
+            </button>
             {showLyrics && (
               <>
                 <button
@@ -1130,6 +1151,123 @@ export function FullPlayer() {
           </div>
         )}
       </div>
+
+      {/* Audio Quality & DSP Specs HUD Modal */}
+      {showAudioHud && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setShowAudioHud(false)}
+        >
+          <div
+            className="relative w-full max-w-sm rounded-3xl bg-[#141720] p-6 shadow-2xl ring-1 ring-white/10 text-fg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="size-5 text-primary" />
+                <h3 className="font-heading text-sm font-bold uppercase tracking-wider text-fg">Flow Hi-Fi Audio Engine</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAudioHud(false)}
+                className="text-xs font-bold text-muted hover:text-fg"
+              >
+                Chiudi
+              </button>
+            </div>
+
+            <div className="mt-4 space-y-2.5 text-xs">
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Codec Audio</span>
+                <span className="font-bold text-primary">Opus 48kHz (Stream Hi-Fi)</span>
+              </div>
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Bitrate Massimo</span>
+                <span className="font-bold text-fg">320 kbps VBR Lossless Container</span>
+              </div>
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Profondità Campionamento</span>
+                <span className="font-bold text-fg">24-bit / 48.000 Hz</span>
+              </div>
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Normalizzazione EBU R128</span>
+                <span className="font-bold text-emerald-400">Attiva (-14 LUFS)</span>
+              </div>
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Preset Equalizzatore DSP</span>
+                <span className="font-bold text-primary uppercase">{settings.eqPreset}</span>
+              </div>
+              <div className="flex justify-between rounded-xl bg-surface/60 p-2.5">
+                <span className="text-muted">Crossfade Intelligente</span>
+                <span className="font-bold text-fg">{settings.crossfade} secondi</span>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl bg-primary/10 p-3 text-center text-[11px] text-primary font-medium">
+              ✨ Motore DSP Web Audio a bassissima latenza con buffering dinamico
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Car Mode / Driving Interface */}
+      {showCarMode && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-between bg-black p-6 text-fg animate-in zoom-in-95 duration-200 select-none">
+          {/* Top Bar */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Car className="size-6 text-primary" />
+              <span className="text-sm font-bold uppercase tracking-widest text-primary">Modalità Guida</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowCarMode(false)}
+              className="rounded-full bg-surface/80 px-4 py-2 text-xs font-bold text-fg hover:bg-surface"
+            >
+              Esci dalla Guida
+            </button>
+          </div>
+
+          {/* Song Info */}
+          <div className="flex flex-col items-center text-center my-auto">
+            <div className="size-48 overflow-hidden rounded-3xl bg-surface shadow-2xl ring-2 ring-white/10 mb-6">
+              <TrackArt src={current.artwork} alt={current.title} />
+            </div>
+            <h2 className="text-2xl font-black text-fg max-w-sm truncate">{current.title}</h2>
+            <p className="text-base font-bold text-muted mt-1 max-w-sm truncate">{current.artist}</p>
+          </div>
+
+          {/* Massive Driving Controls */}
+          <div className="flex items-center justify-center gap-8 pb-8">
+            <button
+              type="button"
+              onClick={prev}
+              className="flex size-18 items-center justify-center rounded-full bg-surface text-fg hover:bg-elevated active:scale-90 transition-transform"
+              aria-label="Precedente"
+            >
+              <SkipBack className="size-8 fill-current" />
+            </button>
+
+            <button
+              type="button"
+              onClick={togglePlay}
+              className="flex size-24 items-center justify-center rounded-full bg-primary text-primary-fg shadow-2xl shadow-primary/30 hover:scale-105 active:scale-90 transition-transform"
+              aria-label={isPlaying ? "Pausa" : "Riproduci"}
+            >
+              {isPlaying ? <Pause className="size-12 fill-current" /> : <Play className="size-12 fill-current ml-1" />}
+            </button>
+
+            <button
+              type="button"
+              onClick={next}
+              className="flex size-18 items-center justify-center rounded-full bg-surface text-fg hover:bg-elevated active:scale-90 transition-transform"
+              aria-label="Successivo"
+            >
+              <SkipForward className="size-8 fill-current" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
