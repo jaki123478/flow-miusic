@@ -84,8 +84,17 @@ async function handleStream(request: Request): Promise<Response> {
         });
       }
     } catch {
-      /* fallback */
+      /* fallback to redirect */
     }
+
+    return new Response(null, {
+      status: 302,
+      headers: {
+        Location: target,
+        "Cache-Control": "no-store",
+        "Access-Control-Allow-Origin": "*",
+      },
+    });
   }
 
   return new Response("No stream", { status: 404 });

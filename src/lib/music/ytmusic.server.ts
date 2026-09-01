@@ -1,4 +1,4 @@
-import { Innertube } from "youtubei.js";
+import { Innertube, UniversalCache } from "youtubei.js";
 import { FALLBACK_ART, type Track } from "./types";
 
 let tubePromise: Promise<Innertube> | null = null;
@@ -6,6 +6,7 @@ let tubePromise: Promise<Innertube> | null = null;
 export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
     tubePromise = Innertube.create({
+      cache: new UniversalCache(false),
       generate_session_locally: true,
       lang: "it",
       location: "IT",
@@ -21,35 +22,38 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
-  // 1. Fast path: Innertube IOS client (direct AAC/m4a playable on all browsers without decipher)
+  // 1. Instant Fast path: Innertube getBasicInfo IOS client (direct AAC/m4a in ~200ms without decipher)
   try {
     const yt = await getTube();
     try {
-      const info = await yt.getBasicInfo(id, { client: "IOS" });
+      const basic = await yt.getBasicInfo(id, { client: "IOS" });
       const format =
-        info.chooseFormat({ type: "audio", format: "mp4" }) ||
-        info.chooseFormat({ type: "audio", quality: "bestefficiency" });
+        basic.chooseFormat({ type: "audio", quality: "best" }) ||
+        basic.chooseFormat({ type: "audio", format: "mp4" }) ||
+        basic.chooseFormat({ type: "audio" });
       if (format?.url) return format.url;
     } catch {
       /* continue */
     }
 
-    // Parallel fallback across other clients
-    const fallbackClients = ["ANDROID", "YTMUSIC", "TV_EMBEDDED"] as const;
-    const url = await Promise.any(
-      fallbackClients.map(async (client) => {
-        const info = await yt.getBasicInfo(id, { client });
-        const format =
-          info.chooseFormat({ type: "audio", format: "mp4" }) ||
-          info.chooseFormat({ type: "audio", quality: "bestefficiency" });
-        if (!format) throw new Error("no format");
-        const u = format.url || (await format.decipher(yt.session.player));
-        if (!u) throw new Error("no url");
-        return u;
-      }),
-    ).catch(() => null);
+    try {
+      const info = await yt.getInfo(id, { client: "IOS" });
+      const format =
+        info.chooseFormat({ type: "audio", quality: "best" }) ||
+        info.chooseFormat({ type: "audio", format: "mp4" }) ||
+        info.chooseFormat({ type: "audio" });
+      if (format?.url) return format.url;
+    } catch {
+      /* continue */
+    }
 
-    if (url) return url;
+    try {
+      const basicAnd = await yt.getBasicInfo(id, { client: "ANDROID" });
+      const format = basicAnd.chooseFormat({ type: "audio" });
+      if (format?.url) return format.url;
+    } catch {
+      /* continue */
+    }
   } catch {
     /* fallback */
   }

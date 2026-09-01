@@ -366,6 +366,26 @@ var AccessibilityData = class {
 	}
 };
 //#endregion
+//#region node_modules/youtubei.js/dist/src/utils/Cache.js
+var UniversalCache = class {
+	#cache;
+	constructor(persistent, persistent_directory) {
+		this.#cache = new Platform.shim.Cache(persistent, persistent_directory);
+	}
+	get cache_dir() {
+		return this.#cache.cache_dir;
+	}
+	get(key) {
+		return this.#cache.get(key);
+	}
+	set(key, value) {
+		return this.#cache.set(key, value);
+	}
+	remove(key) {
+		return this.#cache.remove(key);
+	}
+};
+//#endregion
 //#region node_modules/youtubei.js/dist/src/utils/Constants.js
 var URLS = {
 	YT_BASE: "https://www.youtube.com",
@@ -24809,4 +24829,4 @@ Platform.load({
 	CustomEvent
 });
 //#endregion
-export { Innertube as t };
+export { UniversalCache as n, Innertube as t };

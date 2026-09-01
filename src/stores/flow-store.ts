@@ -250,7 +250,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const plays = readJson<Record<string, number>>(PLAYS_KEY, {});
     const followedArtists = readJson<string[]>(ARTISTS_KEY, []);
     const profileName = readJson<string>("flow_profile_name", "Flow User");
-    const hasSeenOnboarding = readJson<boolean>("flow_onboarding_done", false);
+    const hasSeenOnboarding = readJson<boolean>("flow_onboarding_done", true);
     const trackMap: Record<string, Track> = {};
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
     set({ liked, recents, playlists, volume, trackMap, settings, listenMs, plays, followedArtists, profileName, hasSeenOnboarding });
