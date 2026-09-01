@@ -259,11 +259,19 @@ export function AudioEngine() {
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
 
-    const streamSource = current.streamUrl || (current.videoId ? `/api/stream?v=${current.videoId}` : fallbackSrc(current));
-
-    if (audio) {
+    if (current.videoId) {
+      if (audio) {
+        audio.loop = true;
+        applySrc(audio, "/silence.wav", wantPlay);
+      }
+      if (ytPlayerRef.current?.loadVideoById) {
+        ytPlayerRef.current.loadVideoById(current.videoId, 0);
+        if (wantPlay) ytPlayerRef.current.playVideo?.();
+      }
+    } else if (audio) {
       audio.loop = false;
-      applySrc(audio, streamSource, wantPlay);
+      ytPlayerRef.current?.pauseVideo?.();
+      applySrc(audio, current.streamUrl || "", wantPlay);
     }
 
     claimAudioFocus();
@@ -279,19 +287,27 @@ export function AudioEngine() {
     const audio = audioRef.current;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
-    if (audio) {
+    if (current?.videoId) {
+      if (isPlaying) {
+        if (audio) {
+          audio.loop = true;
+          if (!audio.src.endsWith("/silence.wav")) {
+            applySrc(audio, "/silence.wav", true);
+          } else {
+            void audio.play().catch(() => {});
+          }
+        }
+        ytPlayerRef.current?.playVideo?.();
+      } else {
+        audio?.pause();
+        ytPlayerRef.current?.pauseVideo?.();
+      }
+    } else if (audio) {
       applyOutput(audio);
       if (isPlaying) {
         void audio.play().catch(() => {});
       } else {
         audio.pause();
-      }
-    }
-    if (current?.videoId && ytPlayerRef.current) {
-      if (isPlaying) {
-        ytPlayerRef.current.playVideo?.();
-      } else {
-        ytPlayerRef.current.pauseVideo?.();
       }
     }
     if (current) pushLockScreen(current, isPlaying, currentTime || 0, current.duration || 0, 1);
@@ -310,30 +326,20 @@ export function AudioEngine() {
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
-    if (audioRef.current) {
+    if (current?.videoId && ytPlayerRef.current?.seekTo) {
+      ytPlayerRef.current.seekTo(currentTime, true);
+    } else if (audioRef.current) {
       if (Math.abs(audioRef.current.currentTime - currentTime) > 0.4) {
         audioRef.current.currentTime = currentTime;
       }
     }
-    if (current?.videoId && ytPlayerRef.current?.seekTo) {
-      ytPlayerRef.current.seekTo(currentTime, true);
-    }
   }, [seekVersion, currentTime, current?.videoId]);
 
-  // Universal real-time timeline ticker (syncs both <audio> and YouTube iframe)
+  // Universal real-time timeline ticker
   useEffect(() => {
     const timer = window.setInterval(() => {
       const s = useFlowStore.getState();
       if (!s.isPlaying) return;
-
-      const audio = audioRef.current;
-      if (audio && !audio.paused && Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
-        s.setCurrentTime(audio.currentTime);
-        if (Number.isFinite(audio.duration) && audio.duration > 0) {
-          s.setDuration(audio.duration);
-        }
-        return;
-      }
 
       if (s.current?.videoId && ytPlayerRef.current?.getCurrentTime) {
         try {
@@ -347,6 +353,14 @@ export function AudioEngine() {
           }
         } catch {
           /* ignore */
+        }
+      } else {
+        const audio = audioRef.current;
+        if (audio && !audio.paused && Number.isFinite(audio.currentTime)) {
+          s.setCurrentTime(audio.currentTime);
+          if (Number.isFinite(audio.duration) && audio.duration > 0) {
+            s.setDuration(audio.duration);
+          }
         }
       }
     }, 250);

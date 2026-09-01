@@ -3,13 +3,23 @@ import { getAudioUrl } from "@/lib/music/ytmusic.server";
 
 const cache = new Map<string, { url: string; exp: number }>();
 
+let lastError = "";
+
 async function resolveUrl(id: string, force = false): Promise<string | null> {
   const hit = cache.get(id);
   if (!force && hit && hit.exp > Date.now()) return hit.url;
-  const url = await getAudioUrl(id);
-  if (url) cache.set(id, { url, exp: Date.now() + 12 * 60_000 });
-  else cache.delete(id);
-  return url;
+  try {
+    const url = await getAudioUrl(id);
+    if (url) {
+      cache.set(id, { url, exp: Date.now() + 12 * 60_000 });
+      return url;
+    }
+  } catch (err: any) {
+    lastError = err?.message || String(err);
+    console.error("[resolveUrl error]", id, err);
+  }
+  cache.delete(id);
+  return null;
 }
 
 async function handleStream(request: Request): Promise<Response> {
@@ -27,7 +37,7 @@ async function handleStream(request: Request): Promise<Response> {
   if (wantSrc) {
     if (!target) {
       return Response.json(
-        { url: null },
+        { url: null, error: lastError || "Stream resolution failed" },
         {
           status: 404,
           headers: {

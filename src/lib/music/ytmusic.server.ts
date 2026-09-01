@@ -8,8 +8,6 @@ export async function getTube(): Promise<Innertube> {
     tubePromise = Innertube.create({
       cache: new UniversalCache(false),
       generate_session_locally: true,
-      lang: "it",
-      location: "IT",
     }).catch((err) => {
       tubePromise = null;
       throw err;
@@ -24,7 +22,7 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
 
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC_ANDROID"] as const;
+    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC"] as const;
 
     for (const client of clients) {
       try {
@@ -33,42 +31,20 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
           info.chooseFormat({ type: "audio", quality: "best" }) ||
           info.chooseFormat({ type: "audio", format: "mp4" }) ||
           info.chooseFormat({ type: "audio" });
-        if (format) {
-          if (format.url) return format.url;
-          if (typeof format.decipher === "function") {
-            const u = await format.decipher(yt.session.player);
-            if (u) return u;
-          }
+        if (format?.url) return format.url;
+        if (format && typeof format.decipher === "function") {
+          const u = await format.decipher(yt.session.player);
+          if (u) return u;
         }
-      } catch {
-        /* try next client */
+      } catch (e: any) {
+        console.error(`[getAudioUrl ${client} failed]`, id, e?.message || e);
       }
     }
-  } catch {
-    /* fallback */
+  } catch (err: any) {
+    console.error("[getAudioUrl error]", id, err?.message || err);
   }
 
-  // 2. Multi-instance fallback
-  const fallbackUrls = [
-    `https://pipedapi.kavin.rocks/streams/${id}`,
-    `https://api.piped.private.coffee/streams/${id}`,
-    `https://pipedapi.tokhmi.xyz/streams/${id}`,
-    `https://inv.nadeko.net/api/v1/videos/${id}`,
-    `https://invidious.nerdvpn.de/api/v1/videos/${id}`,
-    `https://yt.artemislena.eu/api/v1/videos/${id}`,
-  ];
-  const pipedUrl = await Promise.any(
-    fallbackUrls.map(async (ep) => {
-      const res = await fetch(ep, { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(3500) });
-      if (!res.ok) throw new Error("bad res");
-      const data = (await res.json()) as { audioStreams?: { url?: string }[]; adaptiveFormats?: { url?: string; type?: string; mimeType?: string }[] };
-      const streams = data.audioStreams || (data.adaptiveFormats || []).filter((f) => (f.type || f.mimeType || "").startsWith("audio"));
-      if (streams && streams.length && streams[0]?.url) return streams[0].url;
-      throw new Error("no stream");
-    }),
-  ).catch(() => null);
-
-  return pipedUrl;
+  return null;
 }
 
 function txt(value: unknown): string {
