@@ -229,6 +229,7 @@ export function AudioEngine() {
         const s = useFlowStore.getState();
         if (s.current?.videoId && ytPlayerRef.current?.playVideo) {
           ytPlayerRef.current.playVideo();
+          void audioRef.current?.play().catch(() => {});
         } else {
           void audioRef.current?.play().catch(() => {});
         }
@@ -267,14 +268,18 @@ export function AudioEngine() {
     const wantPlay = useFlowStore.getState().isPlaying;
 
     if (current.videoId) {
-      // YouTube Track
-      audio?.pause();
+      // YouTube Track - keep silent audio carrier active on native <audio> for iOS/Android background playback
+      if (audio) {
+        audio.loop = true;
+        applySrc(audio, "/silence.wav", wantPlay, true);
+      }
       if (ytPlayerRef.current?.loadVideoById) {
         ytPlayerRef.current.loadVideoById(current.videoId, 0);
         if (wantPlay) ytPlayerRef.current.playVideo();
       }
     } else if (audio) {
       // Radio / Direct Track
+      audio.loop = false;
       ytPlayerRef.current?.pauseVideo?.();
       applySrc(audio, fallbackSrc(current), wantPlay, true);
     }
@@ -293,8 +298,20 @@ export function AudioEngine() {
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
     if (current?.videoId && ytPlayerRef.current) {
-      if (isPlaying) ytPlayerRef.current.playVideo?.();
-      else ytPlayerRef.current.pauseVideo?.();
+      if (isPlaying) {
+        ytPlayerRef.current.playVideo?.();
+        if (audio) {
+          audio.loop = true;
+          if (!audio.src.endsWith("/silence.wav")) {
+            applySrc(audio, "/silence.wav", true, true);
+          } else {
+            void audio.play().catch(() => {});
+          }
+        }
+      } else {
+        ytPlayerRef.current.pauseVideo?.();
+        audio?.pause();
+      }
     } else if (audio) {
       applyOutput(audio);
       if (isPlaying) {
