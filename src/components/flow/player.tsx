@@ -60,9 +60,21 @@ import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/m
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
+function getStreamApiBase(): string {
+  if (typeof window === "undefined") return "";
+  const host = window.location.hostname;
+  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
+    return "https://flow-music-app-two.vercel.app";
+  }
+  return "";
+}
+
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
-  if (track.videoId) return cachedAudioUrl(track.videoId) || `/api/stream?v=${track.videoId}`;
+  if (track.videoId) {
+    const base = getStreamApiBase();
+    return cachedAudioUrl(track.videoId) || `${base}/api/stream?v=${track.videoId}`;
+  }
   return track.streamUrl || "";
 }
 

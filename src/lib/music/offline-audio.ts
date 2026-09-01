@@ -95,6 +95,15 @@ export function prefetchAudio(id: string) {
   void loadLocalAudio(id).catch(() => {});
 }
 
+function getStreamApiBase(): string {
+  if (typeof window === "undefined") return "";
+  const host = window.location.hostname;
+  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
+    return "https://flow-music-app-two.vercel.app";
+  }
+  return "";
+}
+
 export async function loadLocalAudio(id: string): Promise<string> {
   const hit = mem.get(id);
   if (hit) return hit;
@@ -103,9 +112,10 @@ export async function loadLocalAudio(id: string): Promise<string> {
   const job = (async () => {
     const persisted = await fromPersistent(id);
     if (persisted) return persisted;
+    const base = getStreamApiBase();
     return withBackoff(
       async () => {
-        const res = await fetch(`/api/stream?v=${id}`, {
+        const res = await fetch(`${base}/api/stream?v=${id}`, {
           cache: "no-store",
           headers: { Accept: "audio/*,*/*" },
         });
