@@ -22,25 +22,34 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
 
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC"] as const;
+    // Extra clients help YT Music / age-gated ids that IOS/WEB miss.
+    // ANDROID_MUSIC is youtubei.js YTMUSIC_ANDROID; both are tried and errors swallowed.
+    const clients = [
+      "IOS",
+      "ANDROID",
+      "WEB",
+      "YTMUSIC",
+      "TV",
+      "TV_EMBEDDED",
+      "MWEB",
+      "ANDROID_MUSIC",
+      "YTMUSIC_ANDROID",
+    ] as const;
 
     for (const client of clients) {
       try {
-        const info = await yt.getBasicInfo(id, { client });
+        const info = await yt.getBasicInfo(id, { client: client as "WEB" });
         const format =
-          info.chooseFormat({ type: "audio" }) ||
           info.chooseFormat({ type: "audio", quality: "best" }) ||
           info.chooseFormat({ type: "audio", format: "mp4" }) ||
-          info.streaming_data?.adaptive_formats?.find((f) => (f.mime_type || "").startsWith("audio/")) ||
-          info.streaming_data?.formats?.find((f) => (f.mime_type || "").startsWith("audio/") || f.has_audio);
-
+          info.chooseFormat({ type: "audio" });
         if (format?.url) return format.url;
-        if (format && typeof (format as any).decipher === "function") {
-          const u = await (format as any).decipher(yt.session.player);
+        if (format && typeof format.decipher === "function") {
+          const u = await format.decipher(yt.session.player);
           if (u) return u;
         }
       } catch (e: any) {
-        /* try next client */
+        console.error(`[getAudioUrl ${client} failed]`, id, e?.message || e);
       }
     }
   } catch (err: any) {
