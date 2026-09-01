@@ -143,19 +143,19 @@ var manifest = {
 	},
 	"1d774a97ddc65e6ea8fa4d8de5564851dac8d347f4da7748d684e9a06fd845d9": {
 		functionName: "listUserPlaylists_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"24128d9fef7ed7b28e076e3ff5dd8aeb86eaa462cea934c8c730433ef91fb021": {
 		functionName: "saveLibrary_createServerFn_handler",
-		importer: () => import("./cloud-SQWH07jI.mjs")
+		importer: () => import("./cloud-IG8loWQS.mjs")
 	},
 	"2c5986bfbbc1fec6871fbfb28bb0e161830c733aab33519ddc02a3fe26bff3bd": {
 		functionName: "unfollowUser_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"348717c0bc10e27730f609890bfe31e7973d38f21f4d1e318fb4699d08d7b865": {
 		functionName: "listFriendsFeed_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"351f225b34096eb08e6d35a1522b9a9fb7771752e02520f75204619318aa87bf": {
 		functionName: "lastFmUpdate_createServerFn_handler",
@@ -163,7 +163,7 @@ var manifest = {
 	},
 	"38bf62ce71e0190290db930d5798ef4ee437b20a1cdff3eee56aecfdfcf321b3": {
 		functionName: "getSharedPlaylist_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"3a61f6d9a5b2a72932f3b42ae25bd9fea4a51eb3d0412a5c2087bade843a5521": {
 		functionName: "getDiscoverMix_createServerFn_handler",
@@ -207,7 +207,7 @@ var manifest = {
 	},
 	"a647c0c3f3b4aeb4738fff3de93771df92b8a50843fdc50af33dc5655a22b8b9": {
 		functionName: "loadLibrary_createServerFn_handler",
-		importer: () => import("./cloud-SQWH07jI.mjs")
+		importer: () => import("./cloud-IG8loWQS.mjs")
 	},
 	"ab37ff9b70b544c9bbbc85c414574743846319983fa1544ae2f39e0b18722c41": {
 		functionName: "getPlayUrl_createServerFn_handler",
@@ -219,7 +219,7 @@ var manifest = {
 	},
 	"b3740a781b8c2931661ba664483641862702a657b02d31b78df7cf3880636cc4": {
 		functionName: "addSharedTrack_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"ce8a487e4cbefbdf4ec0ffa79cb9704d62902152f43f9d7d07bca5a65759f7c5": {
 		functionName: "getTrackLyrics_createServerFn_handler",
@@ -227,7 +227,7 @@ var manifest = {
 	},
 	"d10a7b663b69d3e1af86f8323b415e9018c2157846c363d760b3b1d7cc8ba126": {
 		functionName: "followUser_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"e717f14110eb25ec0b39ab5ab4b7f9b3b857b73869aee0b9e1025fd5f0dba8d9": {
 		functionName: "getCountryRadios_createServerFn_handler",
@@ -239,7 +239,7 @@ var manifest = {
 	},
 	"eb715264cb14916343622bdad7fc98482b5f416cefea1798c071844e56a8e606": {
 		functionName: "publishPlaylist_createServerFn_handler",
-		importer: () => import("./share-BG2-XL_R.mjs")
+		importer: () => import("./share-DbZB6tJ7.mjs")
 	},
 	"ec02d6163239e7f655cf1fccbdc3f61e78a074317e13902650d1532a6e9f3fe4": {
 		functionName: "createMoodMix_createServerFn_handler",
@@ -1513,7 +1513,7 @@ var getBaseManifest = getProdBaseManifest;
 var createEarlyHintsForRequest = createEarlyHintsCollector;
 async function loadEntries() {
 	const [routerEntry, startEntry, pluginAdapters] = await Promise.all([
-		import("./router-BRYeERQ6.mjs").then((n) => n.t),
+		import("./router-ClPsGtB2.mjs").then((n) => n.t),
 		import("./start-5Z2QO8AU.mjs"),
 		import("./empty-plugin-adapters-D9UWiqvJ.mjs")
 	]);
