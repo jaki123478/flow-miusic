@@ -106,21 +106,26 @@ export function AudioEngine() {
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
-    // Reloading src while hidden kills Android audio (play() is rejected; Range stream dies).
+    // Reloading src / calling load() while hidden kills lock-screen audio
+    // (play() is rejected; the Range stream dies). Never swap src when hidden.
     if (document.hidden) {
       applyOutput(audio);
-      if (play && audio.paused) void audio.play().catch(() => {});
+      if (play && audio.paused && useFlowStore.getState().isPlaying) {
+        void audio.play().catch(() => {});
+      }
       return;
     }
     if (lastSrc.current === src) {
       applyOutput(audio);
-      if (play && audio.paused) void audio.play().catch(() => {});
+      if (play && audio.paused && useFlowStore.getState().isPlaying) {
+        void audio.play().catch(() => {});
+      }
       return;
     }
     const playing = !audio.paused && !audio.error;
     const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
     // Mid-play blob swap calls load() and drops Chrome Android audio focus.
-    if (playing && blobUpgrade) return;
+    if (blobUpgrade && playing) return;
     if (playing && !force) return;
     const keep = audio.currentTime || 0;
     lastSrc.current = src;
@@ -202,11 +207,26 @@ export function AudioEngine() {
       void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
     }
     const el = audioRef.current;
+    const w = window as unknown as {
+      __FLOW_AUDIO_EL__?: HTMLAudioElement;
+      __flowAudioPause?: () => void;
+      __flowAudioResume?: () => void;
+    };
     if (el) {
-      (window as unknown as { __FLOW_AUDIO_EL__?: HTMLAudioElement }).__FLOW_AUDIO_EL__ = el;
+      w.__FLOW_AUDIO_EL__ = el;
       el.setAttribute("playsinline", "true");
       el.setAttribute("webkit-playsinline", "true");
     }
+    w.__flowAudioPause = () => {
+      useFlowStore.getState().pause();
+      audioRef.current?.pause();
+    };
+    w.__flowAudioResume = () => {
+      unlockAudioSession();
+      useFlowStore.getState().resume();
+      const a = audioRef.current;
+      if (a && a.paused) void a.play().catch(() => {});
+    };
     const handleUserInteraction = () => {
       unlockAudioSession();
     };
@@ -250,6 +270,8 @@ export function AudioEngine() {
       window.removeEventListener("pointerdown", handleUserInteraction);
       window.removeEventListener("touchstart", handleUserInteraction);
       window.removeEventListener("keydown", handleUserInteraction);
+      delete w.__flowAudioPause;
+      delete w.__flowAudioResume;
       unbindFocus();
     };
   }, []);
@@ -274,6 +296,18 @@ export function AudioEngine() {
     const st = useFlowStore.getState();
     const nxt = st.queue[st.queueIndex + 1];
     if (nxt?.videoId && nxt.videoId !== current.videoId) prefetchAudio(nxt.videoId);
+    // Warm the blob cache in parallel. Never applySrc while playing or hidden.
+    if (current.videoId && !cachedAudioUrl(current.videoId)) {
+      const warmId = current.videoId;
+      void loadLocalAudio(warmId)
+        .then((url) => {
+          const a = audioRef.current;
+          if (!a || document.hidden || !a.paused) return;
+          if (useFlowStore.getState().current?.videoId !== warmId) return;
+          applySrc(a, url, useFlowStore.getState().isPlaying, false);
+        })
+        .catch(() => {});
+    }
   }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
 
   useEffect(() => {

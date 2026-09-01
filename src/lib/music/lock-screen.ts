@@ -28,7 +28,9 @@ export function unlockAudioSession() {
       if (audioContext.state === "suspended") {
         void audioContext.resume();
       }
-      if (!keepAliveNode && audioContext) {
+      // Oscillator keep-alive is Apple-mobile only. On Android it steals
+      // audio focus from the native <audio> element when the screen locks.
+      if (!keepAliveNode && audioContext && isAppleMobile() && !isAndroid()) {
         const osc = audioContext.createOscillator();
         const gain = audioContext.createGain();
         gain.gain.value = 0.00001; // Inaudible keep-alive for iOS Safari background thread
@@ -38,8 +40,7 @@ export function unlockAudioSession() {
         keepAliveNode = osc;
       }
     }
-    // Do not assign /silence.wav to the media element — it steals Android
-    // audio focus from the real stream. If there is no real src, leave it.
+    // NEVER assign /silence.wav (or any dummy src) to __FLOW_AUDIO_EL__.
   } catch {
     /* ignore */
   }

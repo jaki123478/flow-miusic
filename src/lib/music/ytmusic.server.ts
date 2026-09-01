@@ -22,11 +22,23 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
 
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC"] as const;
+    // Extra clients help YT Music / age-gated ids that IOS/WEB miss.
+    // ANDROID_MUSIC is youtubei.js YTMUSIC_ANDROID; both are tried and errors swallowed.
+    const clients = [
+      "IOS",
+      "ANDROID",
+      "WEB",
+      "YTMUSIC",
+      "TV",
+      "TV_EMBEDDED",
+      "MWEB",
+      "ANDROID_MUSIC",
+      "YTMUSIC_ANDROID",
+    ] as const;
 
     for (const client of clients) {
       try {
-        const info = await yt.getBasicInfo(id, { client });
+        const info = await yt.getBasicInfo(id, { client: client as "WEB" });
         const format =
           info.chooseFormat({ type: "audio", quality: "best" }) ||
           info.chooseFormat({ type: "audio", format: "mp4" }) ||
