@@ -6,7 +6,6 @@ let tubePromise: Promise<Innertube> | null = null;
 export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
     tubePromise = Innertube.create({
-      retrieve_player: false,
       generate_session_locally: true,
       lang: "it",
       location: "IT",
@@ -25,13 +24,15 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   // 1. Innertube direct resolution
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "YTMUSIC", "WEB"] as const;
+    const clients = ["IOS", "ANDROID", "YTMUSIC", "TV_EMBEDDED", "WEB"] as const;
     for (const client of clients) {
       try {
         const info = await yt.getBasicInfo(id, { client });
         const format = info.chooseFormat({ type: "audio", quality: "bestefficiency" });
-        const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
-        if (url) return url;
+        if (format) {
+          const url = format.url || (await format.decipher(yt.session.player).catch(() => ""));
+          if (url) return url;
+        }
       } catch {
         /* next client */
       }
@@ -44,7 +45,10 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   const fallbackUrls = [
     `https://pipedapi.kavin.rocks/streams/${id}`,
     `https://api.piped.private.coffee/streams/${id}`,
+    `https://pipedapi.tokhmi.xyz/streams/${id}`,
     `https://inv.nadeko.net/api/v1/videos/${id}`,
+    `https://invidious.nerdvpn.de/api/v1/videos/${id}`,
+    `https://yt.artemislena.eu/api/v1/videos/${id}`,
   ];
   for (const ep of fallbackUrls) {
     try {
