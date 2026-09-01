@@ -381,7 +381,19 @@ export function AudioEngine() {
           }
         }}
         onEnded={() => {
-          useFlowStore.getState().onEnded();
+          // CRITICO iOS: Avvia il brano successivo DENTRO l'handler ended sullo stesso elemento audio
+          const st = useFlowStore.getState();
+          const nextIdx = st.queueIndex + 1;
+          if (nextIdx < st.queue.length) {
+            const nextTrack = st.queue[nextIdx];
+            const nextSrc = nextTrack.streamUrl || (nextTrack.videoId ? `/api/stream?v=${nextTrack.videoId}` : "");
+            if (audioRef.current && nextSrc) {
+              audioRef.current.src = nextSrc;
+              audioRef.current.load();
+              void audioRef.current.play().catch(() => {});
+            }
+          }
+          st.onEnded();
         }}
         onError={() => {
           const st = useFlowStore.getState();

@@ -14,14 +14,13 @@ export function prefersNativeYtAudio() {
   return isAndroid() || isAppleMobile();
 }
 
+import { getBackgroundPlayer } from "./background-audio";
+
 export function unlockAudioSession() {
   if (typeof window === "undefined") return;
   try {
-    const el = (window as unknown as { __FLOW_AUDIO_EL__?: HTMLAudioElement }).__FLOW_AUDIO_EL__;
-    if (el && el.paused && !el.src) {
-      el.src = "/silence.wav";
-      void el.play().catch(() => {});
-    }
+    const player = getBackgroundPlayer();
+    void player.unlock();
   } catch {
     /* ignore */
   }

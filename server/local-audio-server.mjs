@@ -1,9 +1,10 @@
-// @ts-nocheck
-import http from "node:http";
-import { Innertube } from "youtubei.js";
+﻿// @ts-nocheck
+import http from 'node:http';
+import { Innertube } from 'youtubei.js';
 
 const PORT = process.env.STREAM_PORT ? parseInt(process.env.STREAM_PORT, 10) : 3001;
-const cache = new Map();
+const bufferCache = new Map();
+const urlCache = new Map();
 
 let ytInstance = null;
 async function getTube() {
@@ -14,7 +15,7 @@ async function getTube() {
 }
 
 async function resolveAudioUrl(id) {
-  const hit = cache.get(id);
+  const hit = urlCache.get(id);
   if (hit && hit.exp > Date.now()) return hit.url;
 
   const yt = await getTube();
@@ -31,13 +32,13 @@ async function resolveAudioUrl(id) {
         info.streaming_data?.formats?.find(f => (f.mime_type || '').startsWith('audio/') || f.has_audio);
 
       if (format?.url) {
-        cache.set(id, { url: format.url, exp: Date.now() + 15 * 60_000 });
+        urlCache.set(id, { url: format.url, exp: Date.now() + 60 * 60_000 });
         return format.url;
       }
       if (format && typeof format.decipher === 'function') {
         const u = await format.decipher(yt.session.player);
         if (u) {
-          cache.set(id, { url: u, exp: Date.now() + 15 * 60_000 });
+          urlCache.set(id, { url: u, exp: Date.now() + 60 * 60_000 });
           return u;
         }
       }
@@ -46,6 +47,42 @@ async function resolveAudioUrl(id) {
     }
   }
   return null;
+}
+
+async function getAudioBuffer(id) {
+  const cached = bufferCache.get(id);
+  if (cached && cached.exp > Date.now()) return cached;
+
+  const url = await resolveAudioUrl(id);
+  if (!url) return null;
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+      },
+    });
+    if (!res.ok) return null;
+    const arrayBuf = await res.arrayBuffer();
+    const buf = Buffer.from(arrayBuf);
+    const contentType = res.headers.get('content-type') || 'audio/mp4';
+    const entry = {
+      buffer: buf,
+      contentType,
+      length: buf.length,
+      exp: Date.now() + 120 * 60_000,
+    };
+    bufferCache.set(id, entry);
+    // Trim cache to max 20 songs
+    if (bufferCache.size > 20) {
+      const oldest = bufferCache.keys().next().value;
+      if (oldest) bufferCache.delete(oldest);
+    }
+    return entry;
+  } catch (err) {
+    console.error('[getAudioBuffer error]', id, err);
+    return null;
+  }
 }
 
 const server = http.createServer(async (req, res) => {
@@ -64,7 +101,7 @@ const server = http.createServer(async (req, res) => {
 
   if (url.pathname === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ status: 'ok', port: PORT, time: Date.now() }));
+    res.end(JSON.stringify({ status: 'ok', port: PORT, cacheSize: bufferCache.size, time: Date.now() }));
     return;
   }
 
@@ -87,51 +124,47 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const target = await resolveAudioUrl(id).catch(() => null);
-    if (!target) {
+    const audioEntry = await getAudioBuffer(id);
+    if (!audioEntry) {
+      // Fallback to direct redirect if buffering failed
+      const directUrl = await resolveAudioUrl(id);
+      if (directUrl) {
+        res.writeHead(302, { Location: directUrl });
+        res.end();
+        return;
+      }
       res.writeHead(404);
       res.end('No stream found');
       return;
     }
 
-    try {
-      const range = req.headers['range'] || 'bytes=0-';
-      const upstream = await fetch(target, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
-          Range: range,
-        },
-      });
+    const { buffer, contentType, length } = audioEntry;
+    const rangeHeader = req.headers.range;
 
-      const resHeaders = {
-        'Content-Type': upstream.headers.get('content-type') || 'audio/mp4',
+    if (rangeHeader) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10) || 0;
+      const end = parts[1] ? parseInt(parts[1], 10) : length - 1;
+      const chunkSize = end - start + 1;
+
+      res.writeHead(206, {
+        'Content-Range': 'bytes ' + start + '-' + end + '/' + length,
         'Accept-Ranges': 'bytes',
+        'Content-Length': chunkSize,
+        'Content-Type': contentType,
+        'Cache-Control': 'public, max-age=86400, immutable',
         'Access-Control-Allow-Origin': '*',
-        'Cache-Control': 'public, max-age=3600',
-      };
-
-      const cr = upstream.headers.get('content-range');
-      if (cr) resHeaders['Content-Range'] = cr;
-
-      const cl = upstream.headers.get('content-length');
-      if (cl) resHeaders['Content-Length'] = cl;
-
-      res.writeHead(upstream.status, resHeaders);
-
-      if (upstream.body) {
-        const reader = upstream.body.getReader();
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          res.write(value);
-        }
-      }
-      res.end();
-      return;
-    } catch (e) {
-      console.error('[stream proxy error]', e);
-      res.writeHead(302, { Location: target });
-      res.end();
+      });
+      res.end(buffer.subarray(start, end + 1));
+    } else {
+      res.writeHead(200, {
+        'Content-Length': length,
+        'Content-Type': contentType,
+        'Accept-Ranges': 'bytes',
+        'Cache-Control': 'public, max-age=86400, immutable',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(buffer);
     }
     return;
   }
@@ -141,5 +174,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log('[Flow Audio Server] Running on http://0.0.0.0:' + PORT);
+  console.log('[Flow Turbo Audio Server] Running on http://0.0.0.0:' + PORT);
 });
