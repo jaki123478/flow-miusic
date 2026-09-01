@@ -46,7 +46,7 @@ export interface Sql {
  */
 const globalRef = globalThis as typeof globalThis & {
   __pgSqlPromise__?: Promise<Sql>;
-  __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite>;
+  __pgliteInstance__?: Promise<import("@electric-sql/pglite").PGlite | undefined>;
   __pgliteMigrateChain__?: Promise<void>;
 };
 
