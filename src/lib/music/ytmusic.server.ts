@@ -22,37 +22,27 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
-  // 1. Instant Fast path: Innertube getBasicInfo IOS client (direct AAC/m4a in ~200ms without decipher)
   try {
     const yt = await getTube();
-    try {
-      const basic = await yt.getBasicInfo(id, { client: "IOS" });
-      const format =
-        basic.chooseFormat({ type: "audio", quality: "best" }) ||
-        basic.chooseFormat({ type: "audio", format: "mp4" }) ||
-        basic.chooseFormat({ type: "audio" });
-      if (format?.url) return format.url;
-    } catch {
-      /* continue */
-    }
+    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC_ANDROID"] as const;
 
-    try {
-      const info = await yt.getInfo(id, { client: "IOS" });
-      const format =
-        info.chooseFormat({ type: "audio", quality: "best" }) ||
-        info.chooseFormat({ type: "audio", format: "mp4" }) ||
-        info.chooseFormat({ type: "audio" });
-      if (format?.url) return format.url;
-    } catch {
-      /* continue */
-    }
-
-    try {
-      const basicAnd = await yt.getBasicInfo(id, { client: "ANDROID" });
-      const format = basicAnd.chooseFormat({ type: "audio" });
-      if (format?.url) return format.url;
-    } catch {
-      /* continue */
+    for (const client of clients) {
+      try {
+        const info = await yt.getBasicInfo(id, { client });
+        const format =
+          info.chooseFormat({ type: "audio", quality: "best" }) ||
+          info.chooseFormat({ type: "audio", format: "mp4" }) ||
+          info.chooseFormat({ type: "audio" });
+        if (format) {
+          if (format.url) return format.url;
+          if (typeof format.decipher === "function") {
+            const u = await format.decipher(yt.session.player);
+            if (u) return u;
+          }
+        }
+      } catch {
+        /* try next client */
+      }
     }
   } catch {
     /* fallback */
