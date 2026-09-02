@@ -100,42 +100,6 @@ async function handleStream(request: Request): Promise<Response> {
     );
   }
 
-  // High speed buffered delivery from PC RAM
-  const audioEntry = await getBufferedAudio(id);
-  if (audioEntry) {
-    const { buffer, contentType, length } = audioEntry;
-    const range = request.headers.get("range");
-    if (range) {
-      const parts = range.replace(/bytes=/, "").split("-");
-      const start = parseInt(parts[0], 10) || 0;
-      const end = parts[1] ? parseInt(parts[1], 10) : length - 1;
-      const chunk = buffer.subarray(start, end + 1);
-
-      return new Response(chunk as unknown as BodyInit, {
-        status: 206,
-        headers: {
-          "Content-Type": contentType,
-          "Content-Range": `bytes ${start}-${end}/${length}`,
-          "Content-Length": String(chunk.byteLength),
-          "Accept-Ranges": "bytes",
-          "Access-Control-Allow-Origin": "*",
-          "Cache-Control": "public, max-age=86400, immutable",
-        },
-      });
-    }
-
-    return new Response(buffer as unknown as BodyInit, {
-      status: 200,
-      headers: {
-        "Content-Type": contentType,
-        "Content-Length": String(length),
-        "Accept-Ranges": "bytes",
-        "Access-Control-Allow-Origin": "*",
-        "Cache-Control": "public, max-age=86400, immutable",
-      },
-    });
-  }
-
   if (target) {
     try {
       const range = request.headers.get("range") || "bytes=0-";
@@ -146,7 +110,7 @@ async function handleStream(request: Request): Promise<Response> {
           Range: range,
           Accept: "*/*",
         },
-        signal: AbortSignal.timeout(12000),
+        signal: AbortSignal.timeout(10000),
       });
 
       if (upstream.ok || upstream.status === 206) {

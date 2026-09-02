@@ -206,6 +206,17 @@ export const getGenreMix = createServerFn({ method: "GET" })
     }
   });
 
+export const resolveAudioStreamUrl = createServerFn({ method: "GET" })
+  .validator((d: { videoId: string }) => d)
+  .handler(async ({ data }) => {
+    try {
+      const yt = await import("./ytmusic.server");
+      return await yt.getAudioUrl(data.videoId);
+    } catch {
+      return null;
+    }
+  });
+
 export const getCountryRadios = createServerFn({ method: "GET" })
   .validator((d: { countryCode: string }) => d)
   .handler(async ({ data }) => {

@@ -28,10 +28,13 @@ import {
   ShieldCheck,
   Volume2,
   VolumeX,
+  Smartphone,
 } from "lucide-react";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore, type FlowSettings } from "@/stores/flow-store";
 import { AudioVisualizer } from "./visualizer";
+import { AndroidPowerHubModal } from "./android-power-hub";
+import { notifyNativeTrackChange, notifyNativeLyricLine, isAndroidNative } from "@/lib/music/android-bridge";
 
 const EQ_PRESETS = [
   { id: "flat", label: "Flat", bass: 0, treble: 0 },
@@ -243,6 +246,7 @@ export function AudioEngine() {
       showAndroidNowPlaying(current);
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
+    notifyNativeTrackChange(current, wantPlay, 0);
     const st = useFlowStore.getState();
     const nxt = st.queue[st.queueIndex + 1];
     if (nxt?.videoId && nxt.videoId !== current.videoId) prefetchAudio(nxt.videoId);
@@ -259,7 +263,10 @@ export function AudioEngine() {
     } else {
       audio.pause();
     }
-    if (current) pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
+    if (current) {
+      pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
+      notifyNativeTrackChange(current, isPlaying, audio.currentTime || 0);
+    }
   }, [isPlaying, current]);
 
   useEffect(() => {
@@ -509,6 +516,7 @@ export function FullPlayer() {
   const [showEqMenu, setShowEqMenu] = useState(false);
   const [showCarMode, setShowCarMode] = useState(false);
   const [showAudioHud, setShowAudioHud] = useState(false);
+  const [showAndroidHub, setShowAndroidHub] = useState(false);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const lyricsBox = useRef<HTMLDivElement | null>(null);
 
@@ -548,17 +556,21 @@ export function FullPlayer() {
     setLyricsLoading(true);
     void getTrackLyrics({
       data: {
-        videoId: current.videoId,
         title: current.title,
         artist: current.artist,
         album: current.album,
         duration: current.duration || duration || undefined,
+        videoId: current.videoId,
       },
     })
       .then((res) => {
         if (cancelled) return;
-        lyricsMem.set(key, res);
-        setLyrics(res);
+        if (res) {
+          lyricsMem.set(key, res);
+          setLyrics(res);
+        } else {
+          setLyrics(null);
+        }
       })
       .catch(() => {
         if (!cancelled) setLyrics(null);
@@ -576,11 +588,14 @@ export function FullPlayer() {
     : -1;
 
   useEffect(() => {
+    if (activeIdx >= 0 && lyrics?.lines[activeIdx]) {
+      notifyNativeLyricLine(lyrics.lines[activeIdx].text, current?.title || "");
+    }
     if (!showLyrics || activeIdx < 0) return;
     const root = lyricsBox.current;
     const el = root?.querySelector(`[data-ly="${activeIdx}"]`);
     el?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [activeIdx, showLyrics]);
+  }, [activeIdx, showLyrics, current?.title]);
 
   if (!mounted || !current) return null;
 
@@ -1158,11 +1173,27 @@ export function FullPlayer() {
                   <Radio className="size-3.5" />
                   Radio
                 </button>
+
+                {/* Android Native Features Hub */}
+                <button
+                  type="button"
+                  onClick={() => setShowAndroidHub(true)}
+                  className="flex items-center gap-1.5 rounded-full bg-emerald-500/15 text-emerald-400 px-3 py-1 font-semibold hover:bg-emerald-500/25 transition-colors"
+                >
+                  <Smartphone className="size-3.5" />
+                  Android
+                </button>
               </div>
             </div>
           </div>
         )}
       </div>
+
+      {/* Android Power Hub Modal */}
+      <AndroidPowerHubModal
+        isOpen={showAndroidHub}
+        onClose={() => setShowAndroidHub(false)}
+      />
 
       {/* Audio Quality & DSP Specs HUD Modal */}
       {showAudioHud && (

@@ -104,6 +104,8 @@ function getStreamApiBase(): string {
   return "";
 }
 
+import { resolveAudioStreamUrl } from "./catalog";
+
 export async function loadLocalAudio(id: string): Promise<string> {
   const hit = mem.get(id);
   if (hit) return hit;
@@ -112,6 +114,15 @@ export async function loadLocalAudio(id: string): Promise<string> {
   const job = (async () => {
     const persisted = await fromPersistent(id);
     if (persisted) return persisted;
+
+    try {
+      const directUrl = await resolveAudioStreamUrl({ data: { videoId: id } });
+      if (directUrl) {
+        remember(id, directUrl, pinned.has(id));
+        return directUrl;
+      }
+    } catch (_) {}
+
     const base = getStreamApiBase();
     return withBackoff(
       async () => {
