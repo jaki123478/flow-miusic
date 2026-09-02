@@ -1,5 +1,4 @@
 import type { Track } from "./types";
-import { catalogStreamUrl } from "./stream-url";
 
 let pageHiding = false;
 let lifecycle = false;
@@ -77,7 +76,9 @@ export function directPlayTrack(track: Track) {
     void audio.play().catch(() => {});
     return;
   }
-  const src = track.videoId ? catalogStreamUrl(track.videoId) : track.streamUrl;
+  const src = track.videoId
+    ? "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(track.videoId)
+    : track.streamUrl;
   if (!src) return;
   audio.src = src;
   void audio.play().catch(() => {});

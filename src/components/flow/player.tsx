@@ -48,7 +48,6 @@ const EQ_PRESETS = [
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
 import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from "@/lib/music/native-audio";
-import { catalogStreamUrl } from "@/lib/music/stream-url";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -67,8 +66,9 @@ import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
-  if (track.videoId) {
-    return cachedAudioUrl(track.videoId) || catalogStreamUrl(track.videoId);
+  const id = track.videoId || "";
+  if (id.length === 11) {
+    return "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
   }
   return track.streamUrl || "";
 }
@@ -230,9 +230,7 @@ export function AudioEngine() {
         resumeElement(audio);
         return;
       }
-      const blob = cachedAudioUrl(id);
-      if (blob) applySrc(audio, blob, s.isPlaying, true);
-      else applySrc(audio, catalogStreamUrl(id), s.isPlaying, true);
+      applySrc(audio, "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(id), s.isPlaying, true);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
