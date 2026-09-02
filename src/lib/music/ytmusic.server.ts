@@ -168,12 +168,6 @@ const IOS_KEY = "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
 
 export let lastResolveDetail = "";
 
-function tubeFetch(yt: Innertube | null): typeof fetch {
-  const http = (yt as any)?.session?.http;
-  if (http && typeof http.fetch === "function") return http.fetch.bind(http);
-  return fetch;
-}
-
 function audioUrlFromPlayerData(data: any, notes: string[], tag: string): string | null {
   const status = data?.playabilityStatus?.status || data?.playability_status?.status || "?";
   const reason = data?.playabilityStatus?.reason || data?.playability_status?.reason || "";
@@ -204,39 +198,32 @@ async function iosPlayer(id: string, yt: Innertube | null, notes: string[]): Pro
     racyCheckOk: true,
     params: "8AEB",
   };
-  const endpoints = [
-    `https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&key=${IOS_KEY}`,
-    `https://www.youtube.com/youtubei/v1/player?prettyPrint=false&key=${IOS_KEY}`,
-  ];
-  const doFetch = tubeFetch(yt);
-  for (const endpoint of endpoints) {
-    try {
-      const res = await doFetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "User-Agent": IOS_UA,
-          "X-YouTube-Client-Name": "5",
-          "X-YouTube-Client-Version": IOS_CLIENT.clientVersion,
-          Origin: "https://www.youtube.com",
-          Referer: "https://www.youtube.com/",
-        },
-        body: JSON.stringify(body),
-        signal: AbortSignal.timeout(8000),
-      } as any);
-      const tag = endpoint.includes("googleapis") ? "ios-gapi" : "ios-www";
-      if (!res.ok) {
-        notes.push(`${tag}:http ${res.status}`);
-        continue;
-      }
-      const data = await res.json();
-      const url = audioUrlFromPlayerData(data, notes, tag);
-      if (url) return url;
-    } catch (err: any) {
-      notes.push(`ios-fetch:${err?.message || err}`);
+  const endpoint =
+    "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&key=" + IOS_KEY;
+  try {
+    const res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": IOS_UA,
+        "X-YouTube-Client-Name": "5",
+        "X-YouTube-Client-Version": IOS_CLIENT.clientVersion,
+        Origin: "https://www.youtube.com",
+        Referer: "https://www.youtube.com/",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) {
+      notes.push(`ios-gapi:http ${res.status}`);
+      return null;
     }
+    const data = await res.json();
+    return audioUrlFromPlayerData(data, notes, "ios-gapi");
+  } catch (err: any) {
+    notes.push(`ios-gapi:${err?.message || "fail"}`);
+    return null;
   }
-  return null;
 }
 
 export async function getAudioUrl(videoId: string): Promise<string | null> {
