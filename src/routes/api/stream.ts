@@ -96,8 +96,7 @@ async function handleStream(request: Request): Promise<Response> {
     parsed.searchParams.has("src") ||
     (request.headers.get("accept") || "").includes("application/json");
 
-  let target = await resolveUrl(id, false);
-  if (!target) target = await resolveUrl(id, true);
+  const target = await resolveUrl(id, false);
 
   if (wantSrc) {
     if (!target) {

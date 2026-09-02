@@ -1,4 +1,4 @@
-import { Innertube, UniversalCache } from "youtubei.js";
+import { Innertube } from "youtubei.js";
 import { FALLBACK_ART, type Track } from "./types";
 
 let tubePromise: Promise<Innertube> | null = null;
@@ -7,6 +7,7 @@ export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
     tubePromise = Innertube.create({
       generate_session_locally: true,
+      retrieve_player: true,
     }).catch((err) => {
       tubePromise = null;
       throw err;
@@ -15,60 +16,225 @@ export async function getTube(): Promise<Innertube> {
   return tubePromise;
 }
 
-function pickAudioFormat(info: any, yt: Innertube): Promise<string | null> {
-  const format =
-    info?.chooseFormat?.({ type: "audio", quality: "best" }) ||
-    info?.chooseFormat?.({ type: "audio", format: "mp4" }) ||
-    info?.chooseFormat?.({ type: "audio" }) ||
-    info?.streaming_data?.adaptive_formats?.find((f: any) => String(f.mime_type || "").startsWith("audio/")) ||
-    info?.streaming_data?.formats?.find((f: any) => String(f.mime_type || "").startsWith("audio/") || f.has_audio);
-  if (!format) return Promise.resolve(null);
-  if (format.url) return Promise.resolve(format.url);
+function isHttp(u: unknown): u is string {
+  return typeof u === "string" && /^https?:\/\//.test(u);
+}
+
+function isAudioFormat(format: any): boolean {
+  const mime = String(format?.mime_type || format?.mimeType || "");
+  return (
+    mime.startsWith("audio/") ||
+    !!format?.has_audio ||
+    !!format?.audio_quality ||
+    !!format?.audioQuality
+  );
+}
+
+async function urlFromFormat(format: any, yt: Innertube): Promise<string | null> {
+  if (!format) return null;
+  if (isHttp(format.url)) return format.url;
+  const player = (yt as any).session?.player;
   if (typeof format.decipher === "function") {
-    return Promise.resolve(format.decipher(yt.session.player)).then((u: string) => u || null);
+    try {
+      const u = await format.decipher(player);
+      if (isHttp(u)) return u;
+    } catch {
+      /* next */
+    }
   }
-  return Promise.resolve(null);
+  const signed = format.signature_cipher || format.signatureCipher;
+  if (signed && player && typeof player.decipher === "function") {
+    try {
+      const u = player.decipher(signed);
+      if (isHttp(u)) return u;
+    } catch {
+      /* next */
+    }
+  }
+  return null;
+}
+
+function collectFormats(info: any): any[] {
+  const out: any[] = [];
+  try {
+    const chosen = info?.chooseFormat?.({ type: "audio", quality: "best" });
+    if (chosen) out.push(chosen);
+  } catch {
+    /* ignore */
+  }
+  const sd = info?.streaming_data || info?.streamingData || info;
+  for (const key of ["adaptive_formats", "adaptiveFormats", "formats"]) {
+    const list = sd?.[key];
+    if (Array.isArray(list)) out.push(...list);
+  }
+  return out;
+}
+
+async function pickAudioFormat(info: any, yt: Innertube): Promise<string | null> {
+  const formats = collectFormats(info);
+  for (const format of formats) {
+    if (!isAudioFormat(format) && format !== formats[0]) continue;
+    const url = await urlFromFormat(format, yt);
+    if (url) return url;
+  }
+  for (const format of formats) {
+    const url = await urlFromFormat(format, yt);
+    if (url) return url;
+  }
+  return null;
+}
+
+function firstHttp(promises: Promise<string | null>[]): Promise<string | null> {
+  return new Promise((resolve) => {
+    let left = promises.length;
+    if (!left) return resolve(null);
+    let settled = false;
+    for (const p of promises) {
+      p.then((url) => {
+        if (!settled && url) {
+          settled = true;
+          resolve(url);
+          return;
+        }
+        if (--left === 0 && !settled) resolve(null);
+      }).catch(() => {
+        if (--left === 0 && !settled) resolve(null);
+      });
+    }
+  });
+}
+
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error("timeout")), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      (e) => {
+        clearTimeout(t);
+        reject(e);
+      },
+    );
+  });
+}
+
+async function fromInnertube(yt: Innertube, id: string, client: string): Promise<string | null> {
+  try {
+    const info = await withTimeout(yt.getBasicInfo(id, { client: client as any }), 6000);
+    const url = await pickAudioFormat(info, yt);
+    if (url) return url;
+  } catch {
+    /* next */
+  }
+  try {
+    const info = await withTimeout(
+      (yt as any).actions.execute("/player", { videoId: id, client, parse: true }),
+      6000,
+    );
+    const url = await pickAudioFormat(info, yt);
+    if (url) return url;
+  } catch {
+    /* next */
+  }
+  try {
+    const fmt = await withTimeout(
+      (yt as any).getStreamingData(id, { type: "audio", quality: "best", client }),
+      6000,
+    );
+    const url = await urlFromFormat(fmt, yt);
+    if (url) return url;
+  } catch {
+    /* next */
+  }
+  return null;
+}
+
+async function rawPlayer(
+  id: string,
+  clientName: string,
+  clientVersion: string,
+  extra: Record<string, unknown>,
+  ua: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "User-Agent": ua,
+        Origin: "https://www.youtube.com",
+      },
+      body: JSON.stringify({
+        videoId: id,
+        context: { client: { clientName, clientVersion, hl: "en", gl: "US", ...extra } },
+        contentCheckOk: true,
+        racyCheckOk: true,
+      }),
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    const formats = [
+      ...(data?.streamingData?.adaptiveFormats || []),
+      ...(data?.streamingData?.formats || []),
+    ];
+    for (const format of formats) {
+      if (!isAudioFormat(format)) continue;
+      if (isHttp(format.url)) return format.url;
+    }
+    for (const format of formats) {
+      if (isHttp(format.url)) return format.url;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function rawFallbacks(id: string): Promise<string | null> {
+  return firstHttp([
+    rawPlayer(
+      id,
+      "ANDROID_VR",
+      "1.65.10",
+      { deviceMake: "Oculus", deviceModel: "Quest 3", androidSdkVersion: 32 },
+      "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
+    ),
+    rawPlayer(
+      id,
+      "IOS",
+      "20.11.6",
+      { deviceMake: "Apple", deviceModel: "iPhone16,2", osName: "iOS", osVersion: "17.5.1" },
+      "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)",
+    ),
+    rawPlayer(
+      id,
+      "ANDROID",
+      "19.50.37",
+      { androidSdkVersion: 34, deviceMake: "Google", deviceModel: "Pixel 7" },
+      "com.google.android.youtube/19.50.37 (Linux; U; Android 14; en_US; Pixel 7 Build/UP1A) gzip",
+    ),
+  ]);
 }
 
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
-  try {
-    const yt = await getTube();
-    const clients = [
-      "IOS",
-      "ANDROID",
-      "ANDROID_MUSIC",
-      "YTMUSIC",
-      "YTMUSIC_ANDROID",
-      "TV",
-      "TV_EMBEDDED",
-      "MWEB",
-      "WEB",
-    ] as const;
+  const raw = rawFallbacks(id);
 
-    for (const client of clients) {
-      try {
-        const info = await yt.getBasicInfo(id, { client: client as any });
-        const url = await pickAudioFormat(info, yt);
-        if (url) return url;
-      } catch {
-        /* next client */
-      }
-      try {
-        const info = await (yt as any).getInfo(id, { client });
-        const url = await pickAudioFormat(info, yt);
-        if (url) return url;
-      } catch {
-        /* next */
-      }
-    }
+  try {
+    const yt = await withTimeout(getTube(), 8000);
+    const clients = ["ANDROID_VR", "IOS", "ANDROID", "WEB_EMBEDDED"] as const;
+    const url = await firstHttp([raw, ...clients.map((client) => fromInnertube(yt, id, client))]);
+    if (url) return url;
   } catch (err: any) {
     console.error("[getAudioUrl error]", id, err?.message || err);
   }
 
-  return null;
+  return raw;
 }
 
 function txt(value: unknown): string {
