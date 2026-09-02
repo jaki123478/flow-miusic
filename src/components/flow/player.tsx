@@ -48,6 +48,15 @@ const EQ_PRESETS = [
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
 import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from "@/lib/music/native-audio";
+import {
+  bindYtEmbed,
+  isYtEmbedActive,
+  pauseYtEmbed,
+  playYtEmbed,
+  resumeYtEmbed,
+  seekYtEmbed,
+  stopYtEmbed,
+} from "@/lib/music/yt-embed";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -242,7 +251,10 @@ export function AudioEngine() {
       const blob = cachedAudioUrl(id);
       if (blob) applySrc(audio, blob, s.isPlaying, true);
       else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
-      else if (s.isPlaying) recover(id, s.currentTime);
+      else {
+        void playYtEmbed(id);
+        if (s.isPlaying) recover(id, s.currentTime);
+      }
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
@@ -264,6 +276,16 @@ export function AudioEngine() {
     audio.addEventListener("stalled", onStalled);
     audio.addEventListener("ended", onEndedEv);
 
+    bindYtEmbed({
+      tick: (time, dur, playing) => {
+        if (!isYtEmbedActive()) return;
+        if (Number.isFinite(time)) setCurrentTime(time);
+        if (Number.isFinite(dur) && dur > 0) setDuration(dur);
+        const track = useFlowStore.getState().current;
+        if (track) pushLockScreen(track, playing, time, dur || 0, 1);
+      },
+      ended: () => useFlowStore.getState().onEnded(),
+    });
     bindLockScreenActions({
       play: () => {
         unlockAudioSession();
@@ -322,6 +344,7 @@ export function AudioEngine() {
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
+    stopYtEmbed();
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
@@ -347,8 +370,10 @@ export function AudioEngine() {
     claimAudioFocus();
     applyOutput(audio);
     if (isPlaying) {
-      void audio.play().catch(() => {});
+      if (isYtEmbedActive(current?.videoId)) resumeYtEmbed();
+      else void audio.play().catch(() => {});
     } else {
+      pauseYtEmbed();
       audio.pause();
     }
     if (current) {
@@ -367,7 +392,11 @@ export function AudioEngine() {
     lastSeek.current = seekVersion;
     const audio = el();
     if (!audio) return;
-    if (Math.abs(audio.currentTime - currentTime) > 0.4) audio.currentTime = currentTime;
+    if (isYtEmbedActive()) {
+      seekYtEmbed(currentTime);
+    } else if (Math.abs(audio.currentTime - currentTime) > 0.4) {
+      audio.currentTime = currentTime;
+    }
   }, [seekVersion, currentTime]);
 
   useEffect(() => {
