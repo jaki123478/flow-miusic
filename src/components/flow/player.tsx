@@ -150,7 +150,7 @@ export function AudioEngine() {
     const audio = el();
     const s = useFlowStore.getState();
     if (!audio || !s.current || !s.isPlaying) return;
-    const dead = Boolean(audio.error) || audio.readyState < 2 || audio.paused;
+    const dead = Boolean(audio.error) || audio.networkState === 3;
     if (!force && !dead) {
       playWhenReady(audio);
       return;
@@ -412,7 +412,7 @@ export function AudioEngine() {
     claimAudioFocus();
     applyOutput(audio);
     if (isPlaying) {
-      if (audio.error || audio.readyState < 1) wakePlayback(true);
+      if (audio.error) wakePlayback(true);
       else playWhenReady(audio);
     } else {
       audio.pause();
@@ -421,7 +421,7 @@ export function AudioEngine() {
       pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
       notifyNativeTrackChange(current, isPlaying, audio.currentTime || 0);
     }
-  }, [isPlaying, current]);
+  }, [isPlaying]);
 
   useEffect(() => {
     const audio = el();
