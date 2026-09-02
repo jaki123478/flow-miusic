@@ -1,12 +1,7 @@
-import { getPlayUrl } from "./catalog";
+import { catalogStreamUrl } from "./stream-url";
 
 export async function resolveDirectUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
-  try {
-    const out = await getPlayUrl({ data: { v: id } });
-    return out?.url || null;
-  } catch {
-    return null;
-  }
+  return catalogStreamUrl(id) || null;
 }
