@@ -195,7 +195,7 @@ export function StationEngine() {
     if (queue.length - queueIndex > 3) return;
     let cancelled = false;
     void getRelatedTracks({
-      data: { artist: current.artist, title: current.title, excludeId: current.id },
+      data: { artist: current.artist, title: current.title, excludeId: current.id, videoId: current.videoId },
     }).then((tracks) => {
       if (!cancelled && tracks.length) appendQueue(tracks);
     });

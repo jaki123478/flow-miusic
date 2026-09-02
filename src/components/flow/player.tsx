@@ -776,7 +776,7 @@ export function FullPlayer() {
     try {
       notify("Ricerca correlati YouTube Music…");
       const related = await getRelatedTracks({
-        data: { artist: current.artist, title: current.title, excludeId: current.id },
+        data: { artist: current.artist, title: current.title, excludeId: current.id, videoId: current.videoId },
       });
       if (related && related.length) {
         playQueue([current, ...related], 0);

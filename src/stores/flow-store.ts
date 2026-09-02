@@ -333,7 +333,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
           nextIndex = 0;
         } else if (settings.autoplayRelated && current) {
           void getRelatedTracks({
-            data: { artist: current.artist, title: current.title, excludeId: current.id },
+            data: { artist: current.artist, title: current.title, excludeId: current.id, videoId: current.videoId },
           })
             .then((related) => {
               if (related && related.length) {

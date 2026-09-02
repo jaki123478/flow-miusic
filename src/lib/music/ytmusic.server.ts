@@ -387,7 +387,7 @@ function toTrack(item: unknown): Track | null {
 }
 
 function walkTracks(root: unknown, into: Track[], seen: Set<string>, depth = 0) {
-  if (!root || depth > 14 || into.length > 80) return;
+  if (!root || depth > 16 || into.length > 250) return;
   if (Array.isArray(root)) {
     for (const item of root) walkTracks(item, into, seen, depth + 1);
     return;
@@ -426,6 +426,8 @@ function isLikelySong(track: Track): boolean {
   if (/\bplaylist\b|top hits \d{4}|trending songs \d{4}|best songs playlist|spotify pop mix/i.test(track.title)) {
     return false;
   }
+  if (track.duration > 0 && track.duration < 25) return false;
+  if (track.duration > 20 * 60) return false;
   return true;
 }
 
@@ -434,11 +436,65 @@ export async function searchYtMusic(query: string, limit = 24): Promise<Track[]>
   if (!q) return [];
   try {
     const yt = await getTube();
-    const result = await yt.music.search(q);
     const tracks: Track[] = [];
     const seen = new Set<string>();
-    walkTracks(result, tracks, seen);
+    try {
+      const songs = await yt.music.search(q, { type: "song" });
+      walkTracks(songs, tracks, seen);
+    } catch {
+      /* mixed search below */
+    }
+    if (tracks.length < limit) {
+      const mixed = await yt.music.search(q);
+      walkTracks(mixed, tracks, seen);
+    }
     return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function getYtMusicHome(limit = 48): Promise<Track[]> {
+  try {
+    const yt = await getTube();
+    const home = await yt.music.getHomeFeed();
+    const tracks: Track[] = [];
+    const seen = new Set<string>();
+    walkTracks(home.sections || home, tracks, seen);
+    try {
+      if (home.has_continuation && tracks.length < limit) {
+        const more = await home.getContinuation();
+        walkTracks(more.sections || more, tracks, seen);
+      }
+    } catch {
+      /* one page is enough */
+    }
+    return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
+export async function getRelatedSongs(videoId: string, limit = 24): Promise<Track[]> {
+  const id = String(videoId || "").trim();
+  if (!isVideoId(id)) return [];
+  try {
+    const yt = await getTube();
+    const tracks: Track[] = [];
+    const seen = new Set<string>();
+    try {
+      const upNext = await yt.music.getUpNext(id, true);
+      walkTracks(upNext, tracks, seen);
+    } catch {
+      /* related shelf below */
+    }
+    try {
+      const related = await yt.music.getRelated(id);
+      walkTracks(related, tracks, seen);
+    } catch {
+      /* ignore */
+    }
+    return uniqueTracks(tracks.filter(isLikelySong).filter((t) => t.videoId !== id)).slice(0, limit);
   } catch {
     return [];
   }
@@ -460,9 +516,8 @@ export async function getExploreTracks(): Promise<{ trending: Track[]; fresh: Tr
     for (const section of sections) {
       const title = `${txt(section.header?.title)} ${txt(section.title)}`.toLowerCase();
       if (/puntat|podcast|episodio/.test(title)) continue;
-      const isMusic = /video musical|nuovi video|brani|hits|official/.test(title);
-      if (!isMusic && title.trim()) continue;
-      const bucket = /nuov/.test(title) ? fresh : trending;
+      if (/film|movie trailer|comedy|gaming/.test(title)) continue;
+      const bucket = /nuov|fresh|release|album/.test(title) ? fresh : trending;
       const seen = bucket === fresh ? seenF : seenT;
       walkTracks(section.contents, bucket, seen);
     }
@@ -480,10 +535,10 @@ export async function getPlaylistTracks(playlistId: string, limit = 30): Promise
   if (!id) return [];
   try {
     const yt = await getTube();
-    const playlist = await yt.getPlaylist(id);
+    const playlist = await (yt.music.getPlaylist(id).catch(() => yt.getPlaylist(id)));
     const tracks: Track[] = [];
     const seen = new Set<string>();
-    walkTracks(playlist.items || playlist, tracks, seen);
+    walkTracks((playlist as { items?: unknown }).items || playlist, tracks, seen);
     return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
   } catch {
     return [];

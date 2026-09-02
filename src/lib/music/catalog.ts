@@ -112,25 +112,27 @@ export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () =>
   try {
     const yt = await import("./ytmusic.server");
     const settled = await Promise.allSettled([
-      yt.searchYtMusic("top hits official audio 2026", 16),
-      yt.searchYtMusic("hit italia canzone official audio", 12),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[0].playlistId, 16),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[1].playlistId, 12),
+      yt.getYtMusicHome(48),
+      yt.searchYtMusic("top hits 2026", 20),
+      yt.searchYtMusic("hit italia 2026", 16),
+      yt.getPlaylistTracks(HOME_PLAYLISTS[0].playlistId, 20),
+      yt.getPlaylistTracks(HOME_PLAYLISTS[1].playlistId, 16),
       radioBrowser("/json/stations/search?hidebroken=true&order=clickcount&reverse=true&limit=40"),
       yt.getExploreTracks(),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[2].playlistId, 12),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[3].playlistId, 12),
+      yt.getPlaylistTracks(HOME_PLAYLISTS[2].playlistId, 16),
+      yt.getPlaylistTracks(HOME_PLAYLISTS[3].playlistId, 16),
     ]);
-    const hits = settled[0].status === "fulfilled" ? settled[0].value : [];
-    const italy = settled[1].status === "fulfilled" ? settled[1].value : [];
-    const pop = settled[2].status === "fulfilled" ? settled[2].value : [];
-    const viral = settled[3].status === "fulfilled" ? settled[3].value : [];
-    const radiosRaw = settled[4].status === "fulfilled" ? settled[4].value : [];
-    const explore = settled[5].status === "fulfilled" ? settled[5].value : { trending: [], fresh: [] };
-    const global = settled[6].status === "fulfilled" ? settled[6].value : [];
-    const latino = settled[7].status === "fulfilled" ? settled[7].value : [];
+    const homeSongs = settled[0].status === "fulfilled" ? settled[0].value : [];
+    const hits = settled[1].status === "fulfilled" ? settled[1].value : [];
+    const italy = settled[2].status === "fulfilled" ? settled[2].value : [];
+    const pop = settled[3].status === "fulfilled" ? settled[3].value : [];
+    const viral = settled[4].status === "fulfilled" ? settled[4].value : [];
+    const radiosRaw = settled[5].status === "fulfilled" ? settled[5].value : [];
+    const explore = settled[6].status === "fulfilled" ? settled[6].value : { trending: [], fresh: [] };
+    const global = settled[7].status === "fulfilled" ? settled[7].value : [];
+    const latino = settled[8].status === "fulfilled" ? settled[8].value : [];
     const stations = radiosRaw.map(toStation).filter((s): s is RadioStation => Boolean(s)).slice(0, 18);
-    const trending = uniqueTracks([...hits, ...pop, ...explore.trending]).slice(0, 24);
+    const trending = uniqueTracks([...homeSongs, ...hits, ...pop, ...explore.trending]).slice(0, 36);
     const playlistTracks = [pop, viral, global, latino];
     const curated: CatalogCollection[] = HOME_PLAYLISTS.map((spec, i) => ({
       id: spec.id,
@@ -169,7 +171,7 @@ export const searchCatalog = createServerFn({ method: "GET" })
     if (!q) return { tracks: [] as Track[], radios: [] as RadioStation[], independent: [] as Track[] };
     const yt = await import("./ytmusic.server");
     const [tracks, rb] = await Promise.all([
-      yt.searchYtMusic(q, 28).catch(() => [] as Track[]),
+      yt.searchYtMusic(q, 48).catch(() => [] as Track[]),
       radioBrowser(`/json/stations/search?name=${encodeURIComponent(q)}&hidebroken=true&limit=12&order=votes&reverse=true`),
     ]);
     return {
@@ -283,19 +285,20 @@ export const createMoodMix = createServerFn({ method: "POST" })
   });
 
 export const getRelatedTracks = createServerFn({ method: "GET" })
-  .validator((d: { artist: string; title: string; excludeId?: string }) => d)
+  .validator((d: { artist: string; title: string; excludeId?: string; videoId?: string }) => d)
   .handler(async ({ data }) => {
     try {
       const yt = await import("./ytmusic.server");
       const artist = (data.artist || "").trim();
       const title = (data.title || "").trim();
-      const queries = [`${artist} ${title} mix official audio`, `${artist} radio mix official audio`, `${artist} similar songs official audio`].filter(
-        (q) => q.replace(/official audio|mix|radio|similar songs/gi, "").trim().length > 1,
+      const fromRadio = data.videoId ? await yt.getRelatedSongs(data.videoId, 30).catch(() => [] as Track[]) : [];
+      const queries = [`${artist} ${title}`, `${artist} songs`, `${artist} mix`].filter(
+        (q) => q.replace(/songs|mix/gi, "").trim().length > 1,
       );
-      const batches = await Promise.all(queries.map((q) => yt.searchYtMusic(q, 10).catch(() => [] as Track[])));
-      return uniqueTracks(batches.flat())
+      const batches = await Promise.all(queries.map((q) => yt.searchYtMusic(q, 12).catch(() => [] as Track[])));
+      return uniqueTracks([...fromRadio, ...batches.flat()])
         .filter((t) => t.id !== data.excludeId && t.videoId !== data.excludeId)
-        .slice(0, 24);
+        .slice(0, 36);
     } catch {
       return [];
     }

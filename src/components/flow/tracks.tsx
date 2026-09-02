@@ -449,7 +449,7 @@ export function ActionSheet() {
               onClick={() => {
                 close();
                 void getRelatedTracks({
-                  data: { artist: view.artist, title: view.title, excludeId: view.id },
+                  data: { artist: view.artist, title: view.title, excludeId: view.id, videoId: view.videoId },
                 }).then((tracks) => startStation(view, tracks));
               }}
             />
