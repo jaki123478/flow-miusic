@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import http from "node:http";
-import { Readable } from "node:stream";
 
 const PORT = Number(process.env.STREAM_PORT || 8787);
 const HOST = process.env.STREAM_HOST || "0.0.0.0";
 const IOS_UA = "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)";
 const UPSTREAM_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
 const PLAYER_URL = "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false";
+const CHUNK = 256 * 1024;
 const IOS_CLIENT = {
   clientName: "IOS",
   clientVersion: "20.11.6",
@@ -19,10 +19,18 @@ const IOS_CLIENT = {
   gl: "US",
 };
 const urlCache = new Map();
+const fileCache = new Map();
 
 function corsHeaders(req) {
   const origin = String(req.headers.origin || "");
-  const allow = origin && (origin.endsWith(".vercel.app") || origin.endsWith(".grok.me") || origin.endsWith(".grok.com") || origin.endsWith(".trycloudflare.com")) ? origin : "*";
+  const allow =
+    origin &&
+    (origin.endsWith(".vercel.app") ||
+      origin.endsWith(".grok.me") ||
+      origin.endsWith(".grok.com") ||
+      origin.endsWith(".trycloudflare.com"))
+      ? origin
+      : "*";
   return {
     "Access-Control-Allow-Origin": allow,
     "Access-Control-Allow-Methods": "GET, HEAD, OPTIONS",
@@ -61,14 +69,72 @@ async function resolveStream(id) {
   const data = await res.json();
   const fmt = pickAudio(data);
   if (!fmt?.url) throw new Error("no stream (" + (data?.playabilityStatus?.status || "?") + ")");
-  const entry = { url: fmt.url, exp: Date.now() + 10 * 60_000 };
+  const entry = { url: fmt.url, exp: Date.now() + 8 * 60_000, length: Number(fmt.contentLength) || 0 };
   urlCache.set(id, entry);
   return entry;
 }
-async function proxyBytes(target, range) {
-  const headers = { "User-Agent": UPSTREAM_UA, Accept: "*/*" };
-  headers.Range = range && /^bytes=/i.test(String(range)) ? String(range) : "bytes=0-65535";
-  return fetch(target, { headers, signal: AbortSignal.timeout(25_000), redirect: "follow" });
+async function fetchSlice(url, start, end) {
+  const headers = { "User-Agent": UPSTREAM_UA, Accept: "*/*", Range: "bytes=" + start + "-" + end };
+  const res = await fetch(url, { headers, signal: AbortSignal.timeout(25_000), redirect: "follow" });
+  return res;
+}
+function parseTotal(cr, fallback) {
+  const m = /\/(\d+)\s*$/.exec(String(cr || ""));
+  return m ? Number(m[1]) : fallback;
+}
+async function fetchFull(url, knownLen) {
+  const parts = [];
+  let start = 0;
+  let total = knownLen || 0;
+  while (!total || start < total) {
+    const end = total ? Math.min(start + CHUNK - 1, total - 1) : start + CHUNK - 1;
+    let res = await fetchSlice(url, start, end);
+    if (!(res.ok || res.status === 206)) {
+      try { await res.body?.cancel(); } catch {}
+      throw new Error("upstream " + res.status + " at " + start);
+    }
+    const cr = res.headers.get("content-range");
+    total = parseTotal(cr, total);
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) break;
+    parts.push(buf);
+    start += buf.length;
+    if (res.status === 200) break;
+    if (total && start >= total) break;
+    if (!total && buf.length < CHUNK) break;
+  }
+  return Buffer.concat(parts, total || undefined);
+}
+async function getFile(id) {
+  const hit = fileCache.get(id);
+  if (hit && hit.exp > Date.now() && hit.buf?.length) return hit.buf;
+  let resolved = await resolveStream(id);
+  let buf;
+  try {
+    buf = await fetchFull(resolved.url, resolved.length);
+  } catch {
+    urlCache.delete(id);
+    resolved = await resolveStream(id);
+    buf = await fetchFull(resolved.url, resolved.length);
+  }
+  if (!buf?.length) throw new Error("empty body");
+  fileCache.set(id, { buf, exp: Date.now() + 6 * 60_000 });
+  if (fileCache.size > 12) {
+    const first = fileCache.keys().next().value;
+    fileCache.delete(first);
+  }
+  return buf;
+}
+function parseRange(header, size) {
+  const m = /^bytes=(\d*)-(\d*)$/i.exec(String(header || "").trim());
+  if (!m) return null;
+  let start = m[1] === "" ? 0 : Number(m[1]);
+  let end = m[2] === "" ? size - 1 : Number(m[2]);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start < 0) return null;
+  if (start >= size) return { unsat: true };
+  end = Math.min(end, size - 1);
+  if (end < start) return null;
+  return { start, end };
 }
 function json(res, status, obj, extra) {
   const body = JSON.stringify(obj);
@@ -80,61 +146,68 @@ function json(res, status, obj, extra) {
 const server = http.createServer(async (req, res) => {
   const cors = corsHeaders(req);
   setHeaders(res, cors);
-  if (req.method === "OPTIONS") { res.writeHead(204); res.end(); return; }
-  let parsed;
-  try { parsed = new URL(req.url || "/", "http://" + (req.headers.host || "localhost")); }
-  catch { res.writeHead(400); res.end("Bad request"); return; }
-  const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
-  if (pathname === "/health") { res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" }); res.end("ok"); return; }
-  if (pathname !== "/stream" && pathname !== "/api/stream") { res.writeHead(404); res.end("Not found"); return; }
-  const id = (parsed.searchParams.get("id") || parsed.searchParams.get("v") || "").trim();
-  if (!/^[\w-]{11}$/.test(id)) { json(res, 400, { error: "Bad request" }, cors); return; }
-  let resolved;
-  try { resolved = await resolveStream(id); }
-  catch (err) { json(res, 404, { error: err instanceof Error ? err.message : "No stream" }, cors); return; }
-  let upstream;
-  try {
-    upstream = await proxyBytes(resolved.url, req.headers.range || null);
-    if (!(upstream.ok || upstream.status === 206)) {
-      try { await upstream.body?.cancel(); } catch {}
-      urlCache.delete(id);
-      resolved = await resolveStream(id);
-      upstream = await proxyBytes(resolved.url, req.headers.range || null);
-    }
-  } catch (err) {
-    json(res, 502, { error: err instanceof Error ? err.message : "Upstream fetch failed" }, cors);
-    return;
-  }
-  if (!(upstream.ok || upstream.status === 206)) {
-    json(res, 502, { error: "upstream " + upstream.status }, cors);
-    return;
-  }
-  const cr = upstream.headers.get("content-range");
-  const cl = upstream.headers.get("content-length");
-  const out = { ...cors, "Content-Type": "audio/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=120" };
-  const isHead = req.method === "HEAD";
-  if (isHead && cr) {
-    const total = (/\/(\d+)\s*$/.exec(cr) || [])[1];
-    if (total) {
-      out["Content-Length"] = total;
-      setHeaders(res, out);
-      res.writeHead(200);
-      try { await upstream.body?.cancel(); } catch {}
-      res.end();
-      return;
-    }
-  }
-  if (cr) out["Content-Range"] = cr;
-  if (cl) out["Content-Length"] = cl;
-  setHeaders(res, out);
-  res.writeHead(upstream.status === 206 ? 206 : 200);
-  if (isHead) {
-    try { await upstream.body?.cancel(); } catch {}
+  if (req.method === "OPTIONS") {
+    res.writeHead(204);
     res.end();
     return;
   }
-  if (!upstream.body) { res.end(); return; }
-  Readable.fromWeb(upstream.body).on("error", () => { try { res.destroy(); } catch {} }).pipe(res);
+  let parsed;
+  try {
+    parsed = new URL(req.url || "/", "http://" + (req.headers.host || "localhost"));
+  } catch {
+    res.writeHead(400);
+    res.end("Bad request");
+    return;
+  }
+  const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
+  if (pathname === "/health" || pathname === "/api/health") {
+    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("ok");
+    return;
+  }
+  if (pathname !== "/stream" && pathname !== "/api/stream") {
+    res.writeHead(404);
+    res.end("Not found");
+    return;
+  }
+  const id = (parsed.searchParams.get("id") || parsed.searchParams.get("v") || "").trim();
+  if (!/^[\w-]{11}$/.test(id)) {
+    json(res, 400, { error: "Bad request" }, cors);
+    return;
+  }
+  let buf;
+  try {
+    buf = await getFile(id);
+  } catch (err) {
+    json(res, 502, { error: err instanceof Error ? err.message : "No stream" }, cors);
+    return;
+  }
+  const size = buf.length;
+  const out = { ...cors, "Content-Type": "audio/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=120" };
+  const isHead = req.method === "HEAD";
+  const range = parseRange(req.headers.range, size);
+  if (range?.unsat) {
+    out["Content-Range"] = "bytes */" + size;
+    setHeaders(res, out);
+    res.writeHead(416);
+    res.end();
+    return;
+  }
+  if (range) {
+    const slice = buf.subarray(range.start, range.end + 1);
+    out["Content-Range"] = "bytes " + range.start + "-" + range.end + "/" + size;
+    out["Content-Length"] = String(slice.length);
+    setHeaders(res, out);
+    res.writeHead(206);
+    if (isHead) res.end();
+    else res.end(slice);
+    return;
+  }
+  out["Content-Length"] = String(size);
+  setHeaders(res, out);
+  res.writeHead(200);
+  if (isHead) res.end();
+  else res.end(buf);
 });
 
 server.listen(PORT, HOST, () => {
