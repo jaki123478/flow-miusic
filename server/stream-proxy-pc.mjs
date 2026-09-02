@@ -1,34 +1,26 @@
 #!/usr/bin/env node
 import http from "node:http";
+import { BotGuardClient } from "bgutils-js/botguard";
+import { buildURL, parseLooseJSON, getHeaders, USER_AGENT } from "bgutils-js/utils";
+import { WebPoMinter } from "bgutils-js/webpo";
+import { JSDOM } from "jsdom";
+import { Innertube, Platform, UniversalCache } from "youtubei.js";
+
+Platform.shim.eval = async (data) => new Function(data.output)();
 
 const PORT = Number(process.env.STREAM_PORT || 8787);
 const HOST = process.env.STREAM_HOST || "0.0.0.0";
-const IOS_UA = "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)";
-const UPSTREAM_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1";
-const PLAYER_URL = "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false";
 const CHUNK = 256 * 1024;
-const IOS_CLIENT = {
-  clientName: "IOS",
-  clientVersion: "20.11.6",
-  deviceMake: "Apple",
-  deviceModel: "iPhone16,2",
-  osName: "iOS",
-  osVersion: "17.5.1.21F90",
-  platform: "MOBILE",
-  hl: "en",
-  gl: "US",
-};
-const urlCache = new Map();
+const REQUEST_KEY = "O43z0dpjhgX20SCx4KAo";
+
+let sessionPromise = null;
 const fileCache = new Map();
 
 function corsHeaders(req) {
   const origin = String(req.headers.origin || "");
   const allow =
     origin &&
-    (origin.endsWith(".vercel.app") ||
-      origin.endsWith(".grok.me") ||
-      origin.endsWith(".grok.com") ||
-      origin.endsWith(".trycloudflare.com"))
+    (origin.endsWith(".vercel.app") || origin.endsWith(".grok.me") || origin.endsWith(".grok.com") || origin.endsWith(".trycloudflare.com"))
       ? origin
       : "*";
   return {
@@ -43,87 +35,11 @@ function corsHeaders(req) {
 function setHeaders(res, obj) {
   for (const [k, v] of Object.entries(obj)) if (v != null) res.setHeader(k, v);
 }
-function pickAudio(data) {
-  const formats = [...(data?.streamingData?.adaptiveFormats || []), ...(data?.streamingData?.formats || [])];
-  const audio = formats.filter((f) => {
-    const mime = String(f?.mimeType || "");
-    return typeof f.url === "string" && f.url.startsWith("http") && (mime.startsWith("audio/") || f.audioQuality);
-  });
-  return audio.find((f) => Number(f.itag) === 140) || audio.find((f) => String(f.mimeType || "").includes("mp4a")) || audio[0] || null;
-}
-async function resolveStream(id) {
-  const hit = urlCache.get(id);
-  if (hit && hit.exp > Date.now()) return hit;
-  const res = await fetch(PLAYER_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "User-Agent": IOS_UA,
-      "X-YouTube-Client-Name": "5",
-      "X-YouTube-Client-Version": IOS_CLIENT.clientVersion,
-    },
-    body: JSON.stringify({ videoId: id, context: { client: { ...IOS_CLIENT } }, contentCheckOk: true, racyCheckOk: true }),
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!res.ok) throw new Error("innertube " + res.status);
-  const data = await res.json();
-  const fmt = pickAudio(data);
-  if (!fmt?.url) throw new Error("no stream (" + (data?.playabilityStatus?.status || "?") + ")");
-  const entry = { url: fmt.url, exp: Date.now() + 8 * 60_000, length: Number(fmt.contentLength) || 0 };
-  urlCache.set(id, entry);
-  return entry;
-}
-async function fetchSlice(url, start, end) {
-  const headers = { "User-Agent": UPSTREAM_UA, Accept: "*/*", Range: "bytes=" + start + "-" + end };
-  const res = await fetch(url, { headers, signal: AbortSignal.timeout(25_000), redirect: "follow" });
-  return res;
-}
-function parseTotal(cr, fallback) {
-  const m = /\/(\d+)\s*$/.exec(String(cr || ""));
-  return m ? Number(m[1]) : fallback;
-}
-async function fetchFull(url, knownLen) {
-  const parts = [];
-  let start = 0;
-  let total = knownLen || 0;
-  while (!total || start < total) {
-    const end = total ? Math.min(start + CHUNK - 1, total - 1) : start + CHUNK - 1;
-    let res = await fetchSlice(url, start, end);
-    if (!(res.ok || res.status === 206)) {
-      try { await res.body?.cancel(); } catch {}
-      throw new Error("upstream " + res.status + " at " + start);
-    }
-    const cr = res.headers.get("content-range");
-    total = parseTotal(cr, total);
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (!buf.length) break;
-    parts.push(buf);
-    start += buf.length;
-    if (res.status === 200) break;
-    if (total && start >= total) break;
-    if (!total && buf.length < CHUNK) break;
-  }
-  return Buffer.concat(parts, total || undefined);
-}
-async function getFile(id) {
-  const hit = fileCache.get(id);
-  if (hit && hit.exp > Date.now() && hit.buf?.length) return hit.buf;
-  let resolved = await resolveStream(id);
-  let buf;
-  try {
-    buf = await fetchFull(resolved.url, resolved.length);
-  } catch {
-    urlCache.delete(id);
-    resolved = await resolveStream(id);
-    buf = await fetchFull(resolved.url, resolved.length);
-  }
-  if (!buf?.length) throw new Error("empty body");
-  fileCache.set(id, { buf, exp: Date.now() + 6 * 60_000 });
-  if (fileCache.size > 12) {
-    const first = fileCache.keys().next().value;
-    fileCache.delete(first);
-  }
-  return buf;
+function json(res, status, obj, extra) {
+  const body = JSON.stringify(obj);
+  setHeaders(res, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Length": Buffer.byteLength(body), ...extra });
+  res.writeHead(status);
+  res.end(body);
 }
 function parseRange(header, size) {
   const m = /^bytes=(\d*)-(\d*)$/i.exec(String(header || "").trim());
@@ -136,11 +52,95 @@ function parseRange(header, size) {
   if (end < start) return null;
   return { start, end };
 }
-function json(res, status, obj, extra) {
-  const body = JSON.stringify(obj);
-  setHeaders(res, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store", "Content-Length": Buffer.byteLength(body), ...extra });
-  res.writeHead(status);
-  res.end(body);
+
+async function createSession() {
+  const dom = new JSDOM(" ", { url: "https://www.youtube.com", referrer: "https://www.youtube.com/", userAgent: USER_AGENT });
+  const pageHtml = await (await fetch("https://www.youtube.com", { headers: { accept: "*/*", "accept-language": "en-US,en;q=0.7", "user-agent": USER_AGENT } })).text();
+  const ytConfig = pageHtml.match(/ytcfg\.set\(({.+?})\);/s)?.[1];
+  if (!ytConfig) throw new Error("no ytcfg");
+  dom.window.yt = { config_: JSON.parse(ytConfig) };
+  Object.assign(globalThis, { yt: dom.window.yt, window: dom.window, document: dom.window.document, location: dom.window.location, origin: dom.window.origin });
+  if (!("navigator" in globalThis)) Object.defineProperty(globalThis, "navigator", { value: dom.window.navigator });
+  const initialAttestationData = pageHtml.match(/window\.ytAtN\(\s*({[\s\S]*?})\s*\)/);
+  if (!initialAttestationData) throw new Error("no challenge");
+  const challengeResponse = parseLooseJSON(initialAttestationData[1]).R;
+  if (!challengeResponse?.bgChallenge) throw new Error("no bgChallenge");
+  const interpreterUrl = challengeResponse.bgChallenge.interpreterUrl.privateDoNotAccessOrElseTrustedResourceUrlWrappedValue;
+  const interpreterJavascript = await (await fetch("https:" + interpreterUrl)).text();
+  if (!interpreterJavascript) throw new Error("no VM");
+  new Function(interpreterJavascript)();
+  const botGuardClient = await BotGuardClient.create({
+    program: challengeResponse.bgChallenge.program,
+    globalName: challengeResponse.bgChallenge.globalName,
+    globalObject: globalThis,
+  });
+  const webPoSignalOutput = [];
+  const botguardResponse = await botGuardClient.snapshot({ webPoSignalOutput });
+  const integrityTokenJson = await (await fetch(buildURL("GenerateIT", true), { method: "POST", headers: getHeaders(), body: JSON.stringify([REQUEST_KEY, botguardResponse]) })).json();
+  const [integrityToken, estimatedTtlSecs, mintRefreshThreshold, websafeFallbackToken] = integrityTokenJson;
+  const webPoMinter = await WebPoMinter.create({ integrityToken, estimatedTtlSecs, mintRefreshThreshold, websafeFallbackToken }, webPoSignalOutput);
+  const innertube = await Innertube.create({ cache: new UniversalCache(false) });
+  return { webPoMinter, innertube, exp: Date.now() + 25 * 60_000 };
+}
+
+function session() {
+  if (!sessionPromise) {
+    sessionPromise = createSession().catch((err) => {
+      sessionPromise = null;
+      throw err;
+    });
+  }
+  return sessionPromise.then((s) => {
+    if (s.exp < Date.now()) {
+      sessionPromise = null;
+      return session();
+    }
+    return s;
+  });
+}
+
+async function fetchFull(url, knownLen) {
+  const parts = [];
+  let start = 0;
+  const total = knownLen || 0;
+  while (!total || start < total) {
+    const end = total ? Math.min(start + CHUNK - 1, total - 1) : start + CHUNK - 1;
+    const u = new URL(url);
+    u.searchParams.set("range", start + "-" + end);
+    const res = await fetch(u, { headers: { "User-Agent": USER_AGENT, Accept: "*/*" }, redirect: "follow", signal: AbortSignal.timeout(25_000) });
+    if (!(res.ok || res.status === 206)) {
+      try { await res.body?.cancel(); } catch {}
+      throw new Error("upstream " + res.status + " at " + start);
+    }
+    const buf = Buffer.from(await res.arrayBuffer());
+    if (!buf.length) break;
+    parts.push(buf);
+    start += buf.length;
+    if (total && start >= total) break;
+    if (!total && buf.length < CHUNK) break;
+  }
+  return Buffer.concat(parts, total || undefined);
+}
+
+async function getFile(id) {
+  const hit = fileCache.get(id);
+  if (hit && hit.exp > Date.now() && hit.buf?.length > 1000) return hit.buf;
+  const { webPoMinter, innertube } = await session();
+  const pot = await webPoMinter.mintAsWebsafeString(id);
+  let info;
+  try {
+    info = await innertube.getBasicInfo(id, { client: "YTMUSIC" });
+  } catch {
+    info = await innertube.getBasicInfo(id, { client: "MUSIC" });
+  }
+  const format = info.chooseFormat({ quality: "best", type: "audio" });
+  if (!format) throw new Error("no audio");
+  const url = (await format.decipher(innertube.session.player)) + "&pot=" + pot;
+  const buf = await fetchFull(url, Number(format.content_length) || 0);
+  if (buf.length < 1000) throw new Error("short body " + buf.length);
+  fileCache.set(id, { buf, exp: Date.now() + 8 * 60_000 });
+  if (fileCache.size > 10) fileCache.delete(fileCache.keys().next().value);
+  return buf;
 }
 
 const server = http.createServer(async (req, res) => {
@@ -211,5 +211,5 @@ const server = http.createServer(async (req, res) => {
 });
 
 server.listen(PORT, HOST, () => {
-  console.log("[flow-stream-proxy] http://" + HOST + ":" + PORT);
+  console.log("[flow-stream-proxy] simpmusic/pot http://" + HOST + ":" + PORT);
 });
