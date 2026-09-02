@@ -47,7 +47,7 @@ const EQ_PRESETS = [
 ] as const;
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
-import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from "@/lib/music/native-audio";
+import { getGlobalAudio, isPlaybackFrozen, markPageVisible, unlockAudioSession } from "@/lib/music/native-audio";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -126,6 +126,38 @@ export function AudioEngine() {
   const resumeElement = (audio: HTMLAudioElement | null) => {
     if (!audio) return;
     if (useFlowStore.getState().isPlaying && audio.paused) playWhenReady(audio);
+  };
+
+  const wakePlayback = (force = false) => {
+    markPageVisible();
+    unlockAudioSession();
+    claimAudioFocus();
+    const audio = el();
+    const s = useFlowStore.getState();
+    if (!audio || !s.current || !s.isPlaying) return;
+    const dead = Boolean(audio.error) || audio.readyState < 2 || audio.paused;
+    if (!force && !dead) {
+      playWhenReady(audio);
+      return;
+    }
+    lastSrc.current = "";
+    recovering.current = "";
+    const t = audio.currentTime || s.currentTime || 0;
+    applySrc(audio, fallbackSrc(s.current), true, true, true);
+    if (t > 1) {
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          try {
+            audio.currentTime = t;
+          } catch {
+            /* ignore */
+          }
+          playWhenReady(audio);
+        },
+        { once: true },
+      );
+    }
   };
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false, allowHidden = false) => {
@@ -246,7 +278,11 @@ export function AudioEngine() {
       if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onError = () => {
-      if (isPlaybackFrozen()) resumeElement(audio);
+      if (isPlaybackFrozen()) {
+        resumeElement(audio);
+        return;
+      }
+      if (useFlowStore.getState().isPlaying) wakePlayback(true);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
@@ -272,9 +308,8 @@ export function AudioEngine() {
 
     bindLockScreenActions({
       play: () => {
-        unlockAudioSession();
         useFlowStore.getState().resume();
-        void audio.play().catch(() => {});
+        wakePlayback(true);
       },
       pause: () => {
         useFlowStore.getState().pause();
@@ -393,6 +428,11 @@ export function AudioEngine() {
       claimAudioFocus();
       if (audio.paused) void audio.play().catch(() => {});
     };
+    const onShow = () => {
+      hidKeep = false;
+      markPageVisible();
+      wakePlayback(true);
+    };
     const kick = () => {
       const audio = el();
       const s = useFlowStore.getState();
@@ -405,15 +445,16 @@ export function AudioEngine() {
         return;
       }
       hidKeep = false;
-      if (!audio.ended) resumeElement(audio);
+      if (audio.ended) return;
+      if (audio.error || (audio.paused && audio.readyState < 1)) {
+        wakePlayback(true);
+        return;
+      }
+      resumeElement(audio);
       const t = audio.currentTime || 0;
       if (t > lastPos.current + 0.15) {
         lastPos.current = t;
         lastMove.current = Date.now();
-        return;
-      }
-      if (Date.now() - lastMove.current > 4000 && s.current.videoId && audio.error) {
-        recover(s.current.videoId, t || s.currentTime);
       }
     };
     const onHide = () => {
@@ -422,15 +463,17 @@ export function AudioEngine() {
     };
     const onVis = () => {
       if (document.hidden) onHide();
-      else kick();
+      else onShow();
     };
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("pageshow", kick);
+    document.addEventListener("resume", onShow);
+    window.addEventListener("pageshow", onShow);
     window.addEventListener("pagehide", onHide);
     const watchdog = window.setInterval(kick, 2000);
     return () => {
       document.removeEventListener("visibilitychange", onVis);
-      window.removeEventListener("pageshow", kick);
+      document.removeEventListener("resume", onShow);
+      window.removeEventListener("pageshow", onShow);
       window.removeEventListener("pagehide", onHide);
       window.clearInterval(watchdog);
     };

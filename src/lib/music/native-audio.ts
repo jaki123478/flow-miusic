@@ -12,6 +12,16 @@ function installLifecycle() {
   window.addEventListener("pageshow", () => {
     pageHiding = false;
   });
+  document.addEventListener("freeze", () => {
+    pageHiding = true;
+  });
+  document.addEventListener("resume", () => {
+    pageHiding = false;
+  });
+}
+
+export function markPageVisible() {
+  pageHiding = false;
 }
 
 export function isPlaybackFrozen() {
