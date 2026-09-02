@@ -151,90 +151,136 @@ async function fromInnertube(yt: Innertube, id: string, client: string): Promise
   return null;
 }
 
-async function rawPlayer(
-  id: string,
-  clientName: string,
-  clientVersion: string,
-  extra: Record<string, unknown>,
-  ua: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": ua,
-        Origin: "https://www.youtube.com",
-      },
-      body: JSON.stringify({
-        videoId: id,
-        context: { client: { clientName, clientVersion, hl: "en", gl: "US", ...extra } },
-        contentCheckOk: true,
-        racyCheckOk: true,
-      }),
-      signal: AbortSignal.timeout(7000),
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const formats = [
-      ...(data?.streamingData?.adaptiveFormats || []),
-      ...(data?.streamingData?.formats || []),
-    ];
-    for (const format of formats) {
-      if (!isAudioFormat(format)) continue;
-      if (isHttp(format.url)) return format.url;
-    }
-    for (const format of formats) {
-      if (isHttp(format.url)) return format.url;
-    }
-    return null;
-  } catch {
-    return null;
-  }
+const IOS_UA =
+  "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)";
+const IOS_CLIENT = {
+  clientName: "IOS",
+  clientVersion: "20.11.6",
+  deviceMake: "Apple",
+  deviceModel: "iPhone16,2",
+  osName: "iOS",
+  osVersion: "17.5.1.21F90",
+  platform: "MOBILE",
+  hl: "en",
+  gl: "US",
+};
+const IOS_KEY = "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
+
+export let lastResolveDetail = "";
+
+function tubeFetch(yt: Innertube | null): typeof fetch {
+  const http = (yt as any)?.session?.http;
+  if (http && typeof http.fetch === "function") return http.fetch.bind(http);
+  return fetch;
 }
 
-async function rawFallbacks(id: string): Promise<string | null> {
-  return firstHttp([
-    rawPlayer(
-      id,
-      "ANDROID_VR",
-      "1.65.10",
-      { deviceMake: "Oculus", deviceModel: "Quest 3", androidSdkVersion: 32 },
-      "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip",
-    ),
-    rawPlayer(
-      id,
-      "IOS",
-      "20.11.6",
-      { deviceMake: "Apple", deviceModel: "iPhone16,2", osName: "iOS", osVersion: "17.5.1" },
-      "com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)",
-    ),
-    rawPlayer(
-      id,
-      "ANDROID",
-      "19.50.37",
-      { androidSdkVersion: 34, deviceMake: "Google", deviceModel: "Pixel 7" },
-      "com.google.android.youtube/19.50.37 (Linux; U; Android 14; en_US; Pixel 7 Build/UP1A) gzip",
-    ),
-  ]);
+function audioUrlFromPlayerData(data: any, notes: string[], tag: string): string | null {
+  const status = data?.playabilityStatus?.status || data?.playability_status?.status || "?";
+  const reason = data?.playabilityStatus?.reason || data?.playability_status?.reason || "";
+  const formats = [
+    ...(data?.streamingData?.adaptiveFormats || []),
+    ...(data?.streamingData?.formats || []),
+    ...(data?.streaming_data?.adaptive_formats || []),
+    ...(data?.streaming_data?.formats || []),
+  ];
+  const audio = formats.filter((f: any) => isAudioFormat(f) && isHttp(f.url));
+  notes.push(`${tag}:${status}${reason ? "(" + String(reason).slice(0, 40) + ")" : ""} fmt=${formats.length} audio=${audio.length}`);
+  if (audio[0]) return audio[0].url;
+  const any = formats.find((f: any) => isHttp(f.url));
+  return any?.url || null;
+}
+
+async function iosPlayer(id: string, yt: Innertube | null, notes: string[]): Promise<string | null> {
+  const visitor = (yt as any)?.session?.context?.client?.visitorData;
+  const body = {
+    videoId: id,
+    context: {
+      client: {
+        ...IOS_CLIENT,
+        ...(visitor ? { visitorData: visitor } : {}),
+      },
+    },
+    contentCheckOk: true,
+    racyCheckOk: true,
+    params: "8AEB",
+  };
+  const endpoints = [
+    `https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&key=${IOS_KEY}`,
+    `https://www.youtube.com/youtubei/v1/player?prettyPrint=false&key=${IOS_KEY}`,
+  ];
+  const doFetch = tubeFetch(yt);
+  for (const endpoint of endpoints) {
+    try {
+      const res = await doFetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "User-Agent": IOS_UA,
+          "X-YouTube-Client-Name": "5",
+          "X-YouTube-Client-Version": IOS_CLIENT.clientVersion,
+          Origin: "https://www.youtube.com",
+          Referer: "https://www.youtube.com/",
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(8000),
+      } as any);
+      const tag = endpoint.includes("googleapis") ? "ios-gapi" : "ios-www";
+      if (!res.ok) {
+        notes.push(`${tag}:http ${res.status}`);
+        continue;
+      }
+      const data = await res.json();
+      const url = audioUrlFromPlayerData(data, notes, tag);
+      if (url) return url;
+    } catch (err: any) {
+      notes.push(`ios-fetch:${err?.message || err}`);
+    }
+  }
+  return null;
 }
 
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
+  const notes: string[] = [];
+  lastResolveDetail = "";
 
-  const raw = rawFallbacks(id);
-
+  let yt: Innertube | null = null;
   try {
-    const yt = await withTimeout(getTube(), 8000);
-    const clients = ["ANDROID_VR", "IOS", "ANDROID", "WEB_EMBEDDED"] as const;
-    const url = await firstHttp([raw, ...clients.map((client) => fromInnertube(yt, id, client))]);
-    if (url) return url;
+    yt = await withTimeout(getTube(), 8000);
   } catch (err: any) {
-    console.error("[getAudioUrl error]", id, err?.message || err);
+    notes.push(`tube:${err?.message || err}`);
   }
 
-  return raw;
+  try {
+    const url = await iosPlayer(id, yt, notes);
+    if (url) {
+      lastResolveDetail = notes.join(" | ");
+      return url;
+    }
+  } catch (err: any) {
+    notes.push(`ios:${err?.message || err}`);
+  }
+
+  if (yt) {
+    for (const client of ["IOS", "ANDROID_VR", "ANDROID"] as const) {
+      try {
+        const url = await fromInnertube(yt, id, client);
+        if (url) {
+          notes.push(`${client}:ok`);
+          lastResolveDetail = notes.join(" | ");
+          return url;
+        }
+        notes.push(`${client}:empty`);
+      } catch (err: any) {
+        notes.push(`${client}:${err?.message || err}`);
+      }
+    }
+  }
+
+  lastResolveDetail = notes.join(" | ") || "no url";
+  console.error("[getAudioUrl miss]", id, lastResolveDetail);
+  return null;
 }
 
 function txt(value: unknown): string {

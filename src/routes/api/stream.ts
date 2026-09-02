@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { getAudioUrl } from "@/lib/music/ytmusic.server";
+import { getAudioUrl, lastResolveDetail } from "@/lib/music/ytmusic.server";
 
 /** Vercel / Nitro: allow the googlevideo proxy to outlive the old 12s kill. */
 export const maxDuration = 60;
@@ -20,6 +20,7 @@ async function resolveUrl(id: string, force = false): Promise<string | null> {
       cache.set(id, { url, exp: Date.now() + 12 * 60_000 });
       return url;
     }
+    lastError = lastResolveDetail || "No stream";
   } catch (err: unknown) {
     lastError = err instanceof Error ? err.message : String(err);
     console.error("[resolveUrl error]", id, err);
@@ -125,7 +126,7 @@ async function handleStream(request: Request): Promise<Response> {
     );
   }
 
-  if (!target) return new Response("No stream", { status: 404 });
+  if (!target) return fail(404, lastError || lastResolveDetail || "No stream");
 
   const range = request.headers.get("range");
 
