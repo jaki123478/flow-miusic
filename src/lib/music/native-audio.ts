@@ -27,6 +27,7 @@ export function unlockAudioSession() {
   } catch {
     /* Safari < 16.4 */
   }
+  if (typeof document !== "undefined" && document.hidden) return;
   try {
     const w = window as Window & { webkitAudioContext?: typeof AudioContext; __FLOW_AC__?: AudioContext };
     const Ctx = window.AudioContext || w.webkitAudioContext;

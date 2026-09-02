@@ -52,8 +52,9 @@ export function pushLockScreen(track: Track, isPlaying: boolean, currentTime: nu
     /* older WebKit */
   }
   if (track.isLive) return;
+  if (typeof document !== "undefined" && document.hidden) return;
   const now = Date.now();
-  const gap = typeof document !== "undefined" && document.hidden ? 2500 : 900;
+  const gap = 900;
   if (now - lastPosAt < gap) return;
   lastPosAt = now;
   const dur = Number.isFinite(duration) && duration > 0 ? duration : 0;

@@ -200,6 +200,7 @@ export function AudioEngine() {
         lastPos.current = t;
         lastMove.current = Date.now();
       }
+      if (document.hidden) return;
       const track = useFlowStore.getState().current;
       if (track) pushLockScreen(track, !audio.paused, t, audio.duration || 0, 1);
     };
@@ -362,16 +363,26 @@ export function AudioEngine() {
   }, [seekVersion, currentTime]);
 
   useEffect(() => {
+    let hidKeep = false;
+    const keepPlaying = () => {
+      const audio = el();
+      const s = useFlowStore.getState();
+      if (!audio || !s.isPlaying) return;
+      claimAudioFocus();
+      if (audio.paused) void audio.play().catch(() => {});
+    };
     const kick = () => {
       const audio = el();
       const s = useFlowStore.getState();
       if (!audio || !s.isPlaying || !s.current) return;
-      unlockAudioSession();
-      claimAudioFocus();
-      if (isPlaybackFrozen()) {
-        resumeElement(audio);
+      if (document.hidden || isPlaybackFrozen()) {
+        if (!hidKeep) {
+          hidKeep = true;
+          keepPlaying();
+        }
         return;
       }
+      hidKeep = false;
       resumeElement(audio);
       const t = audio.currentTime || 0;
       if (t > lastPos.current + 0.15) {
@@ -379,29 +390,26 @@ export function AudioEngine() {
         lastMove.current = Date.now();
         return;
       }
-      if (isAppleMobile() && document.hidden) return;
       if (Date.now() - lastMove.current > 4000 && s.current.videoId && audio.error) {
         recover(s.current.videoId, t || s.currentTime);
       }
     };
-    const onPageHide = () => {
-      const audio = el();
-      if (audio && useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
+    const onHide = () => {
+      hidKeep = false;
+      keepPlaying();
     };
-    document.addEventListener("visibilitychange", kick);
+    const onVis = () => {
+      if (document.hidden) onHide();
+      else kick();
+    };
+    document.addEventListener("visibilitychange", onVis);
     window.addEventListener("pageshow", kick);
-    window.addEventListener("pagehide", onPageHide);
-    window.addEventListener("focus", kick);
-    window.addEventListener("freeze", kick);
-    window.addEventListener("resume", kick);
+    window.addEventListener("pagehide", onHide);
     const watchdog = window.setInterval(kick, 2000);
     return () => {
-      document.removeEventListener("visibilitychange", kick);
+      document.removeEventListener("visibilitychange", onVis);
       window.removeEventListener("pageshow", kick);
-      window.removeEventListener("pagehide", onPageHide);
-      window.removeEventListener("focus", kick);
-      window.removeEventListener("freeze", kick);
-      window.removeEventListener("resume", kick);
+      window.removeEventListener("pagehide", onHide);
       window.clearInterval(watchdog);
     };
   }, []);
