@@ -77,7 +77,7 @@ export function directPlayTrack(track: Track) {
     return;
   }
   const src = track.videoId
-    ? "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(track.videoId)
+    ? "https://taken-transition-locator-hunting.trycloudflare.com/api/stream?id=" + encodeURIComponent(track.videoId)
     : track.streamUrl;
   if (!src) return;
   audio.src = src;
