@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { withBackoff } from "@/lib/net/backoff";
 import type { Track } from "./types";
+import { catalogStreamUrl } from "./stream-url";
 
 const mem = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
@@ -95,17 +96,6 @@ export function prefetchAudio(id: string) {
   void loadLocalAudio(id).catch(() => {});
 }
 
-function getStreamApiBase(): string {
-  if (typeof window === "undefined") return "";
-  const host = window.location.hostname;
-  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
-    return "https://flow-music-app-two.vercel.app";
-  }
-  return "";
-}
-
-import { resolveAudioStreamUrl } from "./catalog";
-
 export async function loadLocalAudio(id: string): Promise<string> {
   const hit = mem.get(id);
   if (hit) return hit;
@@ -115,18 +105,9 @@ export async function loadLocalAudio(id: string): Promise<string> {
     const persisted = await fromPersistent(id);
     if (persisted) return persisted;
 
-    try {
-      const directUrl = await resolveAudioStreamUrl({ data: { videoId: id } });
-      if (directUrl) {
-        remember(id, directUrl, pinned.has(id));
-        return directUrl;
-      }
-    } catch (_) {}
-
-    const base = getStreamApiBase();
     return withBackoff(
       async () => {
-        const res = await fetch(`${base}/api/stream?v=${id}`, {
+        const res = await fetch(catalogStreamUrl(id), {
           cache: "no-store",
           headers: { Accept: "audio/*,*/*" },
         });

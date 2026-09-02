@@ -1,0 +1,6 @@
+name = "flow-stream-proxy"
+main = "src/index.ts"
+compatibility_date = "2026-09-02"
+# Deploy: npx wrangler deploy
+# Client:  GET https://<worker>/api/stream?id=VIDEO_ID
+# Health:  GET https://<worker>/health

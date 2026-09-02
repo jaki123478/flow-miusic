@@ -1,5 +1,5 @@
 import type { Track } from "./types";
-import { playYtEmbed } from "./yt-embed";
+import { catalogStreamUrl } from "./stream-url";
 
 let pageHiding = false;
 let lifecycle = false;
@@ -72,10 +72,14 @@ export function directPlayTrack(track: Track) {
     if (audio.paused) void audio.play().catch(() => {});
     return;
   }
-  if (track.videoId && track.source !== "radio") playYtEmbed(track.videoId);
   if (track.source === "radio" && track.streamUrl) {
     audio.src = track.streamUrl;
     void audio.play().catch(() => {});
+    return;
   }
+  const src = track.videoId ? catalogStreamUrl(track.videoId) : track.streamUrl;
+  if (!src) return;
+  audio.src = src;
+  void audio.play().catch(() => {});
 }
 

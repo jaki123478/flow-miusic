@@ -1,4 +1,5 @@
 import type { Track } from "./types";
+import { catalogStreamUrl } from "./stream-url";
 
 export type ImportSeed = {
   title: string;
@@ -199,7 +200,7 @@ export function seedsToTracks(seeds: ImportSeed[]): { tracks: Track[]; unresolve
         album: s.album,
         artwork: `https://i.ytimg.com/vi/${s.videoId}/hqdefault.jpg`,
         duration: s.duration || 0,
-        streamUrl: `/api/stream?v=${s.videoId}`,
+        streamUrl: catalogStreamUrl(s.videoId),
         source: "ytmusic",
         videoId: s.videoId,
       });

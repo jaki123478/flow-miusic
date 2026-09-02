@@ -1,4 +1,5 @@
 import type { Track } from './types';
+import { catalogStreamUrl } from './stream-url';
 import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from './native-audio';
 
 function isIOS(): boolean {
@@ -71,9 +72,9 @@ export class BackgroundAudioPlayer {
   }
 
   private _getTrackSrc(track: Track): string {
-    if (track.streamUrl) return track.streamUrl;
-    if (track.videoId) return `/api/stream?v=${track.videoId}`;
-    return "";
+    if (track.source === "radio" && track.streamUrl) return track.streamUrl;
+    if (track.videoId) return catalogStreamUrl(track.videoId);
+    return track.streamUrl || "";
   }
 
   private _bindAudioEvents() {

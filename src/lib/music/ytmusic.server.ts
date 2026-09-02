@@ -164,8 +164,6 @@ const IOS_CLIENT = {
   hl: "en",
   gl: "US",
 };
-const IOS_KEY = "AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc";
-
 export let lastResolveDetail = "";
 
 function audioUrlFromPlayerData(data: any, notes: string[], tag: string): string | null {
@@ -196,10 +194,8 @@ async function iosPlayer(id: string, yt: Innertube | null, notes: string[]): Pro
     },
     contentCheckOk: true,
     racyCheckOk: true,
-    params: "8AEB",
   };
-  const endpoint =
-    "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&key=" + IOS_KEY;
+  const endpoint = "https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false";
   try {
     const res = await fetch(endpoint, {
       method: "POST",
@@ -208,8 +204,6 @@ async function iosPlayer(id: string, yt: Innertube | null, notes: string[]): Pro
         "User-Agent": IOS_UA,
         "X-YouTube-Client-Name": "5",
         "X-YouTube-Client-Version": IOS_CLIENT.clientVersion,
-        Origin: "https://www.youtube.com",
-        Referer: "https://www.youtube.com/",
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(8000),

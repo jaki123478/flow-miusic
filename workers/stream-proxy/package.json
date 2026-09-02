@@ -1,0 +1,9 @@
+{
+  "name": "flow-stream-proxy",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx wrangler dev --port 8787",
+    "deploy": "npx wrangler deploy"
+  }
+}

@@ -48,17 +48,7 @@ const EQ_PRESETS = [
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
 import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from "@/lib/music/native-audio";
-import {
-  bindYtEmbed,
-  isYtEmbedActive,
-  pauseYtEmbed,
-  playYtEmbed,
-  attachYtStage,
-  preloadYtEmbed,
-  resumeYtEmbed,
-  seekYtEmbed,
-  stopYtEmbed,
-} from "@/lib/music/yt-embed";
+import { catalogStreamUrl } from "@/lib/music/stream-url";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -78,7 +68,7 @@ import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   if (track.videoId) {
-    return cachedAudioUrl(track.videoId) || "";
+    return cachedAudioUrl(track.videoId) || catalogStreamUrl(track.videoId);
   }
   return track.streamUrl || "";
 }
@@ -197,7 +187,6 @@ export function AudioEngine() {
     }
     const audio = el();
     if (!audio) return;
-    preloadYtEmbed();
     audio.setAttribute("playsinline", "true");
     audio.setAttribute("webkit-playsinline", "true");
     unlockAudioSession();
@@ -243,7 +232,7 @@ export function AudioEngine() {
       }
       const blob = cachedAudioUrl(id);
       if (blob) applySrc(audio, blob, s.isPlaying, true);
-      else if (id) playYtEmbed(id);
+      else applySrc(audio, catalogStreamUrl(id), s.isPlaying, true);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
@@ -265,27 +254,14 @@ export function AudioEngine() {
     audio.addEventListener("stalled", onStalled);
     audio.addEventListener("ended", onEndedEv);
 
-    bindYtEmbed({
-      tick: (time, dur, playing) => {
-        if (!isYtEmbedActive()) return;
-        if (Number.isFinite(time)) setCurrentTime(time);
-        if (Number.isFinite(dur) && dur > 0) setDuration(dur);
-        const track = useFlowStore.getState().current;
-        if (track) pushLockScreen(track, playing, time, dur || 0, 1);
-      },
-      ended: () => useFlowStore.getState().onEnded(),
-    });
     bindLockScreenActions({
       play: () => {
         unlockAudioSession();
         useFlowStore.getState().resume();
-        const id = useFlowStore.getState().current?.videoId;
-        if (id) playYtEmbed(id);
         void audio.play().catch(() => {});
       },
       pause: () => {
         useFlowStore.getState().pause();
-        pauseYtEmbed();
         audio.pause();
       },
       prev: () => {
@@ -336,11 +312,7 @@ export function AudioEngine() {
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
-    if (current.videoId && current.source !== "radio") {
-      if (useFlowStore.getState().isPlaying) playYtEmbed(current.videoId);
-    } else {
-      stopYtEmbed();
-    }
+    /* catalog audio plays via native <audio> against the off-Vercel proxy */
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
@@ -366,10 +338,8 @@ export function AudioEngine() {
     claimAudioFocus();
     applyOutput(audio);
     if (isPlaying) {
-      if (isYtEmbedActive(current?.videoId)) resumeYtEmbed();
-      else void audio.play().catch(() => {});
+      void audio.play().catch(() => {});
     } else {
-      pauseYtEmbed();
       audio.pause();
     }
     if (current) {
@@ -388,9 +358,7 @@ export function AudioEngine() {
     lastSeek.current = seekVersion;
     const audio = el();
     if (!audio) return;
-    if (isYtEmbedActive()) {
-      seekYtEmbed(currentTime);
-    } else if (Math.abs(audio.currentTime - currentTime) > 0.4) {
+    if (Math.abs(audio.currentTime - currentTime) > 0.4) {
       audio.currentTime = currentTime;
     }
   }, [seekVersion, currentTime]);
@@ -968,10 +936,7 @@ export function FullPlayer() {
               >
                 <div className="player-art-float relative aspect-square w-[min(100%-1rem,21rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15">
                   <TrackArt src={current.artwork} alt={current.title} />
-                  <div
-                    className="absolute inset-0"
-                    ref={(node) => attachYtStage(node)}
-                  />
+                  <div className="pointer-events-none absolute inset-0" aria-hidden />
                 </div>
 
                 {/* Live Neon Audio Visualizer */}
