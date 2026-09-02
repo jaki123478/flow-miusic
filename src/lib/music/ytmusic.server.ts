@@ -5,12 +5,29 @@ let tubePromise: Promise<Innertube> | null = null;
 
 export async function getTube(): Promise<Innertube> {
   if (!tubePromise) {
-    tubePromise = Innertube.create().catch((err) => {
+    tubePromise = Innertube.create({
+      generate_session_locally: true,
+    }).catch((err) => {
       tubePromise = null;
       throw err;
     });
   }
   return tubePromise;
+}
+
+function pickAudioFormat(info: any, yt: Innertube): Promise<string | null> {
+  const format =
+    info?.chooseFormat?.({ type: "audio", quality: "best" }) ||
+    info?.chooseFormat?.({ type: "audio", format: "mp4" }) ||
+    info?.chooseFormat?.({ type: "audio" }) ||
+    info?.streaming_data?.adaptive_formats?.find((f: any) => String(f.mime_type || "").startsWith("audio/")) ||
+    info?.streaming_data?.formats?.find((f: any) => String(f.mime_type || "").startsWith("audio/") || f.has_audio);
+  if (!format) return Promise.resolve(null);
+  if (format.url) return Promise.resolve(format.url);
+  if (typeof format.decipher === "function") {
+    return Promise.resolve(format.decipher(yt.session.player)).then((u: string) => u || null);
+  }
+  return Promise.resolve(null);
 }
 
 export async function getAudioUrl(videoId: string): Promise<string | null> {
@@ -19,25 +36,32 @@ export async function getAudioUrl(videoId: string): Promise<string | null> {
 
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC"] as const;
+    const clients = [
+      "IOS",
+      "ANDROID",
+      "ANDROID_MUSIC",
+      "YTMUSIC",
+      "YTMUSIC_ANDROID",
+      "TV",
+      "TV_EMBEDDED",
+      "MWEB",
+      "WEB",
+    ] as const;
 
     for (const client of clients) {
       try {
-        const info = await yt.getBasicInfo(id, { client });
-        const format =
-          info.chooseFormat({ type: "audio" }) ||
-          info.chooseFormat({ type: "audio", quality: "best" }) ||
-          info.chooseFormat({ type: "audio", format: "mp4" }) ||
-          info.streaming_data?.adaptive_formats?.find((f) => (f.mime_type || "").startsWith("audio/")) ||
-          info.streaming_data?.formats?.find((f) => (f.mime_type || "").startsWith("audio/") || f.has_audio);
-
-        if (format?.url) return format.url;
-        if (format && typeof (format as any).decipher === "function") {
-          const u = await (format as any).decipher(yt.session.player);
-          if (u) return u;
-        }
-      } catch (e: any) {
-        /* try next client */
+        const info = await yt.getBasicInfo(id, { client: client as any });
+        const url = await pickAudioFormat(info, yt);
+        if (url) return url;
+      } catch {
+        /* next client */
+      }
+      try {
+        const info = await (yt as any).getInfo(id, { client });
+        const url = await pickAudioFormat(info, yt);
+        if (url) return url;
+      } catch {
+        /* next */
       }
     }
   } catch (err: any) {
