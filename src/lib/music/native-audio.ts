@@ -1,4 +1,5 @@
 import type { Track } from "./types";
+import { playYtEmbed } from "./yt-embed";
 
 let pageHiding = false;
 let lifecycle = false;
@@ -71,10 +72,10 @@ export function directPlayTrack(track: Track) {
     if (audio.paused) void audio.play().catch(() => {});
     return;
   }
-  const host = window.location.hostname;
-  const base = host.includes("web.app") || host.includes("firebaseapp.com") ? "https://flow-music-app-two.vercel.app" : "";
-  const src = track.streamUrl || (track.videoId ? `${base}/api/stream?v=${track.videoId}` : "");
-  if (!src) return;
-  audio.src = src;
-  void audio.play().catch(() => {});
+  if (track.videoId && track.source !== "radio") playYtEmbed(track.videoId);
+  if (track.source === "radio" && track.streamUrl) {
+    audio.src = track.streamUrl;
+    void audio.play().catch(() => {});
+  }
 }
+

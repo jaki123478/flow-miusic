@@ -53,6 +53,7 @@ import {
   isYtEmbedActive,
   pauseYtEmbed,
   playYtEmbed,
+  preloadYtEmbed,
   resumeYtEmbed,
   seekYtEmbed,
   stopYtEmbed,
@@ -73,20 +74,10 @@ import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/m
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
-function getStreamApiBase(): string {
-  if (typeof window === "undefined") return "";
-  const host = window.location.hostname;
-  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
-    return "https://flow-music-app-two.vercel.app";
-  }
-  return "";
-}
-
 function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   if (track.videoId) {
-    const base = getStreamApiBase();
-    return cachedAudioUrl(track.videoId) || `${base}/api/stream?v=${track.videoId}`;
+    return cachedAudioUrl(track.videoId) || "";
   }
   return track.streamUrl || "";
 }
@@ -205,6 +196,7 @@ export function AudioEngine() {
     }
     const audio = el();
     if (!audio) return;
+    preloadYtEmbed();
     audio.setAttribute("playsinline", "true");
     audio.setAttribute("webkit-playsinline", "true");
     unlockAudioSession();
@@ -250,11 +242,7 @@ export function AudioEngine() {
       }
       const blob = cachedAudioUrl(id);
       if (blob) applySrc(audio, blob, s.isPlaying, true);
-      else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
-      else {
-        void playYtEmbed(id);
-        if (s.isPlaying) recover(id, s.currentTime);
-      }
+      else if (id) playYtEmbed(id);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
@@ -290,10 +278,13 @@ export function AudioEngine() {
       play: () => {
         unlockAudioSession();
         useFlowStore.getState().resume();
+        const id = useFlowStore.getState().current?.videoId;
+        if (id) playYtEmbed(id);
         void audio.play().catch(() => {});
       },
       pause: () => {
         useFlowStore.getState().pause();
+        pauseYtEmbed();
         audio.pause();
       },
       prev: () => {
@@ -344,7 +335,11 @@ export function AudioEngine() {
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
-    stopYtEmbed();
+    if (current.videoId && current.source !== "radio") {
+      if (useFlowStore.getState().isPlaying) playYtEmbed(current.videoId);
+    } else {
+      stopYtEmbed();
+    }
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;

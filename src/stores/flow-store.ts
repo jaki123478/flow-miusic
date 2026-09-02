@@ -2,6 +2,7 @@ import { create } from "zustand";
 import type { Playlist, RepeatMode, Track } from "@/lib/music/types";
 import type { Locale } from "@/lib/i18n";
 import { getRelatedTracks } from "@/lib/music/catalog";
+import { playYtEmbed } from "@/lib/music/yt-embed";
 
 export type FlowSettings = {
   crossfade: number;
@@ -257,6 +258,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   playTrack: (track, queue) => {
+    if (track.videoId && track.source !== "radio") playYtEmbed(track.videoId);
     get().bumpPlay(track.artist);
     const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
