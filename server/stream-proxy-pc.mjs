@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { spawn } from "node:child_process";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { fileURLToPath } from "node:url";
 import { BotGuardClient } from "bgutils-js/botguard";
 import { buildURL, parseLooseJSON, getHeaders, USER_AGENT } from "bgutils-js/utils";
 import { WebPoMinter } from "bgutils-js/webpo";
@@ -11,11 +16,31 @@ Platform.shim.eval = async (data) => new Function(data.output)();
 
 const PORT = Number(process.env.STREAM_PORT || 8787);
 const HOST = process.env.STREAM_HOST || "0.0.0.0";
-const CHUNK = 256 * 1024;
 const REQUEST_KEY = "O43z0dpjhgX20SCx4KAo";
+const ROOT = path.dirname(fileURLToPath(import.meta.url));
+const CACHE = process.env.STREAM_CACHE || path.join(ROOT, "cache");
+fs.mkdirSync(CACHE, { recursive: true });
 
 let sessionPromise = null;
 const urlCache = new Map();
+const inflight = new Map();
+
+function ffmpegBin() {
+  const candidates = [
+    process.env.FFMPEG,
+    path.join(ROOT, "ffmpeg.exe"),
+    path.join(ROOT, "ffmpeg"),
+    "C:\\Users\\Jaki1\\tools\\ffmpeg.exe",
+    "ffmpeg",
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (c === "ffmpeg") return c;
+    try {
+      if (fs.existsSync(c)) return c;
+    } catch {}
+  }
+  return "ffmpeg";
+}
 
 function corsHeaders(req) {
   const origin = String(req.headers.origin || "");
@@ -120,23 +145,57 @@ async function resolveUrl(id) {
   return entry;
 }
 
-async function openUpstream(url, start, end) {
-  const u = new URL(url);
-  u.searchParams.set("range", start + "-" + end);
-  const res = await fetch(u, { headers: { "User-Agent": USER_AGENT, Accept: "*/*" }, redirect: "follow", signal: AbortSignal.timeout(25_000) });
-  if (!(res.ok || res.status === 206)) {
-    try { await res.body?.cancel(); } catch {}
-    throw new Error("upstream " + res.status + " at " + start);
-  }
-  return res;
+function remux(input, output) {
+  return new Promise((resolve, reject) => {
+    const ff = spawn(ffmpegBin(), ["-y", "-hide_banner", "-loglevel", "error", "-i", input, "-c", "copy", "-movflags", "+faststart", "-f", "ipod", output], { windowsHide: true });
+    let err = "";
+    ff.stderr.on("data", (d) => {
+      err += d;
+    });
+    ff.on("error", reject);
+    ff.on("close", (code) => {
+      if (code === 0) resolve();
+      else reject(new Error("ffmpeg " + code + " " + err.slice(-500)));
+    });
+  });
 }
 
-function pipeBody(res, upstream) {
-  if (!upstream.body) {
-    res.end();
-    return;
+async function ensureProgressive(id) {
+  const out = path.join(CACHE, id + ".m4a");
+  try {
+    const st = fs.statSync(out);
+    if (st.size > 8000) return { file: out, length: st.size };
+  } catch {}
+  if (inflight.has(id)) return inflight.get(id);
+  const job = (async () => {
+    const resolved = await resolveUrl(id);
+    const dash = path.join(CACHE, id + ".dash.tmp");
+    const tmp = path.join(CACHE, id + ".m4a.tmp");
+    const u = new URL(resolved.url);
+    if (resolved.length > 0) u.searchParams.set("range", "0-" + (resolved.length - 1));
+    const res = await fetch(u, { headers: { "User-Agent": USER_AGENT, Accept: "*/*" }, redirect: "follow", signal: AbortSignal.timeout(120_000) });
+    if (!(res.ok || res.status === 206) || !res.body) {
+      try {
+        await res.body?.cancel();
+      } catch {}
+      throw new Error("upstream " + res.status);
+    }
+    await pipeline(Readable.fromWeb(res.body), fs.createWriteStream(dash));
+    await remux(dash, tmp);
+    fs.renameSync(tmp, out);
+    try {
+      fs.unlinkSync(dash);
+    } catch {}
+    const st = fs.statSync(out);
+    if (st.size < 8000) throw new Error("tiny remux");
+    return { file: out, length: st.size };
+  })();
+  inflight.set(id, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(id);
   }
-  Readable.fromWeb(upstream.body).on("error", () => { try { res.destroy(); } catch {} }).pipe(res);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -157,8 +216,9 @@ const server = http.createServer(async (req, res) => {
   }
   const pathname = parsed.pathname.replace(/\/+$/, "") || "/";
   if (pathname === "/health" || pathname === "/api/health") {
-    res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
-    res.end("ok");
+    const body = JSON.stringify({ ok: true, ffmpeg: ffmpegBin(), cache: CACHE });
+    res.writeHead(200, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(body);
     return;
   }
   if (pathname !== "/stream" && pathname !== "/api/stream") {
@@ -171,17 +231,24 @@ const server = http.createServer(async (req, res) => {
     json(res, 400, { error: "Bad request" }, cors);
     return;
   }
-  let resolved;
+  let file;
   try {
-    resolved = await resolveUrl(id);
+    file = await ensureProgressive(id);
   } catch (err) {
+    urlCache.delete(id);
     json(res, 502, { error: err instanceof Error ? err.message : "No stream" }, cors);
     return;
   }
-  const size = resolved.length || 0;
-  const out = { ...cors, "Content-Type": "audio/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=120" };
+  const size = file.length;
+  const out = {
+    ...cors,
+    "Content-Type": "audio/mp4",
+    "Accept-Ranges": "bytes",
+    "Cache-Control": "public, max-age=120",
+    "X-Content-Type-Options": "nosniff",
+  };
   const isHead = req.method === "HEAD";
-  const range = parseRange(req.headers.range, size || 1);
+  const range = parseRange(req.headers.range, size);
   if (range?.unsat) {
     out["Content-Range"] = "bytes */" + size;
     setHeaders(res, out);
@@ -189,33 +256,31 @@ const server = http.createServer(async (req, res) => {
     res.end();
     return;
   }
-  const start = range ? range.start : 0;
-  const end = range ? range.end : (size ? size - 1 : CHUNK - 1);
   if (isHead) {
-    if (size) out["Content-Length"] = String(size);
+    out["Content-Length"] = String(size);
     setHeaders(res, out);
     res.writeHead(200);
     res.end();
     return;
   }
-  let upstream;
-  try {
-    upstream = await openUpstream(resolved.url, start, end);
-  } catch (err) {
-    urlCache.delete(id);
-    json(res, 502, { error: err instanceof Error ? err.message : "upstream" }, cors);
-    return;
+  const start = range ? range.start : 0;
+  const end = range ? range.end : size - 1;
+  out["Content-Length"] = String(end - start + 1);
+  if (range) {
+    out["Content-Range"] = "bytes " + start + "-" + end + "/" + size;
+    setHeaders(res, out);
+    res.writeHead(206);
+  } else {
+    setHeaders(res, out);
+    res.writeHead(200);
   }
-  const cr = upstream.headers.get("content-range");
-  const cl = upstream.headers.get("content-length");
-  if (cr) out["Content-Range"] = cr;
-  else if (size) out["Content-Range"] = "bytes " + start + "-" + end + "/" + size;
-  if (cl) out["Content-Length"] = cl;
-  setHeaders(res, out);
-  res.writeHead(range || cr ? 206 : 200);
-  pipeBody(res, upstream);
+  fs.createReadStream(file.file, { start, end }).on("error", () => {
+    try {
+      res.destroy();
+    } catch {}
+  }).pipe(res);
 });
 
 server.listen(PORT, HOST, () => {
-  console.log("[flow-stream-proxy] simpmusic/pot http://" + HOST + ":" + PORT);
+  console.log("[flow-stream-proxy] safari-m4a ffmpeg=" + ffmpegBin() + " http://" + HOST + ":" + PORT);
 });

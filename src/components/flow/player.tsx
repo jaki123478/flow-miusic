@@ -460,7 +460,8 @@ export function AudioEngine() {
         const a = el();
         const st = useFlowStore.getState();
         if (!st.isPlaying || !a) return;
-        if (a.paused || a.error || a.readyState < 2) wakePlayback(true);
+        if (a.error) wakePlayback(true);
+        else playWhenReady(a);
       };
       window.addEventListener("pointerdown", once, { capture: true, once: true });
     };
