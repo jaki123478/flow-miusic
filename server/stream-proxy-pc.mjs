@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import http from "node:http";
+import { Readable } from "node:stream";
 import { BotGuardClient } from "bgutils-js/botguard";
 import { buildURL, parseLooseJSON, getHeaders, USER_AGENT } from "bgutils-js/utils";
 import { WebPoMinter } from "bgutils-js/webpo";
@@ -14,7 +15,7 @@ const CHUNK = 256 * 1024;
 const REQUEST_KEY = "O43z0dpjhgX20SCx4KAo";
 
 let sessionPromise = null;
-const fileCache = new Map();
+const urlCache = new Map();
 
 function corsHeaders(req) {
   const origin = String(req.headers.origin || "");
@@ -99,32 +100,9 @@ function session() {
   });
 }
 
-async function fetchFull(url, knownLen) {
-  const parts = [];
-  let start = 0;
-  const total = knownLen || 0;
-  while (!total || start < total) {
-    const end = total ? Math.min(start + CHUNK - 1, total - 1) : start + CHUNK - 1;
-    const u = new URL(url);
-    u.searchParams.set("range", start + "-" + end);
-    const res = await fetch(u, { headers: { "User-Agent": USER_AGENT, Accept: "*/*" }, redirect: "follow", signal: AbortSignal.timeout(25_000) });
-    if (!(res.ok || res.status === 206)) {
-      try { await res.body?.cancel(); } catch {}
-      throw new Error("upstream " + res.status + " at " + start);
-    }
-    const buf = Buffer.from(await res.arrayBuffer());
-    if (!buf.length) break;
-    parts.push(buf);
-    start += buf.length;
-    if (total && start >= total) break;
-    if (!total && buf.length < CHUNK) break;
-  }
-  return Buffer.concat(parts, total || undefined);
-}
-
-async function getFile(id) {
-  const hit = fileCache.get(id);
-  if (hit && hit.exp > Date.now() && hit.buf?.length > 1000) return hit.buf;
+async function resolveUrl(id) {
+  const hit = urlCache.get(id);
+  if (hit && hit.exp > Date.now() && hit.url) return hit;
   const { webPoMinter, innertube } = await session();
   const pot = await webPoMinter.mintAsWebsafeString(id);
   let info;
@@ -136,11 +114,29 @@ async function getFile(id) {
   const format = info.chooseFormat({ quality: "best", type: "audio" });
   if (!format) throw new Error("no audio");
   const url = (await format.decipher(innertube.session.player)) + "&pot=" + pot;
-  const buf = await fetchFull(url, Number(format.content_length) || 0);
-  if (buf.length < 1000) throw new Error("short body " + buf.length);
-  fileCache.set(id, { buf, exp: Date.now() + 8 * 60_000 });
-  if (fileCache.size > 10) fileCache.delete(fileCache.keys().next().value);
-  return buf;
+  const length = Number(format.content_length) || 0;
+  const entry = { url, length, exp: Date.now() + 8 * 60_000 };
+  urlCache.set(id, entry);
+  return entry;
+}
+
+async function openUpstream(url, start, end) {
+  const u = new URL(url);
+  u.searchParams.set("range", start + "-" + end);
+  const res = await fetch(u, { headers: { "User-Agent": USER_AGENT, Accept: "*/*" }, redirect: "follow", signal: AbortSignal.timeout(25_000) });
+  if (!(res.ok || res.status === 206)) {
+    try { await res.body?.cancel(); } catch {}
+    throw new Error("upstream " + res.status + " at " + start);
+  }
+  return res;
+}
+
+function pipeBody(res, upstream) {
+  if (!upstream.body) {
+    res.end();
+    return;
+  }
+  Readable.fromWeb(upstream.body).on("error", () => { try { res.destroy(); } catch {} }).pipe(res);
 }
 
 const server = http.createServer(async (req, res) => {
@@ -175,17 +171,17 @@ const server = http.createServer(async (req, res) => {
     json(res, 400, { error: "Bad request" }, cors);
     return;
   }
-  let buf;
+  let resolved;
   try {
-    buf = await getFile(id);
+    resolved = await resolveUrl(id);
   } catch (err) {
     json(res, 502, { error: err instanceof Error ? err.message : "No stream" }, cors);
     return;
   }
-  const size = buf.length;
+  const size = resolved.length || 0;
   const out = { ...cors, "Content-Type": "audio/mp4", "Accept-Ranges": "bytes", "Cache-Control": "public, max-age=120" };
   const isHead = req.method === "HEAD";
-  const range = parseRange(req.headers.range, size);
+  const range = parseRange(req.headers.range, size || 1);
   if (range?.unsat) {
     out["Content-Range"] = "bytes */" + size;
     setHeaders(res, out);
@@ -193,21 +189,31 @@ const server = http.createServer(async (req, res) => {
     res.end();
     return;
   }
-  if (range) {
-    const slice = buf.subarray(range.start, range.end + 1);
-    out["Content-Range"] = "bytes " + range.start + "-" + range.end + "/" + size;
-    out["Content-Length"] = String(slice.length);
+  const start = range ? range.start : 0;
+  const end = range ? range.end : (size ? size - 1 : CHUNK - 1);
+  if (isHead) {
+    if (size) out["Content-Length"] = String(size);
     setHeaders(res, out);
-    res.writeHead(206);
-    if (isHead) res.end();
-    else res.end(slice);
+    res.writeHead(200);
+    res.end();
     return;
   }
-  out["Content-Length"] = String(size);
+  let upstream;
+  try {
+    upstream = await openUpstream(resolved.url, start, end);
+  } catch (err) {
+    urlCache.delete(id);
+    json(res, 502, { error: err instanceof Error ? err.message : "upstream" }, cors);
+    return;
+  }
+  const cr = upstream.headers.get("content-range");
+  const cl = upstream.headers.get("content-length");
+  if (cr) out["Content-Range"] = cr;
+  else if (size) out["Content-Range"] = "bytes " + start + "-" + end + "/" + size;
+  if (cl) out["Content-Length"] = cl;
   setHeaders(res, out);
-  res.writeHead(200);
-  if (isHead) res.end();
-  else res.end(buf);
+  res.writeHead(range || cr ? 206 : 200);
+  pipeBody(res, upstream);
 });
 
 server.listen(PORT, HOST, () => {

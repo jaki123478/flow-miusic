@@ -287,15 +287,33 @@ function parseClock(raw: string): number {
   return parseInt(last[1], 10) * 60 + parseInt(last[2], 10);
 }
 
+function asSeconds(n: number): number {
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return n > 10000 ? Math.round(n / 1000) : Math.round(n);
+}
 function durationOf(item: Record<string, unknown>, subtitle: string): number {
-  const d = item.duration;
-  if (typeof d === "number" && d > 0) return d > 1000 ? Math.round(d / 1000) : d;
-  if (d && typeof d === "object") {
-    const rec = d as { seconds?: number; duration_seconds?: number };
-    const n = Number(rec.seconds ?? rec.duration_seconds ?? 0);
+  for (const key of ["duration_seconds", "length_seconds", "lengthSeconds", "durationSeconds"]) {
+    const n = asSeconds(Number(item[key]));
     if (n > 0) return n;
   }
-  return parseClock(subtitle);
+  const d = item.duration;
+  if (typeof d === "number" && d > 0) return asSeconds(d);
+  if (d && typeof d === "object") {
+    const rec = d as { seconds?: number; duration_seconds?: number; text?: unknown };
+    const n = asSeconds(Number(rec.seconds ?? rec.duration_seconds ?? 0));
+    if (n > 0) return n;
+    const clock = parseClock(txt(rec.text));
+    if (clock > 0) return clock;
+  }
+  const extra = [
+    subtitle,
+    txt(item.length_text),
+    txt(item.duration_text),
+    txt(item.lengthText),
+    txt((item.flex_columns as { title?: unknown }[] | undefined)?.[1]?.title),
+    txt((item.flex_columns as { title?: unknown }[] | undefined)?.[2]?.title),
+  ].join(" ");
+  return parseClock(extra);
 }
 
 function thumbnailOf(item: Record<string, unknown>, videoId: string): string {

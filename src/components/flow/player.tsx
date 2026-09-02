@@ -108,20 +108,35 @@ export function AudioEngine() {
 
   const el = () => audioRef.current || (audioRef.current = getGlobalAudio());
 
+  const playWhenReady = (audio: HTMLAudioElement) => {
+    if (!useFlowStore.getState().isPlaying) return;
+    const go = () => {
+      if (!useFlowStore.getState().isPlaying) return;
+      void audio.play().catch(() => {});
+    };
+    if (audio.readyState >= 2) {
+      go();
+      return;
+    }
+    audio.addEventListener("canplay", go, { once: true });
+    audio.addEventListener("loadeddata", go, { once: true });
+    window.setTimeout(go, 250);
+  };
+
   const resumeElement = (audio: HTMLAudioElement | null) => {
     if (!audio) return;
-    if (useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
+    if (useFlowStore.getState().isPlaying && audio.paused) playWhenReady(audio);
   };
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false, allowHidden = false) => {
     if (!src) return;
     applyOutput(audio);
     if (isPlaybackFrozen() && !allowHidden) {
-      if (play && audio.paused && useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+      if (play) playWhenReady(audio);
       return;
     }
-    if (lastSrc.current === src) {
-      if (play && audio.paused) void audio.play().catch(() => {});
+    if (lastSrc.current === src && audio.src) {
+      if (play) playWhenReady(audio);
       return;
     }
     const playing = !audio.paused && !audio.error;
@@ -129,8 +144,10 @@ export function AudioEngine() {
     if (playing && blobUpgrade) return;
     if (playing && !force) return;
     lastSrc.current = src;
+    audio.pause();
     audio.src = src;
-    if (play) void audio.play().catch(() => {});
+    audio.load();
+    if (play) playWhenReady(audio);
   };
 
   const recover = (id: string, time: number) => {
@@ -206,7 +223,11 @@ export function AudioEngine() {
     };
     const onDurationChange = () => {
       const d = audio.duration;
-      if (Number.isFinite(d) && d > 0) setDuration(d);
+      if (Number.isFinite(d) && d > 1 && d < 86400) setDuration(d);
+      else {
+        const catalog = useFlowStore.getState().current?.duration || 0;
+        if (catalog > 1) setDuration(catalog);
+      }
     };
     const onPlaying = () => {
       lastMove.current = Date.now();
@@ -240,6 +261,7 @@ export function AudioEngine() {
     };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("loadedmetadata", onDurationChange);
     audio.addEventListener("durationchange", onDurationChange);
     audio.addEventListener("playing", onPlaying);
     audio.addEventListener("pause", onPause);
@@ -289,6 +311,7 @@ export function AudioEngine() {
     });
     return () => {
       audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("loadedmetadata", onDurationChange);
       audio.removeEventListener("durationchange", onDurationChange);
       audio.removeEventListener("playing", onPlaying);
       audio.removeEventListener("pause", onPause);
@@ -307,10 +330,9 @@ export function AudioEngine() {
     lastMove.current = Date.now();
     lastPos.current = 0;
     /* catalog audio plays via native <audio> against the off-Vercel proxy */
-    if (current.duration && current.duration > 0) setDuration(current.duration);
-    else setDuration(0);
+    if (current.duration && current.duration > 1) setDuration(current.duration);
     const wantPlay = useFlowStore.getState().isPlaying;
-    applySrc(audio, fallbackSrc(current), wantPlay, true);
+    applySrc(audio, fallbackSrc(current), true, true);
     unlockAudioSession();
     claimAudioFocus();
     if (wantPlay) {
@@ -332,7 +354,7 @@ export function AudioEngine() {
     claimAudioFocus();
     applyOutput(audio);
     if (isPlaying) {
-      void audio.play().catch(() => {});
+      playWhenReady(audio);
     } else {
       audio.pause();
     }
@@ -352,8 +374,13 @@ export function AudioEngine() {
     lastSeek.current = seekVersion;
     const audio = el();
     if (!audio) return;
+    if (audio.readyState < 1) return;
     if (Math.abs(audio.currentTime - currentTime) > 0.4) {
-      audio.currentTime = currentTime;
+      try {
+        audio.currentTime = currentTime;
+      } catch {
+        /* metadata not ready */
+      }
     }
   }, [seekVersion, currentTime]);
 
