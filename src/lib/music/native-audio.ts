@@ -47,7 +47,6 @@ export function getGlobalAudio(): HTMLAudioElement | null {
     el.setAttribute("playsinline", "");
     el.setAttribute("webkit-playsinline", "true");
     el.preload = "auto";
-    el.crossOrigin = "anonymous";
     el.style.position = "fixed";
     el.style.bottom = "0";
     el.style.left = "0";
