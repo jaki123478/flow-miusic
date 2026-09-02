@@ -1,4 +1,5 @@
 import type { Track } from "./types";
+import { catalogStreamUrl } from "./stream-url";
 
 let pageHiding = false;
 let lifecycle = false;
@@ -86,8 +87,8 @@ export function directPlayTrack(track: Track) {
     void audio.play().catch(() => {});
     return;
   }
-  const src = track.videoId
-    ? "https://refer-lying-pdas-centered.trycloudflare.com/api/stream?id=" + encodeURIComponent(track.videoId)
+  const src = track.videoId && track.videoId.length === 11
+    ? catalogStreamUrl(track.videoId)
     : track.streamUrl;
   if (!src) return;
   audio.src = src;

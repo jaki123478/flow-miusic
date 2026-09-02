@@ -48,6 +48,7 @@ const EQ_PRESETS = [
 import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, isAppleMobile, pushLockScreen } from "@/lib/music/lock-screen";
 import { getGlobalAudio, isPlaybackFrozen, markPageVisible, unlockAudioSession } from "@/lib/music/native-audio";
+import { catalogStreamUrl } from "@/lib/music/stream-url";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
 import {
@@ -64,13 +65,12 @@ import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/m
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
-function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
+function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }, nonce = 0) {
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   const id = track.videoId || "";
-  if (id.length === 11) {
-    return "https://refer-lying-pdas-centered.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
-  }
-  return track.streamUrl || "";
+  const base = id.length === 11 ? catalogStreamUrl(id) : track.streamUrl || "";
+  if (!base) return "";
+  return nonce ? base + (base.includes("?") ? "&" : "?") + "r=" + nonce : base;
 }
 
 function applyOutput(audio: HTMLAudioElement) {
@@ -105,12 +105,17 @@ export function AudioEngine() {
   const lastMove = useRef(0);
   const lastPos = useRef(0);
   const recovering = useRef("");
+  const lastReload = useRef(0);
+  const reloadCount = useRef(0);
+  const playGen = useRef(0);
 
   const el = () => audioRef.current || (audioRef.current = getGlobalAudio());
 
   const playWhenReady = (audio: HTMLAudioElement) => {
     if (!useFlowStore.getState().isPlaying) return;
+    const gen = ++playGen.current;
     const go = () => {
+      if (gen !== playGen.current) return;
       if (!useFlowStore.getState().isPlaying) return;
       void audio.play().catch(() => {});
     };
@@ -120,7 +125,17 @@ export function AudioEngine() {
     }
     audio.addEventListener("canplay", go, { once: true });
     audio.addEventListener("loadeddata", go, { once: true });
-    window.setTimeout(go, 250);
+    window.setTimeout(go, 280);
+  };
+
+  const canReload = () => {
+    const now = Date.now();
+    if (now - lastReload.current < 2800) return false;
+    if (now - lastReload.current > 25000) reloadCount.current = 0;
+    if (reloadCount.current >= 3) return false;
+    lastReload.current = now;
+    reloadCount.current += 1;
+    return true;
   };
 
   const resumeElement = (audio: HTMLAudioElement | null) => {
@@ -140,10 +155,16 @@ export function AudioEngine() {
       playWhenReady(audio);
       return;
     }
+    if (force || dead) {
+      if (!canReload() && lastSrc.current) {
+        playWhenReady(audio);
+        return;
+      }
+    }
     lastSrc.current = "";
     recovering.current = "";
     const t = audio.currentTime || s.currentTime || 0;
-    applySrc(audio, fallbackSrc(s.current), true, true, true);
+    applySrc(audio, fallbackSrc(s.current, Date.now()), true, true, true);
     if (t > 1) {
       audio.addEventListener(
         "loadedmetadata",
@@ -264,6 +285,7 @@ export function AudioEngine() {
     const onPlaying = () => {
       lastMove.current = Date.now();
       recovering.current = "";
+      reloadCount.current = 0;
       const track = useFlowStore.getState().current;
       if (track) {
         markPlayingForFocus(true);
@@ -288,12 +310,13 @@ export function AudioEngine() {
       if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onEndedEv = () => {
-      if ((audio.duration || 0) > 0 && audio.duration < 8) return;
+      const d = audio.duration || 0;
+      const t = audio.currentTime || 0;
+      if (t < 6 && (d < 8 || !Number.isFinite(d))) {
+        if (useFlowStore.getState().isPlaying) wakePlayback(true);
+        return;
+      }
       onEnded();
-      const s = useFlowStore.getState();
-      const track = s.current;
-      if (!track || !s.isPlaying) return;
-      applySrc(audio, fallbackSrc(track), true, true, true);
     };
 
     audio.addEventListener("timeupdate", onTimeUpdate);
@@ -389,7 +412,8 @@ export function AudioEngine() {
     claimAudioFocus();
     applyOutput(audio);
     if (isPlaying) {
-      playWhenReady(audio);
+      if (audio.error || audio.readyState < 1) wakePlayback(true);
+      else playWhenReady(audio);
     } else {
       audio.pause();
     }
@@ -431,7 +455,14 @@ export function AudioEngine() {
     const onShow = () => {
       hidKeep = false;
       markPageVisible();
-      wakePlayback(true);
+      wakePlayback(false);
+      const once = () => {
+        const a = el();
+        const st = useFlowStore.getState();
+        if (!st.isPlaying || !a) return;
+        if (a.paused || a.error || a.readyState < 2) wakePlayback(true);
+      };
+      window.addEventListener("pointerdown", once, { capture: true, once: true });
     };
     const kick = () => {
       const audio = el();
