@@ -1,7 +1,5 @@
 import type { Track } from './types';
-
-const SILENT_WAV =
-  'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+import { getGlobalAudio, isPlaybackFrozen, unlockAudioSession } from './native-audio';
 
 function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false;
@@ -44,7 +42,6 @@ export class BackgroundAudioPlayer {
   private _wantPlay = false;
   private _ios = isIOS();
   public audio: HTMLAudioElement;
-  private _warm: HTMLAudioElement;
 
   constructor(options: BackgroundAudioOptions = {}) {
     this.repeat = options.repeat || 'off';
@@ -54,40 +51,23 @@ export class BackgroundAudioPlayer {
     this.onTrackEnded = options.onTrackEnded;
 
     if (typeof document !== 'undefined') {
-      this.audio = document.createElement('audio');
-      this.audio.setAttribute('playsinline', '');
-      this.audio.setAttribute('webkit-playsinline', 'true');
-      this.audio.preload = 'auto';
-      this.audio.crossOrigin = options.crossOrigin || 'anonymous';
-      this.audio.setAttribute('controlslist', 'nodownload');
-      this.audio.style.display = 'none';
-      document.documentElement.appendChild(this.audio);
-
-      // Secondo elemento 'warm' per iOS per tenere viva la sessione audio
-      this._warm = document.createElement('audio');
-      this._warm.setAttribute('playsinline', '');
-      this._warm.preload = 'auto';
-      this._warm.src = SILENT_WAV;
-      this._warm.volume = 0.01;
-      this._warm.style.display = 'none';
-      document.documentElement.appendChild(this._warm);
-
+      this.audio = getGlobalAudio() as HTMLAudioElement;
+      if (this.audio) {
+        this.audio.preload = 'auto';
+        this.audio.crossOrigin = options.crossOrigin || 'anonymous';
+        this.audio.setAttribute('controlslist', 'nodownload');
+      }
       this._bindAudioEvents();
       this._configureAudioSession();
       this._bindMediaSession();
       this._bindLifecycle();
     } else {
       this.audio = null as any;
-      this._warm = null as any;
     }
   }
 
   private _configureAudioSession() {
-    try {
-      if (typeof navigator !== 'undefined' && (navigator as any).audioSession) {
-        (navigator as any).audioSession.type = 'playback';
-      }
-    } catch (_) {}
+    unlockAudioSession();
   }
 
   private _getTrackSrc(track: Track): string {
@@ -267,40 +247,8 @@ export class BackgroundAudioPlayer {
 
   public unlock(): Promise<boolean> {
     this._configureAudioSession();
-    const tasks: Promise<any>[] = [];
-
-    try {
-      if (this._warm) {
-        this._warm.currentTime = 0;
-        const w = this._warm.play();
-        if (w && w.then) {
-          tasks.push(
-            w.then(() => {
-              this._warm.pause();
-              this._warm.currentTime = 0;
-            }).catch(() => {})
-          );
-        }
-      }
-    } catch (_) {}
-
-    try {
-      if (this.audio) {
-        const dummy = this.audio.play();
-        if (dummy && dummy.then) {
-          tasks.push(
-            dummy.then(() => {
-              this.audio.pause();
-            }).catch(() => {})
-          );
-        } else {
-          this.audio.pause();
-        }
-      }
-    } catch (_) {}
-
     this._unlocked = true;
-    return Promise.all(tasks).then(() => true);
+    return Promise.resolve(true);
   }
 
   public setQueue(tracks: Track[], startIndex = 0) {
@@ -322,19 +270,15 @@ export class BackgroundAudioPlayer {
     this._configureAudioSession();
     this._applyMetadata(track);
 
-    this.audio.src = src;
-    this.audio.load();
-
-    const nxt = this.queue[this.index + 1];
-    if (nxt && this._warm) {
-      const nxtSrc = this._getTrackSrc(nxt);
-      if (nxtSrc) {
-        try {
-          this._warm.src = nxtSrc;
-          this._warm.load();
-        } catch (_) {}
+    if (isPlaybackFrozen()) {
+      if (autoplay && this.audio.paused) {
+        const p = this.audio.play();
+        if (p && p.catch) p.catch(() => {});
       }
+      return;
     }
+
+    this.audio.src = src;
 
     if (autoplay) {
       const p = this.audio.play();
@@ -448,8 +392,6 @@ export class BackgroundAudioPlayer {
 
   public destroy() {
     this.stop();
-    if (this.audio?.parentNode) this.audio.parentNode.removeChild(this.audio);
-    if (this._warm?.parentNode) this._warm.parentNode.removeChild(this._warm);
   }
 }
 
