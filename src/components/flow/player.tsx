@@ -68,7 +68,7 @@ function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: str
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   const id = track.videoId || "";
   if (id.length === 11) {
-    return "https://taken-transition-locator-hunting.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
+    return "https://refer-lying-pdas-centered.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
   }
   return track.streamUrl || "";
 }
