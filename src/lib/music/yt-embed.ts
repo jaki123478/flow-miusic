@@ -46,14 +46,27 @@ function listenMessages() {
   });
 }
 
+let stage: HTMLElement | null = null;
+
+export function attachYtStage(el: HTMLElement | null) {
+  stage = el;
+  const box = ensureHost();
+  if (box && el && box.parentElement !== el) {
+    el.appendChild(box);
+    box.style.cssText =
+      "position:absolute;inset:0;width:100%;height:100%;z-index:3;border-radius:inherit;overflow:hidden;background:#000";
+  }
+}
+
 function ensureHost() {
   if (typeof document === "undefined") return null;
-  if (host && document.body.contains(host)) return host;
+  if (host && (stage ? stage.contains(host) : document.body.contains(host))) return host;
   host = document.createElement("div");
   host.id = "flow-yt-embed";
-  host.style.cssText =
-    "position:fixed;right:12px;bottom:96px;width:128px;height:72px;z-index:60;border-radius:12px;overflow:hidden;background:#000;box-shadow:0 8px 28px rgba(0,0,0,.45)";
-  document.documentElement.appendChild(host);
+  host.style.cssText = stage
+    ? "position:absolute;inset:0;width:100%;height:100%;z-index:3;border-radius:inherit;overflow:hidden;background:#000"
+    : "position:fixed;left:0;right:0;bottom:0;top:0;width:100%;height:40%;z-index:80;background:#000";
+  (stage || document.documentElement).appendChild(host);
   return host;
 }
 
@@ -96,8 +109,7 @@ export function playYtEmbed(id: string) {
   lastTime = 0;
   lastDur = 0;
   lastPlaying = true;
-  const origin = encodeURIComponent(window.location.origin);
-  const src = `https://www.youtube.com/embed/${id}?autoplay=1&mute=0&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&controls=0&fs=0&origin=${origin}`;
+  const src = `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=0&playsinline=1&enablejsapi=1&rel=0&modestbranding=1&controls=1&fs=0`;
   if (!frame || !box.contains(frame)) {
     frame = document.createElement("iframe");
     frame.id = "flow-yt-frame";

@@ -53,6 +53,7 @@ import {
   isYtEmbedActive,
   pauseYtEmbed,
   playYtEmbed,
+  attachYtStage,
   preloadYtEmbed,
   resumeYtEmbed,
   seekYtEmbed,
@@ -965,14 +966,13 @@ export function FullPlayer() {
                 onTouchEnd={handleTouchEnd}
                 className="flex min-h-0 flex-1 flex-col items-center justify-center py-2"
               >
-                <button
-                  type="button"
-                  onClick={() => setShowLyrics(true)}
-                  className="player-art-float aspect-square w-[min(100%-1rem,21rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15 transition-transform active:scale-95"
-                  aria-label="Mostra testi"
-                >
+                <div className="player-art-float relative aspect-square w-[min(100%-1rem,21rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15">
                   <TrackArt src={current.artwork} alt={current.title} />
-                </button>
+                  <div
+                    className="absolute inset-0"
+                    ref={(node) => attachYtStage(node)}
+                  />
+                </div>
 
                 {/* Live Neon Audio Visualizer */}
                 <div className="mt-3 flex items-center justify-center">
