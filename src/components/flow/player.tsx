@@ -68,7 +68,7 @@ function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: str
   if (track.source === "radio" && track.streamUrl) return track.streamUrl;
   const id = track.videoId || "";
   if (id.length === 11) {
-    return "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
+    return "https://taken-transition-locator-hunting.trycloudflare.com/api/stream?id=" + encodeURIComponent(id);
   }
   return track.streamUrl || "";
 }
@@ -231,7 +231,7 @@ export function AudioEngine() {
         resumeElement(audio);
         return;
       }
-      applySrc(audio, "https://lightbox-elderly-sku-pension.trycloudflare.com/api/stream?id=" + encodeURIComponent(id), s.isPlaying, true);
+      applySrc(audio, "https://taken-transition-locator-hunting.trycloudflare.com/api/stream?id=" + encodeURIComponent(id), s.isPlaying, true);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
