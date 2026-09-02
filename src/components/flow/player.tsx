@@ -218,25 +218,20 @@ export function AudioEngine() {
       }
     };
     const onPause = () => {
-      resumeElement(audio);
+      if (audio.ended) return;
+      if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onWaiting = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onError = () => {
-      const s = useFlowStore.getState();
-      const id = s.current?.videoId;
-      if (!id) return;
-      if (isPlaybackFrozen()) {
-        resumeElement(audio);
-        return;
-      }
-      applySrc(audio, "https://taken-transition-locator-hunting.trycloudflare.com/api/stream?id=" + encodeURIComponent(id), s.isPlaying, true);
+      if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onStalled = () => {
       if (isPlaybackFrozen()) resumeElement(audio);
     };
     const onEndedEv = () => {
+      if ((audio.duration || 0) > 0 && audio.duration < 8) return;
       onEnded();
       const s = useFlowStore.getState();
       const track = s.current;
@@ -367,7 +362,7 @@ export function AudioEngine() {
     const keepPlaying = () => {
       const audio = el();
       const s = useFlowStore.getState();
-      if (!audio || !s.isPlaying) return;
+      if (!audio || !s.isPlaying || audio.ended) return;
       claimAudioFocus();
       if (audio.paused) void audio.play().catch(() => {});
     };
@@ -383,7 +378,7 @@ export function AudioEngine() {
         return;
       }
       hidKeep = false;
-      resumeElement(audio);
+      if (!audio.ended) resumeElement(audio);
       const t = audio.currentTime || 0;
       if (t > lastPos.current + 0.15) {
         lastPos.current = t;
