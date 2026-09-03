@@ -119,6 +119,8 @@ export type ArtistPageData = {
   similar: SimilarArtist[];
 };
 
+export type AlbumPageData = ArtistAlbum & { artist: string; more: ArtistAlbum[] };
+
 const HOME_PLAYLISTS: { id: string; title: string; subtitle: string; playlistId: string }[] = [
   { id: "hits", title: "Hit del momento", subtitle: "Dal catalogo YouTube Music", playlistId: "PL4fGSI1pDJn77aK7sAW2AT0oOzo5inWY8" },
   { id: "viral", title: "Virali", subtitle: "Cosa sta esplodendo", playlistId: "PL4fGSI1pDJn61unMfmrUSz68RT8IFFnks" },
@@ -359,6 +361,17 @@ export const getFreshTracks = createServerFn({ method: "POST" })
     }
   });
 
+
+export const getAlbumPage = createServerFn({ method: "GET" })
+  .validator((d: { id: string }) => d)
+  .handler(async ({ data }) => {
+    try {
+      const yt = await import("./ytmusic.server");
+      return await yt.getAlbumPage(data.id || "");
+    } catch {
+      return null;
+    }
+  });
 
 export const getArtistPage = createServerFn({ method: "GET" })
   .validator((d: { name: string }) => d)
