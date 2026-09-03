@@ -23,6 +23,7 @@ function ArtistPage() {
   const followed = useFlowStore((s) => s.followedArtists);
   const toggleFollowArtist = useFlowStore((s) => s.toggleFollowArtist);
   const following = followed.some((a) => a.toLowerCase() === page.name.toLowerCase());
+  const navigate = Route.useNavigate();
 
   return (
     <div className="flow-enter space-y-8 pb-4">
@@ -79,6 +80,7 @@ function ArtistPage() {
                 subtitle={al.year ? `${al.year} · ${al.tracks.length} brani` : `${al.tracks.length} brani`}
                 artwork={al.artwork}
                 onPlay={() => al.tracks.length && playQueue(al.tracks, 0)}
+                onOpen={() => void navigate({ to: "/al/$id", params: { id: al.id } })}
               />
             ))}
           </HScroll>

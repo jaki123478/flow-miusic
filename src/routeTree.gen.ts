@@ -26,6 +26,7 @@ import { Route as ApiPlayRouteImport } from './routes/api/play'
 import { Route as ApiProxyRouteImport } from './routes/api/proxy'
 import { Route as ApiStreamRouteImport } from './routes/api/stream'
 import { Route as ANameRouteImport } from './routes/a.$name'
+import { Route as AlIdRouteImport } from './routes/al.$id'
 import { Route as PIdRouteImport } from './routes/p.$id'
 import { Route as TIdRouteImport } from './routes/t.$id'
 import { Route as UIdRouteImport } from './routes/u.$id'
@@ -116,6 +117,11 @@ const ANameRoute = ANameRouteImport.update({
   path: '/a/$name',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AlIdRoute = AlIdRouteImport.update({
+  id: '/al/$id',
+  path: '/al/$id',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PIdRoute = PIdRouteImport.update({
   id: '/p/$id',
   path: '/p/$id',
@@ -155,6 +161,7 @@ export interface FileRoutesByFullPath {
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
   '/a/$name': typeof ANameRoute
+  '/al/$id': typeof AlIdRoute
   '/p/$id': typeof PIdRoute
   '/t/$id': typeof TIdRoute
   '/u/$id': typeof UIdRoute
@@ -178,6 +185,7 @@ export interface FileRoutesByTo {
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
   '/a/$name': typeof ANameRoute
+  '/al/$id': typeof AlIdRoute
   '/p/$id': typeof PIdRoute
   '/t/$id': typeof TIdRoute
   '/u/$id': typeof UIdRoute
@@ -202,6 +210,7 @@ export interface FileRoutesById {
   '/api/proxy': typeof ApiProxyRoute
   '/api/stream': typeof ApiStreamRoute
   '/a/$name': typeof ANameRoute
+  '/al/$id': typeof AlIdRoute
   '/p/$id': typeof PIdRoute
   '/t/$id': typeof TIdRoute
   '/u/$id': typeof UIdRoute
@@ -227,6 +236,7 @@ export interface FileRouteTypes {
     | '/api/proxy'
     | '/api/stream'
     | '/a/$name'
+    | '/al/$id'
     | '/p/$id'
     | '/t/$id'
     | '/u/$id'
@@ -250,6 +260,7 @@ export interface FileRouteTypes {
     | '/api/proxy'
     | '/api/stream'
     | '/a/$name'
+    | '/al/$id'
     | '/p/$id'
     | '/t/$id'
     | '/u/$id'
@@ -273,6 +284,7 @@ export interface FileRouteTypes {
     | '/api/proxy'
     | '/api/stream'
     | '/a/$name'
+    | '/al/$id'
     | '/p/$id'
     | '/t/$id'
     | '/u/$id'
@@ -297,6 +309,7 @@ export interface RootRouteChildren {
   ApiProxyRoute: typeof ApiProxyRoute
   ApiStreamRoute: typeof ApiStreamRoute
   ANameRoute: typeof ANameRoute
+  AlIdRoute: typeof AlIdRoute
   PIdRoute: typeof PIdRoute
   TIdRoute: typeof TIdRoute
   UIdRoute: typeof UIdRoute
@@ -424,6 +437,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ANameRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/al/$id': {
+      id: '/al/$id'
+      path: '/al/$id'
+      fullPath: '/al/$id'
+      preLoaderRoute: typeof AlIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/p/$id': {
       id: '/p/$id'
       path: '/p/$id'
@@ -473,6 +493,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiProxyRoute: ApiProxyRoute,
   ApiStreamRoute: ApiStreamRoute,
   ANameRoute: ANameRoute,
+  AlIdRoute: AlIdRoute,
   PIdRoute: PIdRoute,
   TIdRoute: TIdRoute,
   UIdRoute: UIdRoute,

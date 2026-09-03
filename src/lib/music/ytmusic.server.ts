@@ -374,11 +374,16 @@ function toTrack(item: unknown): Track | null {
     "";
   const artist = artistOf(rec, subtitle, title);
 
+  const albumRec = rec.album as { id?: string; name?: unknown } | undefined;
+  const albumName = txt(albumRec?.name) || txt(rec.album);
+  const albumId = String(albumRec?.id || rec.album_id || rec.albumId || "");
   return {
     id: `yt_${id}`,
     videoId: id,
     title,
     artist,
+    album: albumName || undefined,
+    albumId: /^MPRE/.test(albumId) ? albumId : undefined,
     artwork: thumbnailOf(rec, id),
     duration: durationOf(rec, subtitle),
     streamUrl: "",
@@ -657,6 +662,71 @@ export type ArtistPageData = {
   similar: SimilarArtist[];
 };
 
+async function fetchAlbum(yt: Innertube, albumId: string, fallbackArt = FALLBACK_ART): Promise<(ArtistAlbum & { artist: string }) | null> {
+  try {
+    const album = await yt.music.getAlbum(albumId);
+    const tracksRaw: Track[] = [];
+    const seenA = new Set<string>();
+    walkTracks((album as { contents?: unknown }).contents || album, tracksRaw, seenA);
+    const ah = (album as { header?: Record<string, unknown> }).header;
+    const title = (ah && (txt(ah.title) || txt((ah as { name?: unknown }).name))) || "Album";
+    const artist =
+      (ah && (txt((ah as { strapline_text_one?: unknown }).strapline_text_one) || txt(ah.subtitle))) ||
+      tracksRaw[0]?.artist ||
+      "Artista";
+    const yearBlob =
+      (ah &&
+        (txt((ah as { second_subtitle?: unknown }).second_subtitle) ||
+          txt(ah.subtitle) ||
+          String((ah as { year?: unknown }).year || ""))) ||
+      "";
+    const year = (yearBlob.match(/\d{4}/) || [""])[0];
+    const artwork = (ah && thumbnailOf(ah, "")) || tracksRaw[0]?.artwork || fallbackArt;
+    const list = uniqueTracks(tracksRaw.filter(isLikelySong)).map((t) => ({
+      ...t,
+      album: title,
+      albumId,
+      artwork: t.artwork || artwork,
+      artist: t.artist && t.artist !== "Artista" ? t.artist : artist,
+    }));
+    return { id: albumId, title, year, artwork, tracks: list, artist };
+  } catch {
+    return null;
+  }
+}
+
+export type AlbumPageData = ArtistAlbum & { artist: string; more: ArtistAlbum[] };
+
+export async function getAlbumPage(id: string): Promise<AlbumPageData | null> {
+  const albumId = String(id || "").replace(/^VL/, "").trim();
+  if (!albumId) return null;
+  try {
+    const yt = await getTube();
+    const album = await fetchAlbum(yt, albumId);
+    if (!album) return null;
+    const more: ArtistAlbum[] = [];
+    try {
+      const found = await yt.music.search(album.artist, { type: "artist" });
+      const ids: string[] = [];
+      walkNamedIds(found, ids, "artist");
+      if (ids[0]) {
+        const page = await yt.music.getArtist(ids[0]);
+        const albumIds: string[] = [];
+        walkNamedIds(page.sections || page, albumIds, "album");
+        for (const otherId of albumIds.filter((x) => x !== albumId).slice(0, 6)) {
+          const extra = await fetchAlbum(yt, otherId, album.artwork);
+          if (extra) more.push(extra);
+        }
+      }
+    } catch {
+      /* more is optional */
+    }
+    return { ...album, more };
+  } catch {
+    return null;
+  }
+}
+
 export async function getArtistPage(name: string): Promise<ArtistPageData> {
   const q = decodeURIComponent(name).trim();
   const empty: ArtistPageData = { name: q || "Artista", artwork: FALLBACK_ART, songs: [], albums: [], similar: [] };
@@ -689,26 +759,9 @@ export async function getArtistPage(name: string): Promise<ArtistPageData> {
       walkTracks(page.sections || page, songs, seen);
       const albumIds: string[] = [];
       walkNamedIds(page.sections || page, albumIds, "album");
-      for (const albumId of albumIds.slice(0, 4)) {
-        try {
-          const album = await yt.music.getAlbum(albumId);
-          const tracks: Track[] = [];
-          const seenA = new Set<string>();
-          walkTracks((album as { contents?: unknown }).contents || album, tracks, seenA);
-          const list = uniqueTracks(tracks.filter(isLikelySong));
-          const ah = (album as { header?: Record<string, unknown> }).header;
-          const title = (ah && (txt(ah.title) || txt(ah.subtitle))) || list[0]?.album || "Album";
-          const year = (ah && (txt(ah.subtitle) || String(ah.year || ""))) || "";
-          albums.push({
-            id: albumId,
-            title,
-            year: /\d{4}/.test(year) ? (year.match(/\d{4}/) || [""])[0] : "",
-            artwork: list[0]?.artwork || artwork,
-            tracks: list,
-          });
-        } catch {
-          /* skip album */
-        }
+      for (const albumId of albumIds.slice(0, 6)) {
+        const packed = await fetchAlbum(yt, albumId, artwork);
+        if (packed) albums.push(packed);
       }
       walkArtistCards(page.sections || page, similar, display);
     }

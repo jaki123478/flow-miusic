@@ -1,6 +1,7 @@
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
+  Disc3,
   Download,
   Heart,
   ListMusic,
@@ -243,15 +244,17 @@ export function CollectionCard({
   subtitle,
   artwork,
   onPlay,
+  onOpen,
 }: {
   title: string;
   subtitle: string;
   artwork?: string;
   onPlay: () => void;
+  onOpen?: () => void;
 }) {
   return (
     <div className="spot-card group relative w-44 shrink-0 sm:w-48">
-      <button type="button" onClick={onPlay} className="w-full text-left">
+      <button type="button" onClick={onOpen || onPlay} className="w-full text-left">
         <span className="art-shadow relative block aspect-square overflow-hidden rounded-md bg-elevated">
           {artwork ? (
             <TrackArt src={artwork} alt="" className="art-zoom group-hover:scale-[1.04]" />
@@ -260,7 +263,16 @@ export function CollectionCard({
               <Heart className="size-12 fill-current text-fg" />
             </span>
           )}
-          <span className="play-fab absolute right-2 bottom-2 flex size-12 translate-y-2 items-center justify-center rounded-full bg-primary text-primary-fg opacity-0 group-hover:translate-y-0 group-hover:opacity-100">
+          <span
+            role="button"
+            tabIndex={0}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onPlay();
+            }}
+            className="play-fab absolute right-2 bottom-2 flex size-12 translate-y-2 items-center justify-center rounded-full bg-primary text-primary-fg opacity-0 group-hover:translate-y-0 group-hover:opacity-100"
+          >
             <Play className="ml-0.5 size-5 fill-current" />
           </span>
         </span>
@@ -465,6 +477,16 @@ export function ActionSheet() {
                 void navigate({ to: "/a/$name", params: { name: view.artist } });
               }}
             />
+            {view.albumId ? (
+              <SheetBtn
+                icon={Disc3}
+                label="Vai all'album"
+                onClick={() => {
+                  close();
+                  void navigate({ to: "/al/$id", params: { id: view.albumId! } });
+                }}
+              />
+            ) : null}
             <SheetBtn
               icon={Radio}
               label="Radio da questo brano"
