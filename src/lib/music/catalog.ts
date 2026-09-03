@@ -326,11 +326,16 @@ export const getFreshTracks = createServerFn({ method: "POST" })
   .handler(async ({ data }) => {
     try {
       const yt = await import("./ytmusic.server");
-      const explore = await yt.getExploreTracks();
-      const artists = (data.artists || []).map((a) => a.trim()).filter(Boolean).slice(0, 5);
-      const year = new Date().getFullYear();
-      const batches = await Promise.all(artists.map((a) => yt.searchYtMusic(`${a} ${year} official audio`, 6).catch(() => [] as Track[])));
-      return uniqueTracks([...explore.fresh, ...batches.flat()]).slice(0, 28);
+      const artists = [...new Set((data.artists || []).map((a) => a.trim()).filter(Boolean))].slice(0, 10);
+      if (!artists.length) {
+        const explore = await yt.getExploreTracks();
+        return uniqueTracks(explore.fresh).slice(0, 24);
+      }
+      const batches = await Promise.all(artists.map((a) => yt.getArtistLatestSongs(a, 5).catch(() => [] as Track[])));
+      const fromArtists = uniqueTracks(batches.flat());
+      if (fromArtists.length >= 8) return fromArtists.slice(0, 40);
+      const explore = await yt.getExploreTracks().catch(() => ({ fresh: [] as Track[], trending: [] as Track[] }));
+      return uniqueTracks([...fromArtists, ...explore.fresh]).slice(0, 40);
     } catch {
       return [];
     }
