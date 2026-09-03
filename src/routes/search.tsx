@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { Loader2, Mic, Search as SearchIcon, X } from "lucide-react";
-import { searchCatalog, stationToTrack } from "@/lib/music/catalog";
+import { Loader2, Mic, Search as SearchIcon, User, X } from "lucide-react";
+import { searchCatalog, stationToTrack, suggestSearch } from "@/lib/music/catalog";
+import { useFlowStore } from "@/stores/flow-store";
 import type { RadioStation, Track } from "@/lib/music/types";
 import { GENRES } from "@/lib/music/types";
 import { HScroll, SectionHeader, TrackCard, TrackRow } from "@/components/flow/tracks";
@@ -23,6 +24,10 @@ function SearchPage() {
   const [independent, setIndependent] = useState<Track[]>([]);
   const [radios, setRadios] = useState<RadioStation[]>([]);
   const [recent, setRecent] = useState<string[]>([]);
+  const [queries, setQueries] = useState<string[]>([]);
+  const [hintSongs, setHintSongs] = useState<Track[]>([]);
+  const [hintArtists, setHintArtists] = useState<{ name: string; artwork: string }[]>([]);
+  const playTrack = useFlowStore((s) => s.playTrack);
 
   useEffect(() => {
     try {
@@ -36,6 +41,37 @@ function SearchPage() {
   useEffect(() => {
     setQ(initial);
   }, [initial]);
+
+  useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) {
+      setQueries([]);
+      setHintSongs([]);
+      setHintArtists([]);
+      return;
+    }
+    let cancelled = false;
+    const t = window.setTimeout(() => {
+      void suggestSearch({ data: { q: term } })
+        .then((res) => {
+          if (cancelled) return;
+          setQueries(res.queries || []);
+          setHintSongs(res.songs || []);
+          setHintArtists(res.artists || []);
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setQueries([]);
+            setHintSongs([]);
+            setHintArtists([]);
+          }
+        });
+    }, 140);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(t);
+    };
+  }, [q]);
 
   useEffect(() => {
     const term = q.trim();
@@ -86,6 +122,24 @@ function SearchPage() {
     rec.start();
   };
 
+  const remember = (term: string) => {
+    const next = [term, ...recent.filter((s) => s.toLowerCase() !== term.toLowerCase())].slice(0, 8);
+    setRecent(next);
+    try {
+      localStorage.setItem("flow_recent_searches", JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const applyQuery = (term: string) => {
+    setQ(term);
+    void navigate({ search: { q: term } });
+    remember(term);
+  };
+
+  const hasHints = queries.length + hintSongs.length + hintArtists.length > 0;
+
   return (
     <div className="flow-enter space-y-6">
       <h1 className="text-3xl font-bold tracking-tight">Cerca</h1>
@@ -129,6 +183,61 @@ function SearchPage() {
         )}
       </div>
 
+
+      {q.trim() && hasHints ? (
+        <section className="overflow-hidden rounded-2xl bg-surface ring-1 ring-border">
+          {hintArtists.map((a) => (
+            <Link
+              key={a.name}
+              to="/a/$name"
+              params={{ name: a.name }}
+              className="flex min-h-12 items-center gap-3 px-3 py-2 hover:bg-highlight"
+            >
+              <span className="size-10 shrink-0 overflow-hidden rounded-full bg-elevated">
+                {a.artwork ? (
+                  <img src={a.artwork} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+                ) : (
+                  <User className="m-2.5 size-5 text-muted" />
+                )}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{a.name}</span>
+                <span className="text-xs text-muted">Artista</span>
+              </span>
+            </Link>
+          ))}
+          {hintSongs.map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => {
+                playTrack(t, hintSongs);
+                remember(t.title);
+              }}
+              className="flex min-h-12 w-full items-center gap-3 px-3 py-2 text-left hover:bg-highlight"
+            >
+              <span className="size-10 shrink-0 overflow-hidden rounded-md bg-elevated">
+                <img src={t.artwork} alt="" referrerPolicy="no-referrer" className="size-full object-cover" />
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{t.title}</span>
+                <span className="truncate text-xs text-muted">{t.artist}</span>
+              </span>
+            </button>
+          ))}
+          {queries.map((sugg) => (
+            <button
+              key={sugg}
+              type="button"
+              onClick={() => applyQuery(sugg)}
+              className="flex min-h-11 w-full items-center gap-3 px-3 py-2 text-left hover:bg-highlight"
+            >
+              <SearchIcon className="size-4 shrink-0 text-muted" />
+              <span className="truncate text-sm">{sugg}</span>
+            </button>
+          ))}
+        </section>
+      ) : null}
       {loading ? (
         <div className="flex items-center gap-2 text-sm text-muted">
           <Loader2 className="size-4 animate-spin" /> Ricerca in corso
