@@ -555,6 +555,123 @@ export async function getArtistLatestSongs(name: string, limit = 8): Promise<Tra
   }
 }
 
+function walkArtistCards(root: unknown, into: { name: string; artwork: string }[], skip: string, depth = 0) {
+  if (!root || depth > 14 || into.length > 16) return;
+  if (Array.isArray(root)) {
+    for (const item of root) walkArtistCards(item, into, skip, depth + 1);
+    return;
+  }
+  if (typeof root !== "object") return;
+  const rec = root as Record<string, unknown>;
+  const itemType = String(rec.item_type || rec.content_type || rec.type || "").toLowerCase();
+  const name = txt(rec.title) || txt(rec.name);
+  const id = String(rec.id || rec.channel_id || rec.channelId || "");
+  if (name && (itemType.includes("artist") || /^UC[\w-]{20,}$/.test(id))) {
+    if (!artistClose(name, skip) && !into.some((a) => artistClose(a.name, name))) {
+      into.push({ name, artwork: thumbnailOf(rec, "") });
+    }
+  }
+  for (const key of ["contents", "sections", "results", "items"]) {
+    if (rec[key]) walkArtistCards(rec[key], into, skip, depth + 1);
+  }
+}
+
+export type ArtistAlbum = {
+  id: string;
+  title: string;
+  year: string;
+  artwork: string;
+  tracks: Track[];
+};
+
+export type SimilarArtist = { name: string; artwork: string };
+
+export type ArtistPageData = {
+  name: string;
+  artwork: string;
+  songs: Track[];
+  albums: ArtistAlbum[];
+  similar: SimilarArtist[];
+};
+
+export async function getArtistPage(name: string): Promise<ArtistPageData> {
+  const q = decodeURIComponent(name).trim();
+  const empty: ArtistPageData = { name: q || "Artista", artwork: FALLBACK_ART, songs: [], albums: [], similar: [] };
+  if (!q) return empty;
+  try {
+    const yt = await getTube();
+    const songs: Track[] = [];
+    const seen = new Set<string>();
+    const albums: ArtistAlbum[] = [];
+    const similar: SimilarArtist[] = [];
+    let artwork = FALLBACK_ART;
+    let display = q;
+    const found = await yt.music.search(q, { type: "artist" });
+    const ids: string[] = [];
+    walkNamedIds(found, ids, "artist");
+    const artistId = ids[0];
+    if (artistId) {
+      const page = await yt.music.getArtist(artistId);
+      const header = page.header as Record<string, unknown> | undefined;
+      if (header) {
+        display = txt(header.title) || txt((header as { name?: unknown }).name) || q;
+        artwork = thumbnailOf(header, "") || artwork;
+      }
+      try {
+        const all = await page.getAllSongs();
+        if (all) walkTracks(all, songs, seen);
+      } catch {
+        /* sections below */
+      }
+      walkTracks(page.sections || page, songs, seen);
+      const albumIds: string[] = [];
+      walkNamedIds(page.sections || page, albumIds, "album");
+      for (const albumId of albumIds.slice(0, 4)) {
+        try {
+          const album = await yt.music.getAlbum(albumId);
+          const tracks: Track[] = [];
+          const seenA = new Set<string>();
+          walkTracks((album as { contents?: unknown }).contents || album, tracks, seenA);
+          const list = uniqueTracks(tracks.filter(isLikelySong));
+          const ah = (album as { header?: Record<string, unknown> }).header;
+          const title = (ah && (txt(ah.title) || txt(ah.subtitle))) || list[0]?.album || "Album";
+          const year = (ah && (txt(ah.subtitle) || String(ah.year || ""))) || "";
+          albums.push({
+            id: albumId,
+            title,
+            year: /\d{4}/.test(year) ? (year.match(/\d{4}/) || [""])[0] : "",
+            artwork: list[0]?.artwork || artwork,
+            tracks: list,
+          });
+        } catch {
+          /* skip album */
+        }
+      }
+      walkArtistCards(page.sections || page, similar, display);
+    }
+    if (songs.length < 8) {
+      const extra = await searchYtMusic(q, 16).catch(() => [] as Track[]);
+      for (const t of extra) {
+        if (!seen.has(t.id)) {
+          seen.add(t.id);
+          songs.push(t);
+        }
+      }
+    }
+    const top = uniqueTracks(songs.filter(isLikelySong).filter((t) => artistClose(t.artist, q) || artistClose(t.artist, display))).slice(0, 20);
+    return {
+      name: display || q,
+      artwork: top[0]?.artwork || artwork,
+      songs: top.length ? top : uniqueTracks(songs.filter(isLikelySong)).slice(0, 20),
+      albums,
+      similar: similar.slice(0, 8),
+    };
+  } catch {
+    const songs = await searchYtMusic(q, 16).catch(() => [] as Track[]);
+    return { ...empty, songs };
+  }
+}
+
 export async function getRelatedSongs(videoId: string, limit = 24): Promise<Track[]> {
   const id = String(videoId || "").trim();
   if (!isVideoId(id)) return [];
