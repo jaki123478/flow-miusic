@@ -376,6 +376,19 @@ export const getArtistPage = createServerFn({ method: "GET" })
       };
     }
   });
+export const suggestSearch = createServerFn({ method: "GET" })
+  .validator((d: { q: string }) => d)
+  .handler(async ({ data }) => {
+    const q = (data.q || "").trim();
+    if (q.length < 2) return { queries: [] as string[], songs: [] as Track[], artists: [] as { name: string; artwork: string }[] };
+    try {
+      const yt = await import("./ytmusic.server");
+      return await yt.suggestYtMusic(q);
+    } catch {
+      return { queries: [] as string[], songs: [] as Track[], artists: [] as { name: string; artwork: string }[] };
+    }
+  });
+
 export const getVideoTrack = createServerFn({ method: "GET" })
   .validator((d: { id: string }) => d)
   .handler(async ({ data }) => {

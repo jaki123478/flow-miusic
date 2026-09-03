@@ -454,6 +454,69 @@ export async function searchYtMusic(query: string, limit = 24): Promise<Track[]>
   }
 }
 
+export type SearchSuggest = {
+  queries: string[];
+  songs: Track[];
+  artists: { name: string; artwork: string }[];
+};
+
+function walkSuggestQueries(root: unknown, into: string[], depth = 0) {
+  if (!root || depth > 12 || into.length > 16) return;
+  if (Array.isArray(root)) {
+    for (const item of root) walkSuggestQueries(item, into, depth + 1);
+    return;
+  }
+  if (typeof root !== "object") return;
+  const rec = root as Record<string, unknown>;
+  const text = txt(rec.suggestion) || txt(rec.query) || txt(rec.suggestion_text);
+  if (text && text.length < 80 && !into.includes(text)) into.push(text);
+  for (const key of ["contents", "sections", "results", "items"]) {
+    if (rec[key]) walkSuggestQueries(rec[key], into, depth + 1);
+  }
+}
+
+export async function suggestYtMusic(query: string): Promise<SearchSuggest> {
+  const q = query.trim();
+  const empty: SearchSuggest = { queries: [], songs: [], artists: [] };
+  if (q.length < 2) return empty;
+  try {
+    const yt = await getTube();
+    const queries: string[] = [];
+    const songs: Track[] = [];
+    const seen = new Set<string>();
+    const artists: { name: string; artwork: string }[] = [];
+    try {
+      const sections = await yt.music.getSearchSuggestions(q);
+      walkSuggestQueries(sections, queries);
+      walkTracks(sections, songs, seen);
+      walkArtistCards(sections, artists, "");
+    } catch {
+      /* song search below */
+    }
+    await Promise.all([
+      songs.length < 3
+        ? yt.music
+            .search(q, { type: "song" })
+            .then((r) => walkTracks(r, songs, seen))
+            .catch(() => undefined)
+        : Promise.resolve(),
+      artists.length < 2
+        ? yt.music
+            .search(q, { type: "artist" })
+            .then((r) => walkArtistCards(r, artists, ""))
+            .catch(() => undefined)
+        : Promise.resolve(),
+    ]);
+    return {
+      queries: queries.filter((t) => t.toLowerCase() !== q.toLowerCase()).slice(0, 8),
+      songs: uniqueTracks(songs.filter(isLikelySong)).slice(0, 5),
+      artists: artists.slice(0, 4),
+    };
+  } catch {
+    return empty;
+  }
+}
+
 export async function getYtMusicHome(limit = 48): Promise<Track[]> {
   try {
     const yt = await getTube();
