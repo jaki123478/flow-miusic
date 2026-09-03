@@ -35,7 +35,7 @@ function StatsPage() {
             {top.map(([name, n], i) => (
               <li key={name} className="flex items-center gap-3 rounded-lg bg-surface px-3 py-2">
                 <span className="w-6 text-sm tabular-nums text-subtle">{i + 1}</span>
-                <span className="min-w-0 flex-1 truncate text-sm font-medium">{name}</span>
+                <Link to="/a/$name" params={{ name }} className="min-w-0 flex-1 truncate text-sm font-medium hover:underline">{name}</Link>
                 <span className="text-xs text-muted">{n} play</span>
               </li>
             ))}

@@ -101,6 +101,24 @@ export type CatalogCollection = {
   tracks: Track[];
 };
 
+export type ArtistAlbum = {
+  id: string;
+  title: string;
+  year: string;
+  artwork: string;
+  tracks: Track[];
+};
+
+export type SimilarArtist = { name: string; artwork: string };
+
+export type ArtistPageData = {
+  name: string;
+  artwork: string;
+  songs: Track[];
+  albums: ArtistAlbum[];
+  similar: SimilarArtist[];
+};
+
 const HOME_PLAYLISTS: { id: string; title: string; subtitle: string; playlistId: string }[] = [
   { id: "hits", title: "Hit del momento", subtitle: "Dal catalogo YouTube Music", playlistId: "PL4fGSI1pDJn77aK7sAW2AT0oOzo5inWY8" },
   { id: "viral", title: "Virali", subtitle: "Cosa sta esplodendo", playlistId: "PL4fGSI1pDJn61unMfmrUSz68RT8IFFnks" },
@@ -341,6 +359,23 @@ export const getFreshTracks = createServerFn({ method: "POST" })
     }
   });
 
+
+export const getArtistPage = createServerFn({ method: "GET" })
+  .validator((d: { name: string }) => d)
+  .handler(async ({ data }) => {
+    try {
+      const yt = await import("./ytmusic.server");
+      return await yt.getArtistPage(data.name || "");
+    } catch {
+      return {
+        name: (data.name || "Artista").trim() || "Artista",
+        artwork: FALLBACK_ART,
+        songs: [] as Track[],
+        albums: [] as ArtistAlbum[],
+        similar: [] as SimilarArtist[],
+      };
+    }
+  });
 export const getVideoTrack = createServerFn({ method: "GET" })
   .validator((d: { id: string }) => d)
   .handler(async ({ data }) => {

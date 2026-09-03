@@ -1,5 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
-import { useNavigate } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Download,
   Heart,
@@ -10,6 +10,7 @@ import {
   Play,
   Radio,
   Search,
+  User,
   Share2,
   QrCode,
   SkipForward,
@@ -141,7 +142,18 @@ export function TrackRow({
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
             {track.isLive ? <Radio className="size-3 shrink-0" /> : null}
-            <span className="truncate">{track.artist}</span>
+            {track.isLive || track.source === "radio" || track.artist === "Artista" ? (
+              <span className="truncate">{track.artist}</span>
+            ) : (
+              <Link
+                to="/a/$name"
+                params={{ name: track.artist }}
+                onClick={(e) => e.stopPropagation()}
+                className="truncate hover:underline"
+              >
+                {track.artist}
+              </Link>
+            )}
           </span>
         </span>
       </button>
@@ -202,8 +214,18 @@ export function TrackCard({ track, queue }: { track: Track; queue?: Track[] }) {
         <span className={cn("mt-3 block truncate text-sm font-bold", active ? "text-primary" : "text-fg")}>
           {track.title}
         </span>
-        <span className="mt-1 block truncate text-sm text-muted">{track.artist}</span>
       </button>
+      {track.source !== "radio" && track.artist && track.artist !== "Artista" ? (
+        <Link
+          to="/a/$name"
+          params={{ name: track.artist }}
+          className="mt-1 block truncate text-sm text-muted hover:underline"
+        >
+          {track.artist}
+        </Link>
+      ) : (
+        <span className="mt-1 block truncate text-sm text-muted">{track.artist}</span>
+      )}
       <button
         type="button"
         onClick={() => setActionTrack(track)}
@@ -436,11 +458,11 @@ export function ActionSheet() {
             />
             <SheetBtn icon={Share2} label="Condividi" onClick={() => { void shareTrack(view); close(); }} />
             <SheetBtn
-              icon={Search}
-              label="Cerca artista"
+              icon={User}
+              label="Vai all'artista"
               onClick={() => {
                 close();
-                void navigate({ to: "/search", search: { q: view.artist } });
+                void navigate({ to: "/a/$name", params: { name: view.artist } });
               }}
             />
             <SheetBtn

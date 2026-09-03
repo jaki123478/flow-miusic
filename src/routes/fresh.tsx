@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { getFreshTracks } from "@/lib/music/catalog";
 import type { Track } from "@/lib/music/types";
@@ -78,7 +78,15 @@ function FreshPage() {
           </button>
           {groups.map((g) => (
             <section key={g.artist} className="space-y-1">
-              <h2 className="px-1 text-sm font-bold text-muted">{g.artist}</h2>
+              <h2 className="px-1 text-sm font-bold text-muted">
+                {g.artist === "Altre novità" ? (
+                  g.artist
+                ) : (
+                  <Link to="/a/$name" params={{ name: g.artist }} className="hover:underline">
+                    {g.artist}
+                  </Link>
+                )}
+              </h2>
               {g.tracks.map((t, i) => (
                 <TrackRow key={t.id} track={t} queue={g.tracks} index={i} showIndex />
               ))}
