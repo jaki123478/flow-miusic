@@ -12,5 +12,5 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-// Never intercept media. Cached/SW Range streams die on iPhone lock.
+// v=20260903-tunnel — never intercept media. Cached/SW Range streams die on iPhone lock.
 self.addEventListener("fetch", () => {});

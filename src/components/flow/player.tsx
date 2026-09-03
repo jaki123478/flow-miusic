@@ -253,7 +253,14 @@ export function AudioEngine() {
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
-      void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
+      void navigator.serviceWorker.getRegistrations().then((regs) => {
+        for (const r of regs) {
+          if (!String(r.active?.scriptURL || r.installing?.scriptURL || "").includes("sw-audio.js")) {
+            void r.unregister();
+          }
+        }
+        return navigator.serviceWorker.register("/sw-audio.js?v=20260903");
+      }).catch(() => {});
     }
     const audio = el();
     if (!audio) return;
