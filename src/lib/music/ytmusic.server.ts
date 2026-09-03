@@ -475,6 +475,86 @@ export async function getYtMusicHome(limit = 48): Promise<Track[]> {
   }
 }
 
+function walkNamedIds(root: unknown, into: string[], kind: "artist" | "album", depth = 0) {
+  if (!root || depth > 14 || into.length > 24) return;
+  if (Array.isArray(root)) {
+    for (const item of root) walkNamedIds(item, into, kind, depth + 1);
+    return;
+  }
+  if (typeof root !== "object") return;
+  const rec = root as Record<string, unknown>;
+  const itemType = String(rec.item_type || rec.content_type || rec.type || "").toLowerCase();
+  const id = String(rec.id || rec.browse_id || rec.browseId || rec.channel_id || rec.channelId || "");
+  if (kind === "artist") {
+    if (/^UC[\w-]{20,}$/.test(id) && (itemType.includes("artist") || !itemType) && !into.includes(id)) into.push(id);
+  } else if (/^MPRE/.test(id) && (itemType.includes("album") || !itemType) && !into.includes(id)) {
+    into.push(id);
+  }
+  for (const key of ["contents", "sections", "results", "items"]) {
+    if (rec[key]) walkNamedIds(rec[key], into, kind, depth + 1);
+  }
+}
+
+function normalizeArtist(s: string): string {
+  return s.toLowerCase().replace(/\b(feat\.?|ft\.?|vs\.?)\b|&|,|-/g, " ").replace(/\s+/g, " ").trim();
+}
+
+export function artistClose(trackArtist: string, followed: string): boolean {
+  const a = normalizeArtist(trackArtist);
+  const b = normalizeArtist(followed);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (a.includes(b) || b.includes(a)) return true;
+  return false;
+}
+
+export async function getArtistLatestSongs(name: string, limit = 8): Promise<Track[]> {
+  const q = name.trim();
+  if (!q) return [];
+  try {
+    const yt = await getTube();
+    const tracks: Track[] = [];
+    const seen = new Set<string>();
+    try {
+      const artists = await yt.music.search(q, { type: "artist" });
+      const ids: string[] = [];
+      walkNamedIds(artists, ids, "artist");
+      const artistId = ids[0];
+      if (artistId) {
+        const page = await yt.music.getArtist(artistId);
+        walkTracks(page.sections || page, tracks, seen);
+        const albumIds: string[] = [];
+        walkNamedIds(page.sections || page, albumIds, "album");
+        for (const albumId of albumIds.slice(0, 2)) {
+          try {
+            const album = await yt.music.getAlbum(albumId);
+            walkTracks((album as { contents?: unknown }).contents || album, tracks, seen);
+          } catch {
+            /* skip album */
+          }
+        }
+      }
+    } catch {
+      /* search fallback below */
+    }
+    if (tracks.length < limit) {
+      const year = new Date().getFullYear();
+      for (const query of [`${q} ${year}`, `${q} ${year - 1}`]) {
+        try {
+          const songs = await yt.music.search(query, { type: "song" });
+          walkTracks(songs, tracks, seen);
+        } catch {
+          /* next */
+        }
+        if (tracks.length >= limit * 2) break;
+      }
+    }
+    return uniqueTracks(tracks.filter(isLikelySong).filter((t) => artistClose(t.artist, q))).slice(0, limit);
+  } catch {
+    return [];
+  }
+}
+
 export async function getRelatedSongs(videoId: string, limit = 24): Promise<Track[]> {
   const id = String(videoId || "").trim();
   if (!isVideoId(id)) return [];

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Compass, Pause, Play, Sparkles } from "lucide-react";
-import { getDiscoverMix, getHomeFeed, stationToTrack, type CatalogCollection } from "@/lib/music/catalog";
+import { getDiscoverMix, getFreshTracks, getHomeFeed, stationToTrack, type CatalogCollection } from "@/lib/music/catalog";
 import { GENRES, MOODS } from "@/lib/music/types";
 import { cn, greetingIt, hashHue } from "@/lib/utils";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
@@ -45,6 +45,28 @@ function Home() {
   const followed = useFlowStore((s) => s.followedArtists);
   const [weekly, setWeekly] = useState(discoverWeekly);
   const [weeklyPersonal, setWeeklyPersonal] = useState(false);
+  const [releases, setReleases] = useState<typeof trending>([]);
+  useEffect(() => {
+    const artists = [...followed, ...liked.map((t) => t.artist)]
+      .map((a) => a.trim())
+      .filter((a, i, arr) => a && arr.indexOf(a) === i)
+      .slice(0, 10);
+    if (!artists.length) {
+      setReleases([]);
+      return;
+    }
+    let cancelled = false;
+    void getFreshTracks({ data: { artists } })
+      .then((list) => {
+        if (!cancelled && list.length) setReleases(list);
+      })
+      .catch(() => {
+        /* keep home as-is */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [followed, liked]);
   useEffect(() => {
     const artists = [...followed, ...liked.map((t) => t.artist), ...recents.map((t) => t.artist)]
       .map((a) => a.trim())
@@ -131,6 +153,20 @@ function Home() {
               <QuickTile key={t.id} track={t} queue={quick} />
             ))}
           </div>
+        </section>
+      ) : null}
+
+      {filter !== "radio" && releases.length > 0 ? (
+        <section>
+          <SectionHeader title="Nuove uscite" action="Vedi tutte" onAction={() => void navigate({ to: "/fresh" })} />
+          <p className="mb-3 text-xs text-muted">
+            {followed.length ? "Dagli artisti che segui." : "Dai tuoi preferiti."}
+          </p>
+          <HScroll>
+            {releases.slice(0, 12).map((t) => (
+              <TrackCard key={t.id} track={t} queue={releases} />
+            ))}
+          </HScroll>
         </section>
       ) : null}
 
@@ -239,8 +275,8 @@ function Home() {
               onPlay={() => void navigate({ to: "/discover" })}
             />
             <CollectionCard
-              title="Novità"
-              subtitle="Uscite fresche"
+              title="Nuove uscite"
+              subtitle="Da chi segui"
               artwork={independent[0]?.artwork || trending[0]?.artwork}
               onPlay={() => void navigate({ to: "/fresh" })}
             />
