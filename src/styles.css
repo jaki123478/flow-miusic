@@ -211,6 +211,7 @@
 }
 .sheet-backdrop.is-closing {
   opacity: 0;
+  pointer-events: none;
   transition: opacity var(--duration-fast) var(--ease-in);
 }
 
@@ -284,6 +285,7 @@
 .player-full {
   transform: translate3d(0, 8%, 0);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   backface-visibility: hidden;
   transition:
@@ -294,12 +296,14 @@
 .player-full.is-open {
   transform: translate3d(0, 0, 0);
   opacity: 1;
+  visibility: visible;
   pointer-events: auto;
 }
 
 .player-full.is-closing {
   transform: translate3d(0, 6%, 0);
   opacity: 0;
+  visibility: hidden;
   pointer-events: none;
   transition:
     transform var(--duration-md) var(--ease-in),

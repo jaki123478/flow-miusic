@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Link, Navigate, useRouterState } from "@tanstack/react-router";
+import { Link, Navigate, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Compass, Heart, House, Library, Plus, Radio, Search, Settings, Trophy } from "lucide-react";
 import { authEnabled } from "@/lib/auth/client";
 import { useCurrentUserState } from "@/lib/auth/use-current-user";
@@ -127,6 +127,24 @@ function LibraryRail() {
         </Link>
       </div>
     </div>
+  );
+}
+
+
+function HeaderSearch() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigate({ to: "/search" });
+      }}
+      className="relative z-20 mr-2 flex min-w-[14rem] flex-1 cursor-pointer items-center gap-2 rounded-full bg-elevated px-4 py-2.5 text-left text-sm text-muted ring-1 ring-border/40 hover:bg-white/10 hover:text-fg"
+      aria-label="Cerca brani, artisti, album"
+    >
+      <Search className="size-4 shrink-0" />
+      <span className="truncate">Cerca brani, artisti, album…</span>
+    </button>
   );
 }
 
@@ -269,7 +287,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="flex items-center gap-3 px-4 py-3 md:hidden pt-[max(0.75rem,env(safe-area-inset-top))]">
+          <header className="relative z-20 flex items-center gap-3 px-4 py-3 md:hidden pt-[max(0.75rem,env(safe-area-inset-top))]">
             <Link to="/" className="flex items-center gap-2">
               <FlowMark className="size-8" />
               <span className="font-heading text-base font-semibold">Flow</span>
@@ -291,15 +309,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             </div>
           </header>
-          <div className="hidden items-center gap-2 px-6 py-3 md:flex">
-            <Link
-              to="/search"
-              className="mr-2 flex min-w-[14rem] flex-1 items-center gap-2 rounded-full bg-elevated px-4 py-2 text-sm text-muted hover:bg-white/10 hover:text-fg"
-              aria-label="Cerca"
-            >
-              <Search className="size-4 shrink-0" />
-              <span className="truncate">Cerca brani, artisti, album…</span>
-            </Link>
+          <div className="relative z-20 hidden items-center gap-2 px-6 py-3 md:flex">
+            <HeaderSearch />
             <Link to="/charts" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               <Trophy className="size-4" />
               Classifiche
