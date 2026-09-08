@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Compass, Heart, House, Library, Plus, Radio, Search, Settings, Trophy } from "lucide-react";
 import { authEnabled } from "@/lib/auth/client";
@@ -133,18 +133,54 @@ function LibraryRail() {
 
 function HeaderSearch() {
   const navigate = useNavigate();
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const qParam = useRouterState({
+    select: (s) => {
+      const q = (s.location.search as { q?: string }).q;
+      return typeof q === "string" ? q : "";
+    },
+  });
+  const [value, setValue] = useState(qParam);
+
+  useEffect(() => {
+    if (pathname === "/search") setValue(qParam);
+  }, [pathname, qParam]);
+
+  const commit = (next: string, replace: boolean) => {
+    setValue(next);
+    void navigate({
+      to: "/search",
+      search: { q: next.trim() || undefined },
+      replace,
+    });
+  };
+
   return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigate({ to: "/search" });
+    <form
+      className="relative z-30 mr-2 flex min-w-[14rem] flex-1 items-center gap-2 rounded-full bg-elevated px-4 py-1.5 ring-1 ring-border/40 focus-within:bg-white/10 focus-within:ring-fg/25"
+      onSubmit={(e) => {
+        e.preventDefault();
+        commit(value, false);
       }}
-      className="relative z-20 mr-2 flex min-w-[14rem] flex-1 cursor-pointer items-center gap-2 rounded-full bg-elevated px-4 py-2.5 text-left text-sm text-muted ring-1 ring-border/40 hover:bg-white/10 hover:text-fg"
-      aria-label="Cerca brani, artisti, album"
     >
-      <Search className="size-4 shrink-0" />
-      <span className="truncate">Cerca brani, artisti, album…</span>
-    </button>
+      <Search className="size-4 shrink-0 text-muted" aria-hidden />
+      <input
+        type="search"
+        value={value}
+        onChange={(e) => commit(e.target.value, pathname === "/search")}
+        onFocus={() => {
+          if (pathname !== "/search") commit(value, false);
+        }}
+        placeholder="Cerca brani, artisti, album…"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-muted"
+        autoCapitalize="off"
+        autoCorrect="off"
+        autoComplete="off"
+        enterKeyHint="search"
+        inputMode="search"
+        aria-label="Cerca brani, artisti, album"
+      />
+    </form>
   );
 }
 
@@ -309,7 +345,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             </div>
           </header>
-          <div className="relative z-20 hidden items-center gap-2 px-6 py-3 md:flex">
+          <div className="relative z-30 hidden items-center gap-2 px-6 py-3 md:flex">
             <HeaderSearch />
             <Link to="/charts" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               <Trophy className="size-4" />

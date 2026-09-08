@@ -148,7 +148,7 @@ export function TrackRow({
             ) : (
               <Link
                 to="/a/$name"
-                params={{ name: track.artist }}
+                params={{ name: track.artist.split(",")[0]?.trim() || track.artist }}
                 onClick={(e) => e.stopPropagation()}
                 className="truncate hover:underline"
               >
