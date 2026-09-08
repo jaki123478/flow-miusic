@@ -1,3 +1,4 @@
+import { artworkSrcSet, upgradeArtworkUrl } from "@/lib/music/artwork";
 import { useRef, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -28,22 +29,37 @@ export function TrackArt({
   src,
   alt,
   className,
+  videoId,
+  sizes = "(max-width: 640px) 42vw, 200px",
 }: {
   src?: string;
   alt: string;
   className?: string;
+  videoId?: string;
+  sizes?: string;
 }) {
+  const hi = upgradeArtworkUrl(src, videoId, 544);
   return (
     <img
-      src={src || FALLBACK_ART}
+      src={hi}
+      srcSet={artworkSrcSet(src, videoId)}
+      sizes={sizes}
       alt={alt}
       referrerPolicy="no-referrer"
-      className={cn("size-full object-cover", className)}
+      className={cn("cover-art size-full object-cover", className)}
       loading="lazy"
       decoding="async"
       onError={(e) => {
         const img = e.currentTarget;
-        if (img.src.endsWith(FALLBACK_ART)) return;
+        const vid = videoId || src?.match(/\/vi\/([\w-]{11})\//)?.[1];
+        if (vid && !img.dataset.fallbackYt) {
+          img.dataset.fallbackYt = "1";
+          img.src = `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+          img.removeAttribute("srcset");
+          return;
+        }
+        if (img.src.includes(FALLBACK_ART)) return;
+        img.removeAttribute("srcset");
         img.src = FALLBACK_ART;
       }}
     />
@@ -130,7 +146,7 @@ export function TrackRow({
           </span>
         ) : null}
         <span className="relative size-12 shrink-0 overflow-hidden rounded-md bg-elevated">
-          <TrackArt src={track.artwork} alt="" />
+          <TrackArt src={track.artwork} alt="" videoId={track.videoId} />
           {active && isPlaying ? (
             <span className="absolute inset-0 flex items-center justify-center bg-bg/55">
               <PlayingBars />
@@ -202,7 +218,7 @@ export function TrackCard({ track, queue }: { track: Track; queue?: Track[] }) {
         className="w-full text-left"
       >
         <span className="art-shadow relative block aspect-square overflow-hidden rounded-md bg-elevated">
-          <TrackArt src={track.artwork} alt="" className="art-zoom group-hover:scale-[1.04]" />
+          <TrackArt src={track.artwork} alt="" videoId={track.videoId} className="art-zoom group-hover:scale-[1.04]" />
           <span
             className={cn(
               "play-fab absolute right-2 bottom-2 flex size-12 items-center justify-center rounded-full bg-primary text-primary-fg",
@@ -324,7 +340,7 @@ export function QuickTile({ track, queue }: { track: Track; queue: Track[] }) {
       className="quick-tile group flex min-h-[64px] items-center gap-3 overflow-hidden rounded-md bg-fg/10 text-left hover:bg-fg/20"
     >
       <span className="size-16 shrink-0 overflow-hidden bg-surface">
-        <TrackArt src={track.artwork} alt="" />
+        <TrackArt src={track.artwork} alt="" videoId={track.videoId} />
       </span>
       <span className="min-w-0 flex-1 pr-2">
         <span className={cn("block truncate text-sm font-bold", active ? "text-primary" : "text-fg")}>
@@ -391,7 +407,7 @@ export function ActionSheet() {
       >
         <div className="flex items-center gap-3 border-b border-border px-4 py-3">
           <span className="size-12 overflow-hidden rounded-md bg-surface">
-            <TrackArt src={view.artwork} alt="" />
+            <TrackArt src={view.artwork} alt="" videoId={view.videoId} />
           </span>
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium">{view.title}</p>

@@ -1,5 +1,6 @@
 import { Innertube } from "youtubei.js";
 import { FALLBACK_ART, type Track } from "./types";
+import { upgradeArtworkUrl } from "@/lib/music/artwork";
 
 let tubePromise: Promise<Innertube> | null = null;
 
@@ -322,10 +323,9 @@ function thumbnailOf(item: Record<string, unknown>, videoId: string): string {
   const list = thumb?.contents || image || [];
   for (let i = list.length - 1; i >= 0; i--) {
     const url = list[i]?.url;
-    if (url?.startsWith("http")) return url;
+    if (url?.startsWith("http")) return upgradeArtworkUrl(url, videoId, 800);
   }
-  if (videoId) return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-  return FALLBACK_ART;
+  return upgradeArtworkUrl(undefined, videoId, 800);
 }
 
 function artistOf(item: Record<string, unknown>, subtitle: string, title: string): string {
