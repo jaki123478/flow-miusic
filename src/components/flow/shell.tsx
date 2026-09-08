@@ -246,7 +246,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-heading text-lg font-semibold tracking-tight">Flow</span>
             </Link>
             <nav className="flex flex-col">
-              {NAV.slice(0, 2).map((item) => {
+              {NAV.slice(0, 3).map((item) => {
                 const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
                 const Icon = item.icon;
                 return (
@@ -275,6 +275,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
             <div className="ml-auto flex items-center gap-2">
+              <Link to="/search" className="rounded-full p-2 text-muted" aria-label="Cerca">
+                <Search className="size-5" />
+              </Link>
               <ChatToggle />
               <AuthChip />
               <Link to="/settings" className="rounded-full p-2 text-muted" aria-label="Impostazioni">
@@ -289,6 +292,14 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </header>
           <div className="hidden items-center gap-2 px-6 py-3 md:flex">
+            <Link
+              to="/search"
+              className="mr-2 flex min-w-[14rem] flex-1 items-center gap-2 rounded-full bg-elevated px-4 py-2 text-sm text-muted hover:bg-white/10 hover:text-fg"
+              aria-label="Cerca"
+            >
+              <Search className="size-4 shrink-0" />
+              <span className="truncate">Cerca brani, artisti, album…</span>
+            </Link>
             <Link to="/charts" className="nav-link flex items-center gap-2 text-sm font-medium text-muted hover:text-fg">
               <Trophy className="size-4" />
               Classifiche
