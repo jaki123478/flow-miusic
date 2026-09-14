@@ -160,7 +160,7 @@ export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () =>
       subtitle: spec.subtitle,
       tracks: uniqueTracks(playlistTracks[i] || []).slice(0, 16),
     })).filter((c) => c.tracks.length >= 4);
-    const discoverWeekly = uniqueTracks([...explore.trending, ...hits, ...viral]).slice(0, 20);
+    const discoverWeekly = uniqueTracks([...pop, ...viral, ...hits, ...italy, ...explore.trending]).filter((t) => t.source === "ytmusic").slice(0, 20);
     const dailyPlaylists = curated;
     return {
       trending,
