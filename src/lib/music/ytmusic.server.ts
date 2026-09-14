@@ -422,7 +422,10 @@ function uniqueTracks(list: Track[]): Track[] {
 }
 
 const NOT_MUSIC =
-  /puntata|podcast|vangelo|rosario|garlasco|ucraina|true crime|notizie|giornale|intervista politica|serie a\b|formula 1|gp olanda/i;
+  /puntata|podcast|episodio\b|episode\b|vangelo|rosario|messa\b|today'?s mass|true crime|notizie|giornale|news\b|breaking|nightcap|talk show|standup|stand-up|interview|intervista|politic|trump|putin|netanyahu|epstein|maga\b|congress|senate|ukraine|ucraina|garlasco|serie a\b|formula 1|gp olanda|nba\b|nfl\b|mlb\b|ufc\b|react to|lets loose|all hell breaks|took her makeup|artificial annihilation|cara a cara con|voz de un pueblo/i;
+
+const LOOKS_LIKE_SONG =
+  /official (audio|video|mv)|\blyrics\b|\bfeat\.?\b|\bft\.?\b|\(official\)|visualizer|music video|\bofficial mv\b/i;
 
 function isLikelySong(track: Track): boolean {
   const blob = `${track.title} ${track.artist}`;
@@ -431,8 +434,22 @@ function isLikelySong(track: Track): boolean {
   if (/\bplaylist\b|top hits \d{4}|trending songs \d{4}|best songs playlist|spotify pop mix/i.test(track.title)) {
     return false;
   }
+  // Talk / clip titles often end with channel-style hooks or ALL CAPS bursts.
+  if (/[|]/.test(track.title) && !LOOKS_LIKE_SONG.test(track.title)) return false;
+  if (/\b(JUST GOT|LETS LOOSE|ALL HELL|SPIRALING|TOOK HER)\b/i.test(track.title)) return false;
   if (track.duration > 0 && track.duration < 25) return false;
+  // Songs rarely exceed ~12 min; long-form talk often does.
+  if (track.duration > 12 * 60 && !LOOKS_LIKE_SONG.test(track.title)) return false;
   if (track.duration > 20 * 60) return false;
+  // Generic "Artista" + no album + long title → usually non-song shelf junk.
+  if (
+    (!track.artist || track.artist === "Artista") &&
+    !track.album &&
+    track.title.split(/\s+/).length >= 8 &&
+    !LOOKS_LIKE_SONG.test(track.title)
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -525,9 +542,9 @@ export async function suggestYtMusic(query: string): Promise<SearchSuggest> {
 export async function getYtMusicHome(limit = 48): Promise<Track[]> {
   try {
     const yt = await getTube();
-    const home = await yt.music.getHomeFeed();
     const tracks: Track[] = [];
     const seen = new Set<string>();
+    const home = await yt.music.getHomeFeed();
     walkTracks(home.sections || home, tracks, seen);
     try {
       if (home.has_continuation && tracks.length < limit) {
@@ -537,7 +554,17 @@ export async function getYtMusicHome(limit = 48): Promise<Track[]> {
     } catch {
       /* one page is enough */
     }
-    return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
+    let filtered = uniqueTracks(tracks.filter(isLikelySong));
+    // If the home shelf is still thin after filtering junk, backfill with song searches.
+    if (filtered.length < Math.min(12, limit)) {
+      const extras = await Promise.all(
+        ["top songs this week", "hit italia 2026", "global pop hits"].map((q) =>
+          searchYtMusic(q, 16).catch(() => [] as Track[]),
+        ),
+      );
+      filtered = uniqueTracks([...filtered, ...extras.flat()]);
+    }
+    return filtered.slice(0, limit);
   } catch {
     return [];
   }
@@ -828,8 +855,7 @@ export async function getExploreTracks(): Promise<{ trending: Track[]; fresh: Tr
     const seenF = new Set<string>();
     for (const section of sections) {
       const title = `${txt(section.header?.title)} ${txt(section.title)}`.toLowerCase();
-      if (/puntat|podcast|episodio/.test(title)) continue;
-      if (/film|movie trailer|comedy|gaming/.test(title)) continue;
+      if (/puntat|podcast|episodio|episode|news|notizi|politic|sport|talk|comedy|standup|gaming|trailer|film|movie|mass|liturg|sermon|church|vangelo/.test(title)) continue;
       const bucket = /nuov|fresh|release|album/.test(title) ? fresh : trending;
       const seen = bucket === fresh ? seenF : seenT;
       walkTracks(section.contents, bucket, seen);
