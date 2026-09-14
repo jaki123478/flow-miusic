@@ -23,20 +23,20 @@ function MixPage() {
   const playQueue = useFlowStore((s) => s.playQueue);
   const selected = MOODS.find((m) => m.id === moodId);
 
-  const run = async (prompt: string, label: string) => {
+  const run = async (prompt: string, label: string, presetBlurb?: string) => {
     setLoading(true);
-    setBlurb("");
+    setBlurb(presetBlurb || "");
     try {
       const res = await createMoodMix({ data: { mood: label, prompt } });
       setTracks(res.tracks);
-      setBlurb(res.blurb);
+      setBlurb(res.blurb || presetBlurb || "");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (selected) void run(selected.prompt, selected.label);
+    if (selected) void run(selected.prompt, selected.label, selected.blurb);
     else if (seed) void run(seed, seed);
   }, [selected?.id, seed]);
 
@@ -48,7 +48,7 @@ function MixPage() {
         </p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight">Dimmi che umore hai</h1>
         <p className="mt-1 text-sm text-muted">
-          Scegli un mood o descrivi il momento: prepariamo una selezione ascoltabile subito.
+          {selected?.blurb || "Scegli un mood o descrivi il momento: prepariamo una selezione ascoltabile subito."}
         </p>
       </header>
 
@@ -57,7 +57,7 @@ function MixPage() {
           <button
             key={m.id}
             type="button"
-            onClick={() => void run(m.prompt, m.label)}
+            onClick={() => void run(m.prompt, m.label, m.blurb)}
             className={`chip h-11 rounded-full px-4 text-sm font-medium ${
               selected?.id === m.id ? "bg-primary text-primary-fg" : "bg-surface text-fg ring-1 ring-border"
             }`}
