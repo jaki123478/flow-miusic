@@ -104,12 +104,42 @@ export const RADIO_COUNTRIES: { code: string; name: string }[] = [
 ];
 
 export const MOODS = [
-  { id: "workout", label: "Allenamento", prompt: "high energy workout hip hop edm official audio" },
-  { id: "night", label: "Notte", prompt: "late night rnb lo-fi chill official audio" },
-  { id: "party", label: "Festa", prompt: "party dance club hits official audio" },
-  { id: "focus", label: "Focus", prompt: "focus study instrumental lo-fi official audio" },
-  { id: "sad", label: "Malinconia", prompt: "sad emotional ballads official audio" },
-  { id: "summer", label: "Estate", prompt: "summer latin reggae tropical official audio" },
+  {
+    id: "workout",
+    label: "Allenamento",
+    prompt: "high energy workout hip hop edm official audio",
+    blurb: "Battito alto, zero filler. Cardio, pesi o una corsa: questa mix ti tiene sul ritmo.",
+  },
+  {
+    id: "night",
+    label: "Notte",
+    prompt: "late night rnb lo-fi chill official audio",
+    blurb: "Luci basse e volume soft. R&B, lo-fi e groove notturni per attraversare la città.",
+  },
+  {
+    id: "party",
+    label: "Festa",
+    prompt: "party dance club hits official audio",
+    blurb: "Volume su. Dance, reggaeton e hit che fanno alzare tutti — anche chi non balla mai.",
+  },
+  {
+    id: "focus",
+    label: "Focus",
+    prompt: "focus study instrumental lo-fi official audio",
+    blurb: "Produttività senza rumore inutile. Strumentali e groove leggeri sotto mentre lavori.",
+  },
+  {
+    id: "sad",
+    label: "Malinconia",
+    prompt: "sad emotional ballads official audio",
+    blurb: "Triste ma buono. Ballate, indie e soul per quando serve stare un po' con te stesso.",
+  },
+  {
+    id: "summer",
+    label: "Estate",
+    prompt: "summer latin reggae tropical official audio",
+    blurb: "Finestrini aperti e sale sulla pelle. Pop latino, afrobeat e hit che sanno di vacanza.",
+  },
 ] as const;
 
 export const FALLBACK_ART = "/artwork-fallback.svg";
