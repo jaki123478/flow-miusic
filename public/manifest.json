@@ -1,7 +1,7 @@
-﻿{
+{
   "name": "Flow Music",
   "short_name": "Flow",
-  "description": "Musica, radio live, playlist e testi sincronizzati. Ascolta ovunque.",
+  "description": "Musica, radio live, playlist e testi. Ascolta ovunque su Flow.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0c10",
@@ -20,5 +20,10 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "lang": "it",
+  "categories": [
+    "music",
+    "entertainment"
   ]
 }
