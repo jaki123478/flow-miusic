@@ -1,11 +1,31 @@
-import { Innertube, UniversalCache } from "youtubei.js";
+import { Innertube, UniversalCache, Platform, Log } from "youtubei.js";
 import { FALLBACK_ART, type Track } from "./types";
+
+try {
+  Log.setLevel(Log.Level.ERROR);
+} catch {}
+
+// Provide the JS evaluator so Innertube can decipher signatures and n-throttle tokens!
+if (typeof Platform !== "undefined" && Platform?.shim) {
+  Platform.shim.eval = (data: any) => {
+    return new Function(data.output)();
+  };
+}
 
 let tubePromise: Promise<Innertube> | null = null;
 
 export async function getTube(): Promise<Innertube> {
+  if (typeof Platform !== "undefined" && Platform?.shim) {
+    Platform.shim.eval = (data: any) => {
+      return new Function(data.output)();
+    };
+  }
   if (!tubePromise) {
-    tubePromise = Innertube.create().catch((err) => {
+    tubePromise = Innertube.create({
+      cache: new UniversalCache(false),
+      lang: "it",
+      location: "IT",
+    }).catch((err) => {
       tubePromise = null;
       throw err;
     });
@@ -13,38 +33,169 @@ export async function getTube(): Promise<Innertube> {
   return tubePromise;
 }
 
+async function validateStreamUrl(url: string, clientName: string): Promise<boolean> {
+  try {
+    const headers: Record<string, string> = {
+      Range: "bytes=0-100",
+      Accept: "*/*",
+    };
+    if (clientName === "IOS") {
+      headers["User-Agent"] = "com.google.ios.youtube/19.29.1 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X;)";
+    } else if (clientName === "ANDROID_VR") {
+      headers["User-Agent"] = "com.google.android.apps.youtube.vr.oculus/1.37 (Linux; U; Android 12; en_US; Quest 3; Build/SQ3A.220605.009.A1; Cronet/107.0.5284.2)";
+    } else {
+      headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36";
+      headers["Origin"] = "https://music.youtube.com";
+      headers["Referer"] = "https://music.youtube.com/";
+    }
+    const res = await fetch(url, {
+      method: "GET",
+      headers,
+      signal: AbortSignal.timeout(3500),
+    });
+    return res.status === 200 || res.status === 206;
+  } catch {
+    return false;
+  }
+}
+
+// chooseFormat() THROWS when no format matches — wrap it so callers get null instead
+function safeChooseFormat(info: any, opts: Record<string, unknown>): any | null {
+  try {
+    return info.chooseFormat(opts) || null;
+  } catch {
+    return null;
+  }
+}
+
+function pickAudioFormat(info: any): any | null {
+  return (
+    safeChooseFormat(info, { type: "audio", quality: "best" }) ||
+    safeChooseFormat(info, { type: "audio" }) ||
+    safeChooseFormat(info, { type: "audio", format: "mp4" }) ||
+    info.streaming_data?.adaptive_formats?.find((f: any) => (f.mime_type || "").startsWith("audio/")) ||
+    info.streaming_data?.formats?.find((f: any) => (f.mime_type || "").startsWith("audio/") || f.has_audio) ||
+    null
+  );
+}
+
+async function fetchFallbackAudioUrl(id: string): Promise<string | null> {
+  // Piped API mirrors + Invidious instances (JSON API)
+  const mirrors = [
+    `https://pipedapi.kavin.rocks/streams/${id}`,
+    `https://pipedapi.adminforge.de/streams/${id}`,
+    `https://invidious.fdn.fr/api/v1/videos/${id}`,
+    `https://inv.nadeko.net/api/v1/videos/${id}`,
+    `https://invidious.nerdvpn.de/api/v1/videos/${id}`,
+  ];
+  for (const endpoint of mirrors) {
+    try {
+      const isInvidious = endpoint.includes("/api/v1/");
+      const res = await fetch(endpoint, {
+        headers: {
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+          Accept: "application/json",
+        },
+        signal: AbortSignal.timeout(4500),
+      });
+      if (!res.ok) continue;
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.includes("json")) continue; // skip HTML responses from dead mirrors
+      const data = (await res.json()) as any;
+
+      let bestUrl: string | null = null;
+      if (isInvidious) {
+        // Invidious returns { adaptiveFormats: [{ url, type, ... }] }
+        const formats = data.adaptiveFormats || [];
+        const audio = formats.find((f: any) => (f.type || "").startsWith("audio/"));
+        bestUrl = audio?.url || null;
+      } else {
+        // Piped returns { audioStreams: [{ url, mimeType, ... }] }
+        const streams = data.audioStreams || data.adaptiveFormats || [];
+        const best = streams.find((s: any) => (s.mimeType || s.type || "").startsWith("audio/"));
+        bestUrl = best?.url || null;
+      }
+
+      if (bestUrl) {
+        const valid = await validateStreamUrl(bestUrl, "WEB");
+        if (valid) return bestUrl;
+      }
+    } catch {
+      /* try next mirror */
+    }
+  }
+  return null;
+}
+
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
+  const clientErrors: string[] = [];
   try {
     const yt = await getTube();
-    const clients = ["IOS", "ANDROID", "WEB", "YTMUSIC"] as const;
+    // WEB and YTMUSIC are the most stable; IOS is heavily blocked by YouTube now
+    const clients = ["WEB", "YTMUSIC", "ANDROID_VR", "MWEB", "IOS"] as const;
 
     for (const client of clients) {
       try {
-        const info = await yt.getBasicInfo(id, { client });
-        const format =
-          info.chooseFormat({ type: "audio" }) ||
-          info.chooseFormat({ type: "audio", quality: "best" }) ||
-          info.chooseFormat({ type: "audio", format: "mp4" }) ||
-          info.streaming_data?.adaptive_formats?.find((f) => (f.mime_type || "").startsWith("audio/")) ||
-          info.streaming_data?.formats?.find((f) => (f.mime_type || "").startsWith("audio/") || f.has_audio);
+        const info = await yt.getInfo(id, { client });
+        const format = pickAudioFormat(info);
 
-        if (format?.url) return format.url;
+        if (format?.url) {
+          const ok = await validateStreamUrl(format.url, client);
+          if (ok) return format.url;
+        }
+
         if (format && typeof (format as any).decipher === "function") {
-          const u = await (format as any).decipher(yt.session.player);
-          if (u) return u;
+          try {
+            const u = await (format as any).decipher(yt.session.player);
+            if (u) {
+              const ok = await validateStreamUrl(u, client);
+              if (ok) return u;
+            }
+          } catch {
+            /* decipher failed, continue */
+          }
+        }
+
+        // Try getBasicInfo as secondary
+        const basic = await yt.getBasicInfo(id, { client });
+        const basicFormat = pickAudioFormat(basic);
+
+        if (basicFormat?.url) {
+          const ok = await validateStreamUrl(basicFormat.url, client);
+          if (ok) return basicFormat.url;
+        }
+
+        if (basicFormat && typeof (basicFormat as any).decipher === "function") {
+          try {
+            const u = await (basicFormat as any).decipher(yt.session.player);
+            if (u) {
+              const ok = await validateStreamUrl(u, client);
+              if (ok) return u;
+            }
+          } catch {
+            /* decipher failed, continue */
+          }
         }
       } catch (e: any) {
-        /* try next client */
+        clientErrors.push(`${client}: ${e?.message || e}`);
       }
     }
   } catch (err: any) {
-    console.error("[getAudioUrl error]", id, err?.message || err);
+    clientErrors.push(`getTube: ${err?.message || err}`);
+    tubePromise = null;
   }
 
-  return null;
+  // Reset Innertube instance for next call if all clients failed
+  tubePromise = null;
+
+  const fallback = await fetchFallbackAudioUrl(id);
+  if (fallback) return fallback;
+
+  throw new Error(`Audio resolution failed: ${clientErrors.join(" ; ")}`);
 }
 
 function txt(value: unknown): string {
@@ -194,15 +345,32 @@ function isLikelySong(track: Track): boolean {
   return true;
 }
 
-export async function searchYtMusic(query: string, limit = 24): Promise<Track[]> {
+export async function searchYtMusic(query: string, limit = 28): Promise<Track[]> {
   const q = query.trim();
   if (!q) return [];
   try {
     const yt = await getTube();
-    const result = await yt.music.search(q);
     const tracks: Track[] = [];
     const seen = new Set<string>();
-    walkTracks(result, tracks, seen);
+
+    // 1. Direct YouTube Music official tracks
+    try {
+      const result = await yt.music.search(q);
+      walkTracks(result, tracks, seen);
+    } catch {
+      /* continue to fallback */
+    }
+
+    // 2. Global YouTube search for remixes, live concerts, rare & international tracks
+    if (tracks.length < limit) {
+      try {
+        const fullSearch = await yt.search(q, { type: "video" });
+        walkTracks(fullSearch, tracks, seen);
+      } catch {
+        /* ignore */
+      }
+    }
+
     return uniqueTracks(tracks.filter(isLikelySong)).slice(0, limit);
   } catch {
     return [];

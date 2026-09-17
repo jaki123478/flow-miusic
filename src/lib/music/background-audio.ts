@@ -92,7 +92,15 @@ export class BackgroundAudioPlayer {
 
   private _getTrackSrc(track: Track): string {
     if (track.streamUrl) return track.streamUrl;
-    if (track.videoId) return `/api/stream?v=${track.videoId}`;
+    if (track.videoId) {
+      const base =
+        typeof window !== 'undefined' &&
+        (window.location.hostname.includes('web.app') ||
+          window.location.hostname.includes('firebaseapp.com'))
+          ? 'https://flow-music-web.vercel.app'
+          : '';
+      return `${base}/api/stream?v=${track.videoId}`;
+    }
     return "";
   }
 
@@ -237,8 +245,12 @@ export class BackgroundAudioPlayer {
     const artwork: MediaImage[] = [];
     if (typeof track.artwork === 'string' && track.artwork) {
       artwork.push(
+        { src: track.artwork, sizes: '64x64', type: 'image/jpeg' },
         { src: track.artwork, sizes: '96x96', type: 'image/jpeg' },
+        { src: track.artwork, sizes: '128x128', type: 'image/jpeg' },
+        { src: track.artwork, sizes: '192x192', type: 'image/jpeg' },
         { src: track.artwork, sizes: '256x256', type: 'image/jpeg' },
+        { src: track.artwork, sizes: '384x384', type: 'image/jpeg' },
         { src: track.artwork, sizes: '512x512', type: 'image/jpeg' }
       );
     }
