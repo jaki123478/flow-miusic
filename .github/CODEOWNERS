@@ -1,0 +1,12 @@
+# Flow stream / player — Jacopo owns these. AI agents: do not change without an explicit ask.
+/src/components/flow/player.tsx @jaki123478
+/src/lib/music/stream-url.ts @jaki123478
+/src/lib/music/native-audio.ts @jaki123478
+/src/lib/music/offline-audio.ts @jaki123478
+/src/lib/music/background-audio.ts @jaki123478
+/src/lib/music/play-src.ts @jaki123478
+/src/lib/music/lock-screen.ts @jaki123478
+/AGENTS.md @jaki123478
+/CLAUDE.md @jaki123478
+/GEMINI.md @jaki123478
+/.github/copilot-instructions.md @jaki123478

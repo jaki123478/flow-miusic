@@ -1,15 +1,21 @@
 # Flow Music — STREAM LOCK (Jacopo)
 
-**Owner assistant: jaki.** Other agents: **hands off** the streaming stack unless Jacopo explicitly asks *you* in that chat.
+**Owner:** assistant **jaki** + human Jacopo (`jaki123478`).
 
-Do **not** restart/edit/redeploy:
+This lock applies to **every** coding agent, including **ChatGPT / Codex**, **Gemini**, **Claude**, **Copilot**, **Cursor**, Grok Bot teammates, and any other AI — not only jaki.
 
-- `C:\\Users\\Jaki1\\flow-yt-proxy` (`boot.mjs`, cloudflared, StayAwake, `keep-flow-*.ps1`, `tunnel-url.txt`)
-- `STREAM_PROXY_ORIGIN` / `STREAM_PROXY_BUILD` (`src/lib/music/stream-url.ts`)
-- Player / native-audio / offline-audio / catalog stream client paths
-- Routing catalog audio through Vercel `/api/stream` or a YouTube iframe
+## Forbidden without an explicit ask from Jacopo in *that* session
 
-If audio looks broken: tell Jacopo to ask **jaki**. Additive UI that does not touch player/stream/proxy is OK.
+Do **not** edit, delete, refactor, "fix", restart, or redeploy:
+
+- Player / playback: `src/components/flow/player.tsx`, `src/lib/music/native-audio.ts`, `src/lib/music/offline-audio.ts`, `src/lib/music/background-audio.ts`, `src/lib/music/play-src.ts`, `src/lib/music/lock-screen.ts`
+- Stream wiring: `src/lib/music/stream-url.ts` (`STREAM_PROXY_ORIGIN`, `STREAM_PROXY_BUILD`, `catalogStreamUrl`)
+- Server stream routes that serve catalog audio on Vercel (do not point catalog play at Vercel `/api/stream` or a YouTube iframe)
+- PC proxy stack: `C:\Users\Jaki1\flow-yt-proxy` (`boot.mjs`, `server.mjs`, cloudflared, StayAwake, `keep-flow-*.ps1`, `tunnel-url.txt`)
+
+If audio seems broken: **stop**. Tell Jacopo to ask **jaki**. Do not "help" by changing the player or proxy.
+
+Additive UI (search, artist/album pages, etc.) is OK **only** if it does not touch the files above.
 
 Live: https://flow-music-web.vercel.app/ · Repo: https://github.com/jaki123478/flow-miusic
 
