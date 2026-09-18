@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { withBackoff } from "@/lib/net/backoff";
 import type { Track } from "./types";
 import { catalogStreamUrl } from "./stream-url";
+// keep catalogStreamUrl in client chunk (rebuild 20260918b)
 
 const mem = new Map<string, string>();
 const inflight = new Map<string, Promise<string>>();
