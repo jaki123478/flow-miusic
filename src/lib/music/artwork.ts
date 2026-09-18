@@ -13,10 +13,12 @@ export function upgradeArtworkUrl(
     return safeId ? `https://i.ytimg.com/vi/${safeId}/hq720.jpg` : FALLBACK_ART;
   }
 
-  // YouTube video stills: drop tiny sqp crops, use hq720 (maxres often 404).
+  // YouTube video stills: always prefer the track videoId when known.
+  // Shelf/playlist thumbs sometimes embed a different /vi/ID/ than the song.
   const yt = raw.match(/i\.ytimg\.com\/vi\/([\w-]{11})\//i);
   if (yt) {
-    return `https://i.ytimg.com/vi/${yt[1]}/hq720.jpg`;
+    const use = safeId || yt[1];
+    return `https://i.ytimg.com/vi/${use}/hq720.jpg`;
   }
 
   let out = raw;
