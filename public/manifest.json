@@ -26,5 +26,9 @@
     "minimal-ui"
   ],
   "lang": "it",
-  "dir": "ltr"
+  "dir": "ltr",
+  "categories": [
+    "music",
+    "entertainment"
+  ]
 }
