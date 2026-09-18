@@ -585,7 +585,7 @@ export function MiniPlayer() {
         <div className="mx-2.5 mb-1 overflow-hidden rounded-2xl bg-[#14171E]/95 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
           <div className="flex items-center gap-2 px-2.5 py-2">
             <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left active:scale-[0.99] transition-transform">
-              <span className="size-11 shrink-0 overflow-hidden rounded-xl bg-surface shadow-md ring-1 ring-white/10"><TrackArt src={current.artwork} alt="" /></span>
+              <span className="size-11 shrink-0 overflow-hidden rounded-xl bg-surface shadow-md ring-1 ring-white/10"><TrackArt src={current.artwork} alt="" videoId={current.videoId} /></span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-fg">{current.title}</span>
                 <span className="block truncate text-xs text-muted">{current.artist}</span>
@@ -600,7 +600,7 @@ export function MiniPlayer() {
       </div>
       <div className="hidden h-[90px] items-center gap-4 px-4 md:flex">
         <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className="size-14 shrink-0 overflow-hidden rounded bg-surface"><TrackArt src={current.artwork} alt="" /></span>
+          <span className="size-14 shrink-0 overflow-hidden rounded bg-surface"><TrackArt src={current.artwork} alt="" videoId={current.videoId} /></span>
           <span className="min-w-0">
             <span className="block max-w-[14rem] truncate text-sm font-medium">{current.title}</span>
             <span className="block max-w-[14rem] truncate text-xs text-muted">{current.artist}</span>
@@ -1076,7 +1076,7 @@ export function FullPlayer() {
                 className="flex min-h-0 flex-1 flex-col items-center justify-center py-2"
               >
                 <div className="player-art-float relative aspect-square w-[min(100%-1rem,21rem)] overflow-hidden rounded-3xl bg-surface shadow-2xl ring-1 ring-white/15">
-                  <TrackArt src={current.artwork} alt={current.title} />
+                  <TrackArt src={current.artwork} alt={current.title} videoId={current.videoId} />
                   <div className="pointer-events-none absolute inset-0" aria-hidden />
                 </div>
 
@@ -1444,7 +1444,7 @@ export function FullPlayer() {
           {/* Song Info */}
           <div className="flex flex-col items-center text-center my-auto">
             <div className="size-48 overflow-hidden rounded-3xl bg-surface shadow-2xl ring-2 ring-white/10 mb-6">
-              <TrackArt src={current.artwork} alt={current.title} />
+              <TrackArt src={current.artwork} alt={current.title} videoId={current.videoId} />
             </div>
             <h2 className="text-2xl font-black text-fg max-w-sm truncate">{current.title}</h2>
             <p className="text-base font-bold text-muted mt-1 max-w-sm truncate">{current.artist}</p>
