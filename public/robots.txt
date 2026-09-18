@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /
+
+# App routes that are private / low value for indexing
+Disallow: /login
+Disallow: /settings
+Disallow: /api/
+
+Sitemap: https://flow-music-web.vercel.app/sitemap.xml
