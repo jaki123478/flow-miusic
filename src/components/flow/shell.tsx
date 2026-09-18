@@ -334,17 +334,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           <header className="relative z-20 flex items-center gap-2 px-3 py-2 md:hidden pt-[max(0.5rem,env(safe-area-inset-top))]">
-            <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2">
+            <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2 touch-manipulation">
               <FlowMark className="size-8 shrink-0" />
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
             <div className="ml-auto flex shrink-0 items-center gap-0.5">
-              <Link to="/search" className="flex size-11 items-center justify-center rounded-full text-muted" aria-label="Cerca">
+              <Link to="/search" className="flex size-11 items-center justify-center rounded-full text-muted touch-manipulation" aria-label="Cerca">
                 <Search className="size-5" />
               </Link>
               <ChatToggle />
               <AuthChip />
-              <Link to="/settings" className="flex size-11 items-center justify-center rounded-full text-muted" aria-label="Impostazioni">
+              <Link to="/settings" className="flex size-11 items-center justify-center rounded-full text-muted touch-manipulation" aria-label="Impostazioni">
                 <Settings className="size-5" />
               </Link>
               <Link to="/charts" className="hidden min-[400px]:flex h-11 items-center rounded-full px-2.5 text-xs font-medium text-muted">
@@ -401,10 +401,10 @@ export function AppShell({ children }: { children: ReactNode }) {
         ) : null}
       </div>
 
-      <div className="relative z-40 shrink-0">
+      <div className="relative z-[60] shrink-0">
         <MiniPlayer />
         <ChatFab />
-        <div className="px-2.5 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-0.5 md:hidden">
+        <div className="relative z-[70] px-2.5 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-0.5 md:hidden">
           <nav className="floating-nav flex items-center justify-around rounded-2xl border border-white/10 px-1 py-1 shadow-2xl">
             {NAV.map((item) => {
               const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -413,12 +413,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <Link
                   key={item.to}
                   to={item.to}
+                  preload="intent"
                   className={cn(
-                    "floating-nav-pill flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition-all active:scale-95",
-                    active ? "is-active text-primary" : "text-muted hover:text-fg",
+                    "floating-nav-pill flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold touch-manipulation select-none",
+                    active ? "is-active text-primary" : "text-muted",
                   )}
                 >
-                  <Icon className={cn("size-5 transition-transform", active && "scale-110 text-primary")} />
+                  <Icon className={cn("size-5", active && "text-primary")} />
                   <span className={cn("tracking-tight", active ? "font-bold text-fg" : "text-muted")}>{item.label}</span>
                 </Link>
               );
