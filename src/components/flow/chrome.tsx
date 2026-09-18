@@ -98,24 +98,39 @@ export function AuthChip() {
 
   if (isPending) return <div className="size-8 shrink-0 animate-pulse rounded-full bg-elevated" />;
 
-  const label = user?.displayName ?? user?.primaryEmail ?? profileName ?? "Flow User";
+  // Guest: clear Accedi CTA (especially mobile — profile modal buried login)
+  if (!user) {
+    return (
+      <Link
+        to="/login"
+        search={{ mode: "in" }}
+        className="inline-flex h-9 shrink-0 items-center justify-center rounded-full bg-primary px-3.5 text-xs font-black text-primary-fg shadow-lg shadow-primary/20 touch-manipulation active:scale-[0.98] hover:brightness-110"
+        aria-label="Accedi"
+      >
+        Accedi
+      </Link>
+    );
+  }
+
+  const label = user.displayName ?? user.primaryEmail ?? profileName ?? "Flow User";
 
   return (
     <>
       <button
         type="button"
         onClick={() => setShowProfile(true)}
-        className="flex items-center gap-2 rounded-full bg-surface/90 px-2.5 py-1 text-xs font-semibold ring-1 ring-border/50 hover:bg-elevated transition-all"
+        className="flex min-h-9 shrink-0 items-center gap-2 rounded-full bg-surface/90 px-2.5 py-1 text-xs font-semibold ring-1 ring-border/50 touch-manipulation hover:bg-elevated transition-all"
         title="Apri Profilo & Impostazioni"
+        aria-label="Profilo"
       >
-        {user?.profileImageUrl ? (
+        {user.profileImageUrl ? (
           <img src={user.profileImageUrl} alt="" className="size-6 rounded-full object-cover" />
         ) : (
           <span className="grid size-6 place-items-center rounded-full bg-gradient-to-tr from-primary to-emerald-400 text-[11px] font-bold text-bg">
             {label.charAt(0).toUpperCase()}
           </span>
         )}
-        <span className="max-w-[7rem] truncate text-fg sm:max-w-[10rem]">{label}</span>
+        <span className="hidden max-w-[7rem] truncate text-fg min-[380px]:inline sm:max-w-[10rem]">{label}</span>
       </button>
 
       <ProfileModal isOpen={showProfile} onClose={() => setShowProfile(false)} />
