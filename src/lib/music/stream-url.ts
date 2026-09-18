@@ -1,5 +1,5 @@
 /** Off-Vercel catalog audio. Same host must resolve InnerTube and proxy googlevideo. */
-export const STREAM_PROXY_ORIGIN = "https://gale-solar-next-take.trycloudflare.com";
+export const STREAM_PROXY_ORIGIN = "https://boulder-grad-travis-vary.trycloudflare.com";
 
 export function catalogStreamUrl(videoId: string): string {
   const id = String(videoId || "").trim();
