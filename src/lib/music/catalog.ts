@@ -128,29 +128,61 @@ const HOME_PLAYLISTS: { id: string; title: string; subtitle: string; playlistId:
   { id: "latino", title: "Latino", subtitle: "Reggaeton e oltre", playlistId: "PL4fGSI1pDJn5O8siDeZuI_4hbk6JWtTX1" },
 ];
 
+function settleMs<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(fallback), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+const EMPTY_HOME = {
+  trending: [] as Track[],
+  hitsMix: [] as Track[],
+  independent: [] as Track[],
+  radios: [] as RadioStation[],
+  discoverWeekly: [] as Track[],
+  curated: [] as CatalogCollection[],
+  dailyPlaylists: [] as CatalogCollection[],
+};
+
 export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () => {
   try {
     const yt = await import("./ytmusic.server");
-    const settled = await Promise.allSettled([
-      yt.getYtMusicHome(48),
-      yt.searchYtMusic("top hits 2026", 20),
-      yt.searchYtMusic("hit italia 2026", 16),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[0].playlistId, 20),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[1].playlistId, 16),
-      radioBrowser("/json/stations/search?hidebroken=true&order=clickcount&reverse=true&limit=40"),
-      yt.getExploreTracks(),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[2].playlistId, 16),
-      yt.getPlaylistTracks(HOME_PLAYLISTS[3].playlistId, 16),
+    // Hard caps so a stuck YouTube call never freezes Home (and blocks nav).
+    const [
+      homeSongs,
+      hits,
+      italy,
+      pop,
+      viral,
+      radiosRaw,
+      explore,
+      global,
+      latino,
+    ] = await Promise.all([
+      settleMs(yt.getYtMusicHome(48), 7000, [] as Track[]),
+      settleMs(yt.searchYtMusic("top hits 2026", 20), 6000, [] as Track[]),
+      settleMs(yt.searchYtMusic("hit italia 2026", 16), 6000, [] as Track[]),
+      settleMs(yt.getPlaylistTracks(HOME_PLAYLISTS[0].playlistId, 20), 6000, [] as Track[]),
+      settleMs(yt.getPlaylistTracks(HOME_PLAYLISTS[1].playlistId, 16), 6000, [] as Track[]),
+      settleMs(
+        radioBrowser("/json/stations/search?hidebroken=true&order=clickcount&reverse=true&limit=40"),
+        5000,
+        [] as RbStation[],
+      ),
+      settleMs(yt.getExploreTracks(), 7000, { trending: [] as Track[], fresh: [] as Track[] }),
+      settleMs(yt.getPlaylistTracks(HOME_PLAYLISTS[2].playlistId, 16), 6000, [] as Track[]),
+      settleMs(yt.getPlaylistTracks(HOME_PLAYLISTS[3].playlistId, 16), 6000, [] as Track[]),
     ]);
-    const homeSongs = settled[0].status === "fulfilled" ? settled[0].value : [];
-    const hits = settled[1].status === "fulfilled" ? settled[1].value : [];
-    const italy = settled[2].status === "fulfilled" ? settled[2].value : [];
-    const pop = settled[3].status === "fulfilled" ? settled[3].value : [];
-    const viral = settled[4].status === "fulfilled" ? settled[4].value : [];
-    const radiosRaw = settled[5].status === "fulfilled" ? settled[5].value : [];
-    const explore = settled[6].status === "fulfilled" ? settled[6].value : { trending: [], fresh: [] };
-    const global = settled[7].status === "fulfilled" ? settled[7].value : [];
-    const latino = settled[8].status === "fulfilled" ? settled[8].value : [];
     const stations = radiosRaw.map(toStation).filter((s): s is RadioStation => Boolean(s)).slice(0, 18);
     const trending = uniqueTracks([...homeSongs, ...hits, ...pop, ...explore.trending]).slice(0, 36);
     const playlistTracks = [pop, viral, global, latino];
@@ -172,15 +204,7 @@ export const getHomeFeed = createServerFn({ method: "GET" }).handler(async () =>
       dailyPlaylists,
     };
   } catch {
-    return {
-      trending: [],
-      hitsMix: [],
-      independent: [],
-      radios: [],
-      discoverWeekly: [],
-      curated: [] as CatalogCollection[],
-      dailyPlaylists: [] as CatalogCollection[],
-    };
+    return EMPTY_HOME;
   }
 });
 

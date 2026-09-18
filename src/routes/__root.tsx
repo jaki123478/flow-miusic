@@ -79,28 +79,29 @@ export const Route = createRootRoute({
           href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap",
         },
       ],
-      scripts: [
-        {
-          type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "WebApplication",
-            name: "Flow",
-            url: siteUrl,
-            description,
-            applicationCategory: "MultimediaApplication",
-            operatingSystem: "Web",
-            inLanguage: "it-IT",
-            offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
-          }),
-        },
-      ],
     };
   },
   component: () => (
     <html lang="it" suppressHydrationWarning>
       <head>
         <HeadContent />
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "WebApplication",
+              name: "Flow",
+              url: "https://flow-music-web.vercel.app",
+              description:
+                "Musica, radio live, playlist e testi. Scopri hit, mix e radio dal mondo — ascolta ovunque su Flow.",
+              applicationCategory: "MultimediaApplication",
+              operatingSystem: "Web",
+              inLanguage: "it-IT",
+              offers: { "@type": "Offer", price: "0", priceCurrency: "EUR" },
+            }),
+          }}
+        />
       </head>
       <body className="antialiased">
         <PreviewHostBridge />
