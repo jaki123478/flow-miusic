@@ -196,7 +196,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   isPlaying: false,
   currentTime: 0,
   duration: 0,
-  volume: 0.9,
+  volume: 1,
   isMuted: false,
   shuffle: false,
   repeat: "off",
@@ -245,7 +245,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const liked = readJson<Track[]>(LIKED_KEY, []).map(sanitizeTrack);
     const recents = readJson<Track[]>(RECENT_KEY, []).map(sanitizeTrack);
     const playlists = readJson<Playlist[]>(PLAYLISTS_KEY, []);
-    const volume = readJson<number>(VOLUME_KEY, 0.9);
+    const volume = readJson<number>(VOLUME_KEY, 1);
     const settings = { ...DEFAULT_SETTINGS, ...readJson<Partial<FlowSettings>>(SETTINGS_KEY, {}) };
     const listenMs = readJson<number>(STATS_KEY, 0);
     const plays = readJson<Record<string, number>>(PLAYS_KEY, {});
