@@ -345,10 +345,15 @@ export function AudioEngine() {
     const onEndedEv = () => {
       const d = audio.duration || 0;
       const t = audio.currentTime || 0;
-      if (t < 6 && (d < 8 || !Number.isFinite(d))) {
+      // Many mobile browsers reset currentTime on ended; duration can be NaN for
+      // proxied M4A. If we already progressed, always advance — never reload same track.
+      const progressed = lastPos.current >= 12 || (Number.isFinite(d) && d >= 25 && t >= Math.max(12, d * 0.8));
+      if (!progressed && t < 6 && (d < 8 || !Number.isFinite(d))) {
         if (useFlowStore.getState().isPlaying) wakePlayback(true);
         return;
       }
+      lastPos.current = 0;
+      lastMove.current = Date.now();
       onEnded();
     };
 

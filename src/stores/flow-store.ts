@@ -336,22 +336,39 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     } else {
       nextIndex = queueIndex + 1;
       if (nextIndex >= queue.length) {
-        if (repeat === "all") {
+        // One-song queue + repeat-all would loop the same track forever — fetch related instead.
+        if (repeat === "all" && queue.length > 1) {
           nextIndex = 0;
-        } else if (settings.autoplayRelated && current) {
+        } else if ((settings.autoplayRelated || repeat === "all" || queue.length <= 1) && current) {
           void getRelatedTracks({
             data: { artist: current.artist, title: current.title, excludeId: current.id, videoId: current.videoId },
           })
             .then((related) => {
               if (related && related.length) {
                 const existingIds = new Set(get().queue.map((t) => t.id));
-                const fresh = related.filter((t) => !existingIds.has(t.id));
+                const fresh = related.filter((t) => !existingIds.has(t.id) && t.id !== current.id);
                 if (fresh.length) {
                   get().appendQueue(fresh);
                   get().next();
+                } else if (repeat === "all" && queue.length > 1) {
+                  set({
+                    current: queue[0],
+                    queueIndex: 0,
+                    currentTime: 0,
+                    isPlaying: true,
+                    seekVersion: get().seekVersion + 1,
+                  });
                 } else {
                   set({ isPlaying: false });
                 }
+              } else if (repeat === "all" && queue.length > 1) {
+                set({
+                  current: queue[0],
+                  queueIndex: 0,
+                  currentTime: 0,
+                  isPlaying: true,
+                  seekVersion: get().seekVersion + 1,
+                });
               } else {
                 set({ isPlaying: false });
               }
@@ -384,10 +401,12 @@ export const useFlowStore = create<FlowState>((set, get) => ({
       get().notify("Timer completato (fine brano)");
       return;
     }
+    // Only loop the same track when the user explicitly chose repeat-one.
     if (get().repeat === "one") {
       set({ currentTime: 0, isPlaying: true, seekVersion: get().seekVersion + 1 });
       return;
     }
+    // Always try to advance; next() handles end-of-queue / autoplay related.
     get().next();
   },
 
