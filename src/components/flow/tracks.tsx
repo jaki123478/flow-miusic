@@ -214,6 +214,9 @@ export function TrackCard({ track, queue }: { track: Track; queue?: Track[] }) {
     <div className="spot-card group relative w-44 shrink-0 sm:w-48">
       <button
         type="button"
+        onPointerDown={() => {
+          if (track.videoId) void prefetchAudio(track.videoId);
+        }}
         onClick={() => (active ? togglePlay() : playTrack(track, queue))}
         className="w-full text-left"
       >

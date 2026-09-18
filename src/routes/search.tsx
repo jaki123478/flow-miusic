@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { Loader2, Mic, Search as SearchIcon, User, X } from "lucide-react";
 import { searchCatalog, stationToTrack, suggestSearch } from "@/lib/music/catalog";
+import { prefetchAudio } from "@/lib/music/offline-audio";
 import { useFlowStore } from "@/stores/flow-store";
 import type { RadioStation, Track } from "@/lib/music/types";
 import { GENRES } from "@/lib/music/types";
@@ -210,6 +211,9 @@ function SearchPage() {
             <button
               key={t.id}
               type="button"
+              onPointerDown={() => {
+                if (t.videoId) void prefetchAudio(t.videoId);
+              }}
               onClick={() => {
                 playTrack(t, hintSongs);
                 remember(t.title);

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { Playlist, RepeatMode, Track } from "@/lib/music/types";
+import { directPlayTrack } from "@/lib/music/native-audio";
 import type { Locale } from "@/lib/i18n";
 import { getRelatedTracks } from "@/lib/music/catalog";
 
@@ -257,6 +258,12 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   },
 
   playTrack: (track, queue) => {
+    // Start audio in the same user gesture (search / cards / rows).
+    try {
+      directPlayTrack(track);
+    } catch {
+      /* ignore */
+    }
     get().bumpPlay(track.artist);
     const recents = remember(track, get().recents, get().settings.privateSession);
     writeJson(RECENT_KEY, recents);
