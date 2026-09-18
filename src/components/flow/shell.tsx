@@ -287,6 +287,9 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-dvh flex-col bg-bg text-fg">
+      <a href="#main-content" className="skip-link">
+        Vai al contenuto
+      </a>
       <InstallHint />
       <CloudSync />
       <Prefs />
@@ -377,6 +380,8 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
           <main
+            id="main-content"
+            tabIndex={-1}
             className={cn(
               "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 sm:px-6 md:rounded-lg md:px-6 md:pt-4",
             )}
