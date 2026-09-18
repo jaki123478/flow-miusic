@@ -67,8 +67,6 @@
     touch-action: manipulation;
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior: none;
-    padding-left: var(--flow-safe-left);
-    padding-right: var(--flow-safe-right);
   }
 
   button:not(:disabled),
@@ -221,7 +219,7 @@
   transition: transform var(--duration-md) var(--ease-out);
 }
 .nav-link.is-active svg {
-  transform: translate3d(0, -1px, 0) scale(1.06);
+  color: inherit;
 }
 
 .heart-icon {
@@ -562,7 +560,12 @@
 }
 
 .floating-nav-pill {
-  transition: all var(--duration-fast) var(--ease-out);
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: color var(--duration-fast) var(--ease-inout), background-color var(--duration-fast) var(--ease-inout);
+}
+.floating-nav-pill:active {
+  transform: none;
 }
 .floating-nav-pill.is-active {
   color: var(--color-primary);
