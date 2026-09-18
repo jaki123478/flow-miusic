@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type TouchEvent } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   Check,
   ChevronDown,
@@ -570,7 +571,32 @@ export function MiniPlayer() {
   const toggleMute = useFlowStore((s) => s.toggleMute);
   const showFull = useFlowStore((s) => s.showFullPlayer);
   const { mounted, open } = useOpenTransition(Boolean(current), 280);
-  if (!mounted || !current) return null;
+  if (!current) {
+    return (
+      <div className="now-bar pointer-events-auto hidden bg-elevated/80 md:block md:bg-bg">
+        <div className="flex h-[72px] items-center gap-4 px-4">
+          <span className="size-12 shrink-0 rounded-md bg-surface ring-1 ring-border" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium text-muted">Nessun brano in riproduzione</span>
+            <span className="block text-xs text-subtle">Scegli qualcosa da Home, Esplora o Radio</span>
+          </span>
+          <Link
+            to="/explore"
+            className="h-9 rounded-full bg-primary px-4 text-sm font-semibold leading-9 text-primary-fg"
+          >
+            Esplora
+          </Link>
+          <Link
+            to="/radio"
+            className="h-9 rounded-full bg-elevated px-4 text-sm font-medium leading-9 text-fg ring-1 ring-border"
+          >
+            Radio
+          </Link>
+        </div>
+      </div>
+    );
+  }
+  if (!mounted) return null;
   const progress = duration > 0 ? Math.min(100, (currentTime / duration) * 100) : 0;
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
   const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
