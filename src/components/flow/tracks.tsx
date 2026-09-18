@@ -325,7 +325,7 @@ export function SectionHeader({
 
 export function HScroll({ children }: { children: ReactNode }) {
   return (
-    <div className="scrollbar-none -mx-4 flex gap-3 overflow-x-auto px-4 pb-1 sm:-mx-6 sm:px-6">{children}</div>
+    <div className="scrollbar-none -mx-4 flex gap-3 overflow-x-auto scroll-px-4 px-4 pb-1 pe-8 sm:-mx-6 sm:scroll-px-6 sm:px-6 sm:pe-10">{children}</div>
   );
 }
 
