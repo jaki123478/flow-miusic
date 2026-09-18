@@ -15,8 +15,8 @@ export function ChatFab() {
       aria-label="Flow DJ"
       onClick={() => setShowChat(!showChat)}
       className={cn(
-        "fixed right-4 z-50 flex size-12 items-center justify-center rounded-full bg-primary text-primary-fg shadow md:hidden",
-        "bottom-[calc(5.5rem+env(safe-area-inset-bottom))]",
+        "fixed right-4 z-[55] flex size-12 items-center justify-center rounded-full bg-primary text-primary-fg shadow md:hidden touch-manipulation",
+        "bottom-[calc(6.25rem+env(safe-area-inset-bottom))]",
       )}
     >
       <Sparkles className="size-5" />
