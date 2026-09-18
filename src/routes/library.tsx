@@ -479,7 +479,31 @@ function LibraryPage() {
 }
 
 function Empty({ text }: { text: string }) {
-  return <p className="rounded-xl bg-surface px-4 py-10 text-center text-sm text-muted ring-1 ring-border">{text}</p>;
+  return (
+    <div className="rounded-xl bg-surface px-4 py-10 text-center ring-1 ring-border">
+      <p className="text-sm text-muted">{text}</p>
+      <div className="mt-4 flex flex-wrap items-center justify-center gap-2">
+        <Link
+          to="/explore"
+          className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-sm font-semibold text-primary-fg"
+        >
+          Esplora
+        </Link>
+        <Link
+          to="/search"
+          className="inline-flex h-10 items-center rounded-full bg-elevated px-4 text-sm font-medium text-fg"
+        >
+          Cerca un brano
+        </Link>
+        <Link
+          to="/radio"
+          className="inline-flex h-10 items-center rounded-full bg-elevated px-4 text-sm font-medium text-fg"
+        >
+          Radio live
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 function CacheBanner({ stats, onClear, empty }: { stats: CacheStats; onClear?: () => void; empty?: boolean }) {

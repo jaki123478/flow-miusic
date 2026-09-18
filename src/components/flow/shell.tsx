@@ -89,9 +89,19 @@ function LibraryRail() {
           </span>
           <span className="min-w-0">
             <span className="block truncate text-sm font-medium">Brani che ti piacciono</span>
-            <span className="text-xs text-muted">Playlist · {liked.length} brani</span>
+            <span className="text-xs text-muted">
+              {liked.length ? `Playlist · ${liked.length} brani` : "Ancora vuota — metti mi piace a un brano"}
+            </span>
           </span>
         </Link>
+        {!liked.length && !playlists.length && !recents.length ? (
+          <Link
+            to="/explore"
+            className="mx-2 mt-2 block rounded-lg bg-elevated/80 px-3 py-3 text-center text-xs font-medium text-muted hover:bg-elevated hover:text-fg"
+          >
+            Esplora la musica per iniziare la libreria
+          </Link>
+        ) : null}
         {recents[0] ? (
           <Link to="/library" className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-elevated">
             <span className="size-12 overflow-hidden rounded-md bg-elevated">
@@ -300,7 +310,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="font-heading text-lg font-semibold tracking-tight">Flow</span>
             </Link>
             <nav className="flex flex-col">
-              {NAV.slice(0, 3).map((item) => {
+              {NAV.filter((item) => item.to !== "/library").map((item) => {
                 const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
                 const Icon = item.icon;
                 return (

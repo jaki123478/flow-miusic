@@ -333,13 +333,18 @@ function artistOf(item: Record<string, unknown>, subtitle: string, title: string
   const artists = item.artists as unknown[] | undefined;
   const fromAuthors = (authors || artists || []).map(txt).filter(Boolean);
   if (fromAuthors.length) return fromAuthors.join(", ");
-  const parts = subtitle.split("•").map((s) => s.trim()).filter(Boolean);
-  const skip = /video|visualizzaz|views|official|album|playlist|puntata/i;
+  const owner = item.author as unknown;
+  const ownerName = txt(owner) || txt((owner as { name?: unknown } | undefined)?.name);
+  if (ownerName && ownerName.length < 60) return ownerName;
+  const parts = subtitle.split(/[•·|]/).map((s) => s.trim()).filter(Boolean);
+  const skip = /video|visualizzaz|views|view|official|album|playlist|puntata|episode|podcast|single|ep\b|\d+:\d+/i;
   const guess = parts.find((p) => !skip.test(p) && !/^\d/.test(p) && p.length < 60);
   if (guess) return guess;
   const dash = title.match(/^(.{2,48}?)\s+[-–—]\s+/);
   if (dash) return dash[1].trim();
-  return "Artista";
+  const by = title.match(/\bby\s+(.{2,48})$/i);
+  if (by) return by[1].trim();
+  return "";
 }
 
 function isVideoId(id: string): boolean {

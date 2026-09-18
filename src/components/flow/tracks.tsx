@@ -25,6 +25,13 @@ import { directPlayTrack } from "@/lib/music/native-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 
+
+function artistLabel(track: Track): string {
+  const a = (track.artist || "").trim();
+  if (!a || a === "Artista") return track.isLive || track.source === "radio" ? a || "Radio" : "";
+  return a;
+}
+
 export function TrackArt({
   src,
   alt,
@@ -159,18 +166,23 @@ export function TrackRow({
           </span>
           <span className="mt-0.5 flex items-center gap-1.5 text-xs text-muted">
             {track.isLive ? <Radio className="size-3 shrink-0" /> : null}
-            {track.isLive || track.source === "radio" || track.artist === "Artista" ? (
-              <span className="truncate">{track.artist}</span>
-            ) : (
-              <Link
-                to="/a/$name"
-                params={{ name: track.artist.split(",")[0]?.trim() || track.artist }}
-                onClick={(e) => e.stopPropagation()}
-                className="truncate hover:underline"
-              >
-                {track.artist}
-              </Link>
-            )}
+            {(() => {
+              const label = artistLabel(track);
+              if (!label) return <span className="truncate text-subtle">Brano</span>;
+              if (track.isLive || track.source === "radio" || track.artist === "Artista") {
+                return <span className="truncate">{label}</span>;
+              }
+              return (
+                <Link
+                  to="/a/$name"
+                  params={{ name: track.artist.split(",")[0]?.trim() || track.artist }}
+                  onClick={(e) => e.stopPropagation()}
+                  className="truncate hover:underline"
+                >
+                  {label}
+                </Link>
+              );
+            })()}
           </span>
         </span>
       </button>
@@ -235,17 +247,22 @@ export function TrackCard({ track, queue }: { track: Track; queue?: Track[] }) {
           {track.title}
         </span>
       </button>
-      {track.source !== "radio" && track.artist && track.artist !== "Artista" ? (
-        <Link
-          to="/a/$name"
-          params={{ name: track.artist }}
-          className="mt-1 block truncate text-sm text-muted hover:underline"
-        >
-          {track.artist}
-        </Link>
-      ) : (
-        <span className="mt-1 block truncate text-sm text-muted">{track.artist}</span>
-      )}
+      {(() => {
+        const label = artistLabel(track);
+        if (!label) return <span className="mt-1 block truncate text-sm text-subtle">Brano</span>;
+        if (track.source !== "radio" && track.artist && track.artist !== "Artista") {
+          return (
+            <Link
+              to="/a/$name"
+              params={{ name: track.artist }}
+              className="mt-1 block truncate text-sm text-muted hover:underline"
+            >
+              {label}
+            </Link>
+          );
+        }
+        return <span className="mt-1 block truncate text-sm text-muted">{label}</span>;
+      })()}
       <button
         type="button"
         onClick={() => setActionTrack(track)}
