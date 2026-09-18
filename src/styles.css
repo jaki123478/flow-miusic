@@ -125,7 +125,8 @@
 }
 
 .flow-enter > * {
-  animation: flow-enter var(--duration-slow) var(--ease-out) both;
+  opacity: 1;
+  animation: flow-enter var(--duration-slow) var(--ease-out) forwards;
 }
 .flow-enter > *:nth-child(1) {
   animation-delay: 0ms;
