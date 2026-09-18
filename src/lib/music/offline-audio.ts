@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { withBackoff } from "@/lib/net/backoff";
 import type { Track } from "./types";
-import { catalogStreamUrl } from "./stream-url";
+import { catalogStreamUrl, STREAM_PROXY_BANNER } from "./stream-url";
+void STREAM_PROXY_BANNER;
 // keep catalogStreamUrl in client chunk (rebuild 20260918b)
 
 const mem = new Map<string, string>();
