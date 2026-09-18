@@ -1,9 +1,9 @@
 /** Off-Vercel catalog audio. Same host must resolve InnerTube and proxy googlevideo. */
-export const STREAM_PROXY_ORIGIN = "https://boulder-grad-travis-vary.trycloudflare.com";
+export const STREAM_PROXY_ORIGIN = "https://hose-enrolled-hindu-label.trycloudflare.com";
 
 /** Bump when Vercel serves a stale client bundle without the tunnel host. */
 /** rebuild-kick: force production client to embed trycloudflare host */
-export const STREAM_PROXY_BUILD = "20260918c";
+export const STREAM_PROXY_BUILD = "20260918d";
 
 export function catalogStreamUrl(videoId: string): string {
   const id = String(videoId || "").trim();
