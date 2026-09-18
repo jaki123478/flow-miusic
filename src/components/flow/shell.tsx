@@ -296,7 +296,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-bg text-fg">
+    <div className="flex h-dvh max-h-dvh flex-col bg-bg text-fg">
       <InstallHint />
       <CloudSync />
       <Prefs />
@@ -333,24 +333,24 @@ export function AppShell({ children }: { children: ReactNode }) {
         </aside>
 
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-          <header className="relative z-20 flex items-center gap-3 px-4 py-3 md:hidden pt-[max(0.75rem,env(safe-area-inset-top))]">
-            <Link to="/" className="flex items-center gap-2">
-              <FlowMark className="size-8" />
+          <header className="relative z-20 flex items-center gap-2 px-3 py-2 md:hidden pt-[max(0.5rem,env(safe-area-inset-top))]">
+            <Link to="/" className="flex min-h-11 min-w-0 items-center gap-2">
+              <FlowMark className="size-8 shrink-0" />
               <span className="font-heading text-base font-semibold">Flow</span>
             </Link>
-            <div className="ml-auto flex items-center gap-2">
-              <Link to="/search" className="rounded-full p-2 text-muted" aria-label="Cerca">
+            <div className="ml-auto flex shrink-0 items-center gap-0.5">
+              <Link to="/search" className="flex size-11 items-center justify-center rounded-full text-muted" aria-label="Cerca">
                 <Search className="size-5" />
               </Link>
               <ChatToggle />
               <AuthChip />
-              <Link to="/settings" className="rounded-full p-2 text-muted" aria-label="Impostazioni">
+              <Link to="/settings" className="flex size-11 items-center justify-center rounded-full text-muted" aria-label="Impostazioni">
                 <Settings className="size-5" />
               </Link>
-              <Link to="/charts" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
+              <Link to="/charts" className="hidden min-[400px]:flex h-11 items-center rounded-full px-2.5 text-xs font-medium text-muted">
                 Chart
               </Link>
-              <Link to="/explore" className="rounded-full px-3 py-2 text-xs font-medium text-muted">
+              <Link to="/explore" className="hidden min-[430px]:flex h-11 items-center rounded-full px-2.5 text-xs font-medium text-muted">
                 Esplora
               </Link>
             </div>
@@ -388,7 +388,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
           <main
             className={cn(
-              "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 sm:px-6 md:rounded-lg md:px-6 md:pt-4",
+              "spot-main scrollbar-none min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-4 pb-4 sm:px-6 md:rounded-lg md:px-6 md:pt-4 md:!pb-4",
             )}
           >
             {children}
@@ -404,7 +404,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="relative z-40 shrink-0">
         <MiniPlayer />
         <ChatFab />
-        <div className="px-3 pb-[max(0.4rem,env(safe-area-inset-bottom))] pt-1 md:hidden">
+        <div className="px-2.5 pb-[max(0.55rem,env(safe-area-inset-bottom))] pt-0.5 md:hidden">
           <nav className="floating-nav flex items-center justify-around rounded-2xl border border-white/10 px-1 py-1 shadow-2xl">
             {NAV.map((item) => {
               const active = item.to === "/" ? pathname === "/" : pathname.startsWith(item.to);
@@ -414,7 +414,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                   key={item.to}
                   to={item.to}
                   className={cn(
-                    "floating-nav-pill flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1 text-[11px] font-semibold transition-all",
+                    "floating-nav-pill flex min-h-12 flex-1 flex-col items-center justify-center gap-0.5 rounded-xl py-1.5 text-[11px] font-semibold transition-all active:scale-95",
                     active ? "is-active text-primary" : "text-muted hover:text-fg",
                   )}
                 >
