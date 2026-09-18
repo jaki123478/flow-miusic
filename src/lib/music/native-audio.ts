@@ -1,5 +1,6 @@
 import type { Track } from "./types";
-import { catalogStreamUrl } from "./stream-url";
+import { catalogStreamUrl, STREAM_PROXY_BANNER } from "./stream-url";
+void STREAM_PROXY_BANNER;
 
 let pageHiding = false;
 let lifecycle = false;
