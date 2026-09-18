@@ -80,7 +80,7 @@ function pickAudioFormat(info: any): any | null {
 }
 
 async function fetchFallbackAudioUrl(id: string): Promise<string | null> {
-  // Piped API mirrors + Invidious instances (JSON API)
+  // Race all mirrors in parallel — first JSON response with an audio URL wins
   const mirrors = [
     `https://pipedapi.kavin.rocks/streams/${id}`,
     `https://pipedapi.adminforge.de/streams/${id}`,
@@ -88,114 +88,110 @@ async function fetchFallbackAudioUrl(id: string): Promise<string | null> {
     `https://inv.nadeko.net/api/v1/videos/${id}`,
     `https://invidious.nerdvpn.de/api/v1/videos/${id}`,
   ];
-  for (const endpoint of mirrors) {
-    try {
-      const isInvidious = endpoint.includes("/api/v1/");
-      const res = await fetch(endpoint, {
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
-          Accept: "application/json",
-        },
-        signal: AbortSignal.timeout(4500),
-      });
-      if (!res.ok) continue;
-      const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("json")) continue; // skip HTML responses from dead mirrors
-      const data = (await res.json()) as any;
 
-      let bestUrl: string | null = null;
-      if (isInvidious) {
-        // Invidious returns { adaptiveFormats: [{ url, type, ... }] }
-        const formats = data.adaptiveFormats || [];
-        const audio = formats.find((f: any) => (f.type || "").startsWith("audio/"));
-        bestUrl = audio?.url || null;
-      } else {
-        // Piped returns { audioStreams: [{ url, mimeType, ... }] }
-        const streams = data.audioStreams || data.adaptiveFormats || [];
-        const best = streams.find((s: any) => (s.mimeType || s.type || "").startsWith("audio/"));
-        bestUrl = best?.url || null;
-      }
+  const attempts = mirrors.map(async (endpoint) => {
+    const isInvidious = endpoint.includes("/api/v1/");
+    const res = await fetch(endpoint, {
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36",
+        Accept: "application/json",
+      },
+      signal: AbortSignal.timeout(4000),
+    });
+    if (!res.ok) throw new Error(`${res.status}`);
+    const ct = res.headers.get("content-type") || "";
+    if (!ct.includes("json")) throw new Error("not json");
+    const data = (await res.json()) as any;
 
-      if (bestUrl) {
-        const valid = await validateStreamUrl(bestUrl, "WEB");
-        if (valid) return bestUrl;
-      }
-    } catch {
-      /* try next mirror */
+    let bestUrl: string | null = null;
+    if (isInvidious) {
+      const formats = data.adaptiveFormats || [];
+      const audio = formats.find((f: any) => (f.type || "").startsWith("audio/"));
+      bestUrl = audio?.url || null;
+    } else {
+      const streams = data.audioStreams || data.adaptiveFormats || [];
+      const best = streams.find((s: any) => (s.mimeType || s.type || "").startsWith("audio/"));
+      bestUrl = best?.url || null;
     }
+    if (!bestUrl) throw new Error("no audio");
+    return bestUrl;
+  });
+
+  try {
+    return await Promise.any(attempts);
+  } catch {
+    return null;
   }
-  return null;
+}
+
+// Try a single client and return the first URL found (no validation — the proxy retries on 403)
+async function tryClient(
+  yt: any,
+  id: string,
+  client: string,
+): Promise<string> {
+  const info = await yt.getInfo(id, { client });
+  const format = pickAudioFormat(info);
+
+  if (format?.url) return format.url;
+
+  if (format && typeof (format as any).decipher === "function") {
+    try {
+      const u = await (format as any).decipher(yt.session.player);
+      if (u) return u;
+    } catch { /* decipher failed */ }
+  }
+
+  // getBasicInfo as fallback for this client
+  const basic = await yt.getBasicInfo(id, { client });
+  const basicFormat = pickAudioFormat(basic);
+
+  if (basicFormat?.url) return basicFormat.url;
+
+  if (basicFormat && typeof (basicFormat as any).decipher === "function") {
+    try {
+      const u = await (basicFormat as any).decipher(yt.session.player);
+      if (u) return u;
+    } catch { /* decipher failed */ }
+  }
+
+  throw new Error(`${client}: no audio format`);
 }
 
 export async function getAudioUrl(videoId: string): Promise<string | null> {
   const id = videoId.trim();
   if (!/^[\w-]{11}$/.test(id)) return null;
 
-  const clientErrors: string[] = [];
+  // 1. Race all Innertube clients IN PARALLEL — first one to find a URL wins
   try {
     const yt = await getTube();
-    // WEB and YTMUSIC are the most stable; IOS is heavily blocked by YouTube now
     const clients = ["WEB", "YTMUSIC", "ANDROID_VR", "MWEB", "IOS"] as const;
 
-    for (const client of clients) {
-      try {
-        const info = await yt.getInfo(id, { client });
-        const format = pickAudioFormat(info);
+    const url = await Promise.any(
+      clients.map((client) =>
+        Promise.race([
+          tryClient(yt, id, client),
+          // Per-client timeout of 6s — don't let one slow client block others
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`${client}: timeout`)), 6000),
+          ),
+        ]),
+      ),
+    );
 
-        if (format?.url) {
-          const ok = await validateStreamUrl(format.url, client);
-          if (ok) return format.url;
-        }
-
-        if (format && typeof (format as any).decipher === "function") {
-          try {
-            const u = await (format as any).decipher(yt.session.player);
-            if (u) {
-              const ok = await validateStreamUrl(u, client);
-              if (ok) return u;
-            }
-          } catch {
-            /* decipher failed, continue */
-          }
-        }
-
-        // Try getBasicInfo as secondary
-        const basic = await yt.getBasicInfo(id, { client });
-        const basicFormat = pickAudioFormat(basic);
-
-        if (basicFormat?.url) {
-          const ok = await validateStreamUrl(basicFormat.url, client);
-          if (ok) return basicFormat.url;
-        }
-
-        if (basicFormat && typeof (basicFormat as any).decipher === "function") {
-          try {
-            const u = await (basicFormat as any).decipher(yt.session.player);
-            if (u) {
-              const ok = await validateStreamUrl(u, client);
-              if (ok) return u;
-            }
-          } catch {
-            /* decipher failed, continue */
-          }
-        }
-      } catch (e: any) {
-        clientErrors.push(`${client}: ${e?.message || e}`);
-      }
-    }
+    if (url) return url;
   } catch (err: any) {
-    clientErrors.push(`getTube: ${err?.message || err}`);
+    console.warn("[getAudioUrl] all clients failed:", err?.errors?.map?.((e: any) => e?.message) || err?.message || err);
+    // Reset Innertube instance for next call
     tubePromise = null;
   }
 
-  // Reset Innertube instance for next call if all clients failed
-  tubePromise = null;
-
+  // 2. Fallback: race Piped/Invidious mirrors
   const fallback = await fetchFallbackAudioUrl(id);
   if (fallback) return fallback;
 
-  throw new Error(`Audio resolution failed: ${clientErrors.join(" ; ")}`);
+  throw new Error("Audio resolution failed for all clients and fallback mirrors");
 }
 
 function txt(value: unknown): string {
