@@ -73,6 +73,21 @@ function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: str
   return nonce ? base + (base.includes("?") ? "&" : "?") + "r=" + nonce : base;
 }
 
+
+function sameCatalogStream(a: string, b: string) {
+  if (!a || !b) return false;
+  try {
+    const ua = new URL(a, typeof location !== "undefined" ? location.origin : "https://local");
+    const ub = new URL(b, typeof location !== "undefined" ? location.origin : "https://local");
+    const ida = ua.searchParams.get("id") || ua.searchParams.get("v");
+    const idb = ub.searchParams.get("id") || ub.searchParams.get("v");
+    if (ida && idb) return ida === idb && ua.origin === ub.origin && ua.pathname === ub.pathname;
+    return ua.origin === ub.origin && ua.pathname === ub.pathname && ua.searchParams.toString() === ub.searchParams.toString();
+  } catch {
+    return a === b;
+  }
+}
+
 function applyOutput(audio: HTMLAudioElement) {
   const s = useFlowStore.getState();
   const raw = s.isMuted ? 0 : s.volume;
@@ -185,6 +200,17 @@ export function AudioEngine() {
     if (!src) return;
     applyOutput(audio);
     if (isPlaybackFrozen() && !allowHidden) {
+      if (play) playWhenReady(audio);
+      return;
+    }
+    const live = audio.currentSrc || audio.src || "";
+    // Avoid pause+reload when directPlay already set the same catalog stream (search tap feel).
+    if (
+      !audio.error &&
+      (sameCatalogStream(lastSrc.current, src) || sameCatalogStream(live, src)) &&
+      audio.src
+    ) {
+      lastSrc.current = src;
       if (play) playWhenReady(audio);
       return;
     }
