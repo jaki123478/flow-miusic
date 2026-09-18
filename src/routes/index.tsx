@@ -8,20 +8,51 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useFlowStore } from "@/stores/flow-store";
 import { CollectionCard, HScroll, QuickTile, SectionHeader, TrackArt, TrackCard, TrackRow } from "@/components/flow/tracks";
 
+function HomePending() {
+  return (
+    <div className="space-y-6 pb-4 pt-2" aria-busy="true" aria-label="Caricamento home">
+      <div className="h-10 w-48 animate-pulse rounded-lg bg-elevated" />
+      <div className="flex gap-2">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-8 w-20 animate-pulse rounded-full bg-elevated" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-3">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <div key={i} className="h-16 animate-pulse rounded-md bg-elevated" />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {Array.from({ length: 10 }).map((_, i) => (
+          <div key={i} className="aspect-square animate-pulse rounded-lg bg-elevated" />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const Route = createFileRoute("/")({
+  pendingComponent: HomePending,
+  pendingMs: 120,
   loader: async () => {
+    const empty = {
+      trending: [],
+      hitsMix: [],
+      independent: [],
+      radios: [],
+      discoverWeekly: [],
+      curated: [] as CatalogCollection[],
+      dailyPlaylists: [] as CatalogCollection[],
+    };
     try {
-      return await getHomeFeed();
+      return await Promise.race([
+        getHomeFeed(),
+        new Promise<typeof empty>((resolve) => {
+          setTimeout(() => resolve(empty), 9000);
+        }),
+      ]);
     } catch {
-      return {
-        trending: [],
-        hitsMix: [],
-        independent: [],
-        radios: [],
-        discoverWeekly: [],
-        curated: [] as CatalogCollection[],
-        dailyPlaylists: [] as CatalogCollection[],
-      };
+      return empty;
     }
   },
   component: Home,
@@ -145,6 +176,21 @@ function Home() {
           ))}
         </div>
       </header>
+
+      {filter === "all" && !trending.length && !hitsMix.length && !recents.length ? (
+        <section className="rounded-2xl bg-elevated/60 p-6 text-center ring-1 ring-white/10">
+          <p className="text-lg font-bold">Niente da mostrare al momento</p>
+          <p className="mt-2 text-sm text-muted">La home non ha caricato i brani. Prova Cerca o Esplora.</p>
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Link to="/search" className="rounded-full bg-primary px-4 py-2 text-sm font-bold text-primary-fg">
+              Cerca
+            </Link>
+            <Link to="/explore" className="rounded-full bg-surface px-4 py-2 text-sm font-bold ring-1 ring-white/15">
+              Esplora
+            </Link>
+          </div>
+        </section>
+      ) : null}
 
       {filter !== "radio" && quick.length > 0 ? (
         <section>
