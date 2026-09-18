@@ -91,7 +91,7 @@ function sameCatalogStream(a: string, b: string) {
 function applyOutput(audio: HTMLAudioElement) {
   const s = useFlowStore.getState();
   const raw = s.isMuted ? 0 : s.volume;
-  const norm = s.settings.normalize ? 0.92 : 1;
+  const norm = 1; // loudness handled by stream proxy
   const duck = s.voiceDuck ? 0.28 : 1;
   audio.volume = Math.max(0, Math.min(1, raw * norm * duck));
   try {
