@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { Copy, Heart, Play, Plus, Trash2, Upload } from "lucide-react";
+import { Copy, Heart, Music2, Play, Plus, Trash2, Upload } from "lucide-react";
 import { SignedOut } from "@/lib/auth/gates";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { importSpotify } from "@/lib/music/import-playlists";
@@ -241,29 +241,7 @@ function LibraryPage() {
       {tab === "playlists" && !openId ? (
         <div className="space-y-4">
           <form
-            className="flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              createPlaylist(title);
-              setTitle("");
-            }}
-          >
-            <input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Nuova playlist"
-              className="h-12 min-w-0 flex-1 rounded-lg bg-surface px-4 text-base ring-1 ring-border outline-none placeholder:text-subtle"
-            />
-            <button
-              type="submit"
-              className="flex size-12 items-center justify-center rounded-lg bg-primary text-primary-fg"
-              aria-label="Crea playlist"
-            >
-              <Plus className="size-5" />
-            </button>
-          </form>
-          <form
-            className="space-y-2 rounded-lg bg-surface p-3 ring-1 ring-border"
+            className="space-y-3 rounded-2xl bg-surface p-4 ring-2 ring-primary/40"
             onSubmit={(e) => {
               e.preventDefault();
               if (!spotUrl.trim() || importing) return;
@@ -288,23 +266,32 @@ function LibraryPage() {
                 .finally(() => setImporting(false));
             }}
           >
-            <p className="text-sm font-medium">Importa playlist</p>
-            <p className="text-xs text-muted">
-              Link Spotify, YouTube, Apple Music, oppure una lista «Artista – Titolo» (anche CSV).
-            </p>
-            <div className="flex gap-2">
+            <div className="flex items-start gap-3">
+              <div className="flex size-11 shrink-0 items-center justify-center rounded-full bg-primary/15 text-primary">
+                <Music2 className="size-5" aria-hidden />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-bold tracking-tight">Da Spotify</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Incolla un link playlist pubblica di Spotify (funziona anche YouTube e Apple Music).
+                  Le playlist private non si importano.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row">
               <input
                 value={spotUrl}
                 onChange={(e) => setSpotUrl(e.target.value)}
-                placeholder="https://open.spotify.com/playlist/…  o  https://youtube.com/playlist?list="
-                className="h-11 min-w-0 flex-1 rounded-lg bg-elevated px-3 text-sm outline-none ring-1 ring-border"
+                placeholder="https://open.spotify.com/playlist/…"
+                className="h-12 min-w-0 flex-1 rounded-xl bg-elevated px-4 text-sm outline-none ring-1 ring-border"
+                aria-label="Link playlist Spotify"
               />
               <button
                 type="submit"
                 disabled={importing}
-                className="h-11 rounded-full bg-fg px-4 text-sm font-bold text-bg disabled:opacity-60"
+                className="h-12 shrink-0 rounded-full bg-primary px-5 text-sm font-bold text-primary-fg disabled:opacity-60"
               >
-                {importing ? "Importo…" : "Importa"}
+                {importing ? "Importo…" : "Importa da Spotify"}
               </button>
             </div>
             {importMsg ? <p className="text-xs text-muted">{importMsg}</p> : null}
@@ -356,6 +343,28 @@ function LibraryPage() {
               />
             </label>
           </form>
+          <form
+            className="flex gap-2"
+            onSubmit={(e) => {
+              e.preventDefault();
+              createPlaylist(title);
+              setTitle("");
+            }}
+          >
+            <input
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="Oppure crea una playlist vuota"
+              className="h-12 min-w-0 flex-1 rounded-lg bg-surface px-4 text-base ring-1 ring-border outline-none placeholder:text-subtle"
+            />
+            <button
+              type="submit"
+              className="flex size-12 items-center justify-center rounded-lg bg-elevated text-fg ring-1 ring-border"
+              aria-label="Crea playlist"
+            >
+              <Plus className="size-5" />
+            </button>
+          </form>
           {playlists.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               <button
@@ -384,7 +393,7 @@ function LibraryPage() {
             </div>
           ) : null}
           {playlists.length === 0 ? (
-            <Empty text="Crea una playlist e aggiungi brani dal menu di ogni traccia." />
+            <Empty text="Inizia da Spotify qui sopra, oppure crea una playlist vuota e aggiungi brani dal menu di ogni traccia." />
           ) : (
             playlists.map((p) => (
               <div key={p.id} className="flex items-center gap-2 rounded-lg bg-surface px-3 py-2 ring-1 ring-border">
