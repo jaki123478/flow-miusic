@@ -1,0 +1,5 @@
+---
+description: Flow Music player/stream lock — all AI agents including ChatGPT and Gemini
+alwaysApply: true
+---
+Do not edit Flow player or streaming files (`player.tsx`, `stream-url.ts`, `native-audio.ts`, `offline-audio.ts`, `background-audio.ts`, `play-src.ts`, `lock-screen.ts`) or the PC proxy under `C:\Users\Jaki1\flow-yt-proxy` unless Jacopo explicitly asked for an audio fix in this chat. Catalog audio stays on `STREAM_PROXY_ORIGIN` (not Vercel `/api/stream`, not YouTube iframe). If audio is broken, stop and tell Jacopo to ask jaki.
