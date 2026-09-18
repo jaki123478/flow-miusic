@@ -1,11 +1,11 @@
-﻿{
+{
   "name": "Flow Music",
   "short_name": "Flow",
   "description": "Musica, radio live, playlist e testi sincronizzati. Ascolta ovunque.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0a0c10",
-  "theme_color": "#1db954",
+  "background_color": "#000000",
+  "theme_color": "#000000",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -20,5 +20,11 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
-  ]
+  ],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
+  "lang": "it",
+  "dir": "ltr"
 }
