@@ -45,7 +45,7 @@ import androidx.core.view.WindowInsetsCompat;
 
 public class MainActivity extends AppCompatActivity implements FlowGestureManager.GestureListener {
     private static final String TAG = "FlowMainActivity";
-    private static final String APP_URL = "https://flow-music-app-two.vercel.app/";
+    private static final String APP_URL = "https://flow-music-web.onrender.com/";
     private static final int NOTIFICATION_PERMISSION_CODE = 101;
     private static final int RECORD_AUDIO_PERMISSION_CODE = 102;
     private static final int OVERLAY_PERMISSION_CODE = 103;

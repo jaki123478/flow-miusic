@@ -51,9 +51,14 @@ export const publishPlaylist = createServerFn({ method: "POST" })
          where shared_playlists.user_id = $2`,
         [id, context.userId, owner, title, tracks, collab],
       );
-      return { id };
-    } catch {
-      return { id: data.id || slug() };
+      const saved = await sql<{ id: string }>`
+        select id from shared_playlists where id = ${id} and user_id = ${context.userId}
+      `;
+      if (!saved[0]) return { ok: false as const };
+      return { ok: true as const, id };
+    } catch (err) {
+      console.error("publishPlaylist failed", err instanceof Error ? err.message : "error");
+      return { ok: false as const };
     }
   });
 

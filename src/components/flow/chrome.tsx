@@ -145,6 +145,27 @@ export function CloudSync() {
     if (isPending || !user) return;
     let cancelled = false;
     let timer = 0;
+    let warned = false;
+    const pushCloud = (data: ReturnType<typeof useFlowStore.getState>["dumpCloud"]) => {
+      void saveLibrary({ data })
+        .then((res) => {
+          if (res?.ok) {
+            warned = false;
+            return;
+          }
+          if (!warned) {
+            warned = true;
+            useFlowStore.getState().notify("Salvataggio sull'account non riuscito");
+          }
+        })
+        .catch(() => {
+          if (!warned) {
+            warned = true;
+            useFlowStore.getState().notify("Salvataggio sull'account non riuscito");
+          }
+        });
+    };
+
     loadLibrary()
       .then((data) => {
         if (cancelled) return;
@@ -152,7 +173,7 @@ export function CloudSync() {
         const remoteHas = data && (data.liked.length > 0 || data.playlists.length > 0 || data.recents.length > 0);
         if (remoteHas && data) local.importCloud(data);
         else {
-          void saveLibrary({ data: local.dumpCloud() }).catch(() => {});
+          pushCloud(local.dumpCloud());
           useFlowStore.setState({ cloudReady: true });
         }
       })
@@ -165,7 +186,7 @@ export function CloudSync() {
       if (s.liked === prev.liked && s.recents === prev.recents && s.playlists === prev.playlists && s.settings === prev.settings && s.volume === prev.volume) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        void saveLibrary({ data: useFlowStore.getState().dumpCloud() }).catch(() => {});
+        pushCloud(useFlowStore.getState().dumpCloud());
       }, 900);
     });
 

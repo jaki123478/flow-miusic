@@ -26,7 +26,15 @@ import {
 } from "@/lib/music/library-io";
 import { useFlowStore } from "@/stores/flow-store";
 import { SectionHeader, TrackRow } from "@/components/flow/tracks";
-import type { Track } from "@/lib/music/types";
+import type { Playlist, Track } from "@/lib/music/types";
+
+const GUEST_PLAYLIST_SAVED =
+  "Playlist salvata su questo dispositivo. Accedi per tenerla sull'account.";
+
+function tracksInPlaylist(pl: Playlist, trackMap: Record<string, Track>): Track[] {
+  const embedded = new Map((pl.tracks ?? []).filter((t) => t?.id).map((t) => [t.id, t]));
+  return pl.trackIds.map((id) => trackMap[id] || embedded.get(id)).filter((t): t is Track => Boolean(t));
+}
 
 export const Route = createFileRoute("/library")({ component: LibraryPage });
 
@@ -62,8 +70,43 @@ function LibraryPage() {
     if (!openId) return [];
     const pl = playlists.find((p) => p.id === openId);
     if (!pl) return [];
-    return pl.trackIds.map((id) => trackMap[id]).filter(Boolean);
+    return tracksInPlaylist(pl, trackMap);
   }, [openId, playlists, trackMap]);
+
+  const sharePlaylist = (pl: Playlist) => {
+    if (!user) {
+      notify("Accedi per condividere la playlist.");
+      return;
+    }
+    const collab = window.confirm(
+      "Vuoi renderla anche collaborativa? Chi ha il link può aggiungere brani sulla playlist pubblica. Quei brani non rientrano da soli nella tua libreria su questo dispositivo.",
+    );
+    const tracks = tracksInPlaylist(pl, trackMap);
+    void publishPlaylist({
+      data: {
+        title: pl.title,
+        tracks,
+        collab,
+        ownerName: user.displayName ?? user.primaryEmail ?? "Utente",
+        id: pl.publicId,
+      },
+    })
+      .then(async (res) => {
+        if (!res.ok) {
+          notify("Pubblicazione non riuscita. Il link non è stato copiato.");
+          return;
+        }
+        setPlaylistPublic(pl.id, res.id, collab);
+        const url = `${window.location.origin}/p/${res.id}`;
+        try {
+          await navigator.clipboard.writeText(url);
+          notify("Playlist pubblica — link copiato");
+        } catch {
+          notify(`Playlist pubblica: ${url}`);
+        }
+      })
+      .catch(() => notify("Pubblicazione non riuscita. Il link non è stato copiato."));
+  };
 
   const tabs: { id: Tab; label: string; count: number }[] = [
     { id: "liked", label: "Preferiti", count: liked.length },
@@ -347,8 +390,9 @@ function LibraryPage() {
             className="flex gap-2"
             onSubmit={(e) => {
               e.preventDefault();
-              createPlaylist(title);
+              const id = createPlaylist(title);
               setTitle("");
+              if (id && !user) notify(GUEST_PLAYLIST_SAVED);
             }}
           >
             <input
@@ -370,7 +414,7 @@ function LibraryPage() {
               <button
                 type="button"
                 onClick={() => {
-                  const all = playlists.flatMap((pl) => pl.trackIds.map((id) => trackMap[id]).filter(Boolean));
+                  const all = playlists.flatMap((pl) => tracksInPlaylist(pl, trackMap));
                   downloadText("libreria-flow.csv", tracksToCsv(all), "text/csv;charset=utf-8");
                 }}
                 className="h-9 rounded-full bg-elevated px-3 text-xs font-medium"
@@ -381,7 +425,7 @@ function LibraryPage() {
                 type="button"
                 onClick={() => {
                   const chunks = playlists.map((pl) => {
-                    const tracks = pl.trackIds.map((id) => trackMap[id]).filter(Boolean);
+                    const tracks = tracksInPlaylist(pl, trackMap);
                     return tracksToM3u(tracks, pl.title);
                   });
                   downloadText("libreria-flow.m3u", chunks.join("\n\n"));
@@ -407,8 +451,15 @@ function LibraryPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => sharePlaylist(p)}
+                  className="rounded-full px-2 py-2 text-xs font-semibold text-primary"
+                >
+                  Condividi
+                </button>
+                <button
+                  type="button"
                   onClick={() => {
-                    const tracks = p.trackIds.map((id) => trackMap[id]).filter(Boolean);
+                    const tracks = tracksInPlaylist(p, trackMap);
                     if (tracks.length) playQueue(tracks, 0);
                   }}
                   className="rounded-full px-3 py-2 text-xs font-medium text-muted"
@@ -456,10 +507,12 @@ function LibraryPage() {
             <PlaylistTools
               id={openId}
               tracks={openTracks}
-              userName={user?.displayName ?? user?.primaryEmail ?? "Utente"}
               signedIn={Boolean(user)}
               setPlaylistFolder={setPlaylistFolder}
-              setPlaylistPublic={setPlaylistPublic}
+              onShare={() => {
+                const pl = playlists.find((p) => p.id === openId);
+                if (pl) sharePlaylist(pl);
+              }}
             />
           ) : null}
           {openTracks.length === 0 ? (
@@ -554,20 +607,17 @@ function DownloadPlaylistBtn({ tracks }: { tracks: Track[] }) {
 function PlaylistTools({
   id,
   tracks,
-  userName,
   signedIn,
   setPlaylistFolder,
-  setPlaylistPublic,
+  onShare,
 }: {
   id: string;
   tracks: Track[];
-  userName: string;
   signedIn: boolean;
   setPlaylistFolder: (id: string, folder: string) => void;
-  setPlaylistPublic: (id: string, publicId: string, collab: boolean) => void;
+  onShare: () => void;
 }) {
   const pl = useFlowStore((s) => s.playlists.find((p) => p.id === id));
-  const notify = useFlowStore((s) => s.notify);
   if (!pl) return null;
   return (
     <div className="mb-4 flex flex-wrap gap-2">
@@ -603,35 +653,13 @@ function PlaylistTools({
       >
         Esporta JSON
       </button>
-      {signedIn ? (
-        <button
-          type="button"
-          onClick={() => {
-            const collab = window.confirm("Vuoi renderla anche collaborativa (chi ha il link può aggiungere brani)?");
-            void publishPlaylist({
-              data: {
-                title: pl.title,
-                tracks,
-                collab,
-                ownerName: userName,
-                id: pl.publicId,
-              },
-            }).then((res) => {
-              setPlaylistPublic(id, res.id, collab);
-              const url = `${window.location.origin}/p/${res.id}`;
-              void navigator.clipboard?.writeText(url);
-              notify("Playlist pubblica — link copiato");
-            });
-          }}
-          className="h-9 rounded-full bg-primary px-3 text-xs font-bold text-primary-fg"
-        >
-          {pl.publicId ? "Aggiorna pubblica" : "Rendi pubblica"}
-        </button>
-      ) : (
-        <Link to="/login" search={{ mode: "up" }} className="h-9 rounded-full bg-elevated px-3 text-xs font-medium leading-9">
-          Accedi per pubblicare
-        </Link>
-      )}
+      <button
+        type="button"
+        onClick={onShare}
+        className={`h-9 rounded-full px-3 text-xs font-bold ${signedIn ? "bg-primary text-primary-fg" : "bg-elevated font-medium"}`}
+      >
+        {signedIn ? (pl.publicId ? "Aggiorna pubblica" : "Rendi pubblica") : "Condividi"}
+      </button>
       {pl.publicId ? (
         <Link to="/p/$id" params={{ id: pl.publicId }} className="h-9 rounded-full px-3 text-xs font-medium leading-9 text-primary">
           Apri link
