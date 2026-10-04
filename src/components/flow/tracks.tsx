@@ -23,6 +23,7 @@ import { getRelatedTracks } from "@/lib/music/catalog";
 import { downloadTrack, prefetchAudio, removeDownload, useIsDownloaded } from "@/lib/music/offline-audio";
 import { directPlayTrack } from "@/lib/music/native-audio";
 import { cn, formatTime, useOpenTransition } from "@/lib/utils";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useFlowStore } from "@/stores/flow-store";
 
 
@@ -395,6 +396,8 @@ export function ActionSheet() {
     s.actionTrack ? s.followedArtists.includes(s.actionTrack.artist) : false,
   );
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
+  const notify = useFlowStore((s) => s.notify);
+  const user = useCurrentUser();
   const setQrTarget = useFlowStore((s) => s.setQrTarget);
   const [picking, setPicking] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -444,8 +447,9 @@ export function ActionSheet() {
               onSubmit={(e) => {
                 e.preventDefault();
                 if (!newTitle.trim()) return;
-                createPlaylist(newTitle);
+                const id = createPlaylist(newTitle);
                 setNewTitle("");
+                if (id && !user) notify("Playlist salvata su questo dispositivo. Accedi per tenerla sull'account.");
               }}
             >
               <input
