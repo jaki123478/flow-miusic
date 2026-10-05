@@ -18,7 +18,14 @@ async function resolveAudioUrl(id) {
   const hit = urlCache.get(id);
   if (hit && hit.exp > Date.now()) return hit.url;
 
-  const yt = await getTube();
+  let yt = null;
+  try {
+    yt = await getTube();
+  } catch (err) {
+    console.error('[resolveAudioUrl init error]', id, err?.message || err);
+    ytInstance = null;
+    return null;
+  }
   const clients = ['IOS', 'ANDROID', 'YTMUSIC', 'WEB'];
 
   for (const client of clients) {

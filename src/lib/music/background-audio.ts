@@ -1,4 +1,5 @@
 import type { Track } from './types';
+import { getStreamApiUrl } from './native-audio';
 
 const SILENT_WAV =
   'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
@@ -91,16 +92,10 @@ export class BackgroundAudioPlayer {
   }
 
   private _getTrackSrc(track: Track): string {
-    if (track.streamUrl) return track.streamUrl;
     if (track.videoId) {
-      const base =
-        typeof window !== 'undefined' &&
-        (window.location.hostname.includes('web.app') ||
-          window.location.hostname.includes('firebaseapp.com'))
-          ? 'https://flow-music-web.vercel.app'
-          : '';
-      return `${base}/api/stream?v=${track.videoId}`;
+      return getStreamApiUrl(track.videoId);
     }
+    if (track.streamUrl) return track.streamUrl;
     return "";
   }
 

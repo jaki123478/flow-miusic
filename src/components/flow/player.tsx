@@ -49,13 +49,11 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
+import { getGlobalAudio, getStreamApiUrl, getStreamUrlForTrack, syncAudioOutput } from "@/lib/music/native-audio";
 import {
-  cachedAudioUrl,
   canDownloadTrack,
   downloadTrack,
   downloadTracks,
-  loadLocalAudio,
-  prefetchAudio,
   removeDownload,
   useIsDownloaded,
 } from "@/lib/music/offline-audio";
@@ -63,39 +61,13 @@ import { getTrackLyrics, getTranslatedLyrics, type LyricsPayload } from "@/lib/m
 import { getRelatedTracks } from "@/lib/music/catalog";
 import { averageArtworkColor, shareLyricsCard } from "@/lib/music/lyrics-share";
 
-function getStreamApiBase(): string {
-  if (typeof window === "undefined") return "";
-  const host = window.location.hostname;
-  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
-    return "https://flow-music-app-two.vercel.app";
-  }
-  return "";
-}
-
-function fallbackSrc(track: { source?: string; videoId?: string; streamUrl?: string }) {
-  if (track.source === "radio" && track.streamUrl) return track.streamUrl;
-  if (track.videoId) {
-    const base = getStreamApiBase();
-    return cachedAudioUrl(track.videoId) || `${base}/api/stream?v=${track.videoId}`;
-  }
-  return track.streamUrl || "";
-}
-
 function applyOutput(audio: HTMLAudioElement) {
-  const s = useFlowStore.getState();
-  const raw = s.isMuted ? 0 : s.volume;
-  const norm = s.settings.normalize ? 0.92 : 1;
-  const duck = s.voiceDuck ? 0.28 : 1;
-  audio.volume = Math.max(0, Math.min(1, raw * norm * duck));
-  try {
-    audio.playbackRate = s.playbackRate || 1;
-  } catch {
-    /* ignore */
-  }
+  syncAudioOutput(audio);
 }
 
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [officialFallbackId, setOfficialFallbackId] = useState<string | null>(null);
   const current = useFlowStore((s) => s.current);
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const volume = useFlowStore((s) => s.volume);
@@ -113,6 +85,8 @@ export function AudioEngine() {
   const lastMove = useRef(0);
   const lastPos = useRef(0);
   const recovering = useRef("");
+  const recoveringAt = useRef(0);
+  const fallbackTimer = useRef<number | null>(null);
 
   const resumeElement = (audio: HTMLAudioElement | null) => {
     if (!audio) return;
@@ -121,91 +95,74 @@ export function AudioEngine() {
 
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
-    if (lastSrc.current === src) {
-      applyOutput(audio);
+    const fullUrl = typeof window !== "undefined" ? new URL(src, window.location.href).href : src;
+    if (lastSrc.current === src || audio.src === fullUrl || audio.src === src) {
+      lastSrc.current = src;
+      syncAudioOutput(audio);
       if (play && audio.paused) void audio.play().catch(() => {});
       return;
     }
     const playing = !audio.paused && !audio.error;
     const blobUpgrade = src.startsWith("blob:") && lastSrc.current.includes("/api/stream");
     // Mid-play blob swap while playing interrupts playback and drops Chrome Android audio focus
-    if (playing && blobUpgrade) return;
+    if (blobUpgrade) return;
     if (document.hidden && playing && !force) return;
 
     lastSrc.current = src;
     audio.src = src;
-    applyOutput(audio);
+    syncAudioOutput(audio);
     if (play) {
       void audio.play().catch(() => {});
     }
   };
 
   const recover = (id: string, time: number) => {
-    const audio = audioRef.current;
-    if (!audio || recovering.current === id) return;
-    if (document.hidden) {
-      resumeElement(audio);
-      return;
-    }
+    const audio = getGlobalAudio();
+    // Allow later retries after a temporary mobile-network/background failure,
+    // but prevent a tight reload loop while the same request is failing.
+    if (!audio || (recovering.current === id && Date.now() - recoveringAt.current < 12000)) return;
     recovering.current = id;
-    const ready = cachedAudioUrl(id);
-    if (ready) {
-      applySrc(audio, ready, true, true);
-      audio.addEventListener(
-        "loadedmetadata",
-        () => {
-          try {
-            if (time > 0) audio.currentTime = time;
-          } catch {
-            /* ignore */
-          }
-          void audio.play().catch(() => {});
-        },
-        { once: true },
-      );
-      return;
-    }
-    void loadLocalAudio(id)
-      .then((url) => {
-        if (document.hidden) return;
-        if (useFlowStore.getState().current?.videoId !== id) return;
-        applySrc(audio, url, true, true);
-        audio.addEventListener(
-          "loadedmetadata",
-          () => {
-            try {
-              if (time > 0) audio.currentTime = time;
-            } catch {
-              /* ignore */
-            }
-            if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
-          },
-          { once: true },
-        );
-      })
-      .catch(() => {
-        if (recovering.current === id) recovering.current = "";
-      });
+    recoveringAt.current = Date.now();
+    // Do not recover through loadLocalAudio here: that endpoint intentionally
+    // reads one range chunk and is not a complete file. Using that blob as a
+    // replacement makes the track end early and jump back to 0. Ask the
+    // streaming route for a fresh URL instead and restore the position.
+    const fresh = getStreamApiUrl(id, { r: Date.now() });
+    applySrc(audio, fresh, true, true);
+    audio.addEventListener(
+      "loadedmetadata",
+      () => {
+        try {
+          if (time > 0) audio.currentTime = Math.min(time, Math.max(0, audio.duration - 0.25));
+        } catch {
+          /* ignore */
+        }
+        if (useFlowStore.getState().isPlaying) void audio.play().catch(() => {});
+        else if (recovering.current === id) recovering.current = "";
+      },
+      { once: true },
+    );
   };
 
   useEffect(() => {
     if ("serviceWorker" in navigator) {
       void navigator.serviceWorker.register("/sw-audio.js").catch(() => {});
     }
-    const el = audioRef.current;
-    if (el) {
-      el.setAttribute("playsinline", "true");
-      el.setAttribute("webkit-playsinline", "true");
+    const audio = getGlobalAudio();
+    if (audio) {
+      audioRef.current = audio;
+      audio.setAttribute("playsinline", "true");
+      audio.setAttribute("webkit-playsinline", "true");
     }
     claimAudioFocus();
     bindLockScreenActions({
       play: () => {
         useFlowStore.getState().resume();
-        void audioRef.current?.play().catch(() => {});
+        void getGlobalAudio()?.play().catch(() => {});
       },
       pause: () => {
         useFlowStore.getState().pause();
-        audioRef.current?.pause();
+        getGlobalAudio()?.pause();
       },
       prev: () => useFlowStore.getState().prev(),
       next: () => useFlowStore.getState().next(),
@@ -213,7 +170,7 @@ export function AudioEngine() {
       skip: (d) => useFlowStore.getState().skipBy(d),
       stop: () => {
         useFlowStore.getState().pause();
-        audioRef.current?.pause();
+        getGlobalAudio()?.pause();
       },
     });
     return bindAudioFocus({
@@ -225,21 +182,181 @@ export function AudioEngine() {
         if (!shouldResumeAfterFocus()) return;
         const s = useFlowStore.getState();
         if (s.current) s.resume();
-        void audioRef.current?.play().catch(() => {});
+        void getGlobalAudio()?.play().catch(() => {});
       },
     });
   }, []);
 
+  // Sync event listeners with the unified global audio element
   useEffect(() => {
-    const audio = audioRef.current;
+    const audio = getGlobalAudio();
+    if (!audio) return;
+    audioRef.current = audio;
+
+    if (Number.isFinite(audio.duration) && audio.duration > 0) {
+      setDuration(audio.duration);
+    }
+    if (Number.isFinite(audio.currentTime) && audio.currentTime > 0) {
+      setCurrentTime(audio.currentTime);
+    }
+
+    const handleTimeUpdate = () => {
+      const t = audio.currentTime;
+      if (!Number.isFinite(t)) return;
+      setCurrentTime(t);
+      if (t > lastPos.current) {
+        lastPos.current = t;
+        lastMove.current = Date.now();
+      }
+      const track = useFlowStore.getState().current;
+      if (track) pushLockScreen(track, !audio.paused, t, audio.duration || 0, 1);
+    };
+
+    const handleDurationChange = () => {
+      const d = audio.duration;
+      if (Number.isFinite(d) && d > 0) setDuration(d);
+    };
+
+    const handlePlaying = () => {
+      if (fallbackTimer.current !== null) {
+        window.clearTimeout(fallbackTimer.current);
+        fallbackTimer.current = null;
+      }
+      lastMove.current = Date.now();
+      const track = useFlowStore.getState().current;
+      if (track) {
+        markPlayingForFocus(true);
+        pushLockScreen(track, true, audio.currentTime || 0, audio.duration || 0, 1);
+      }
+    };
+
+    const handlePause = () => {
+      if (!audio.getAttribute("src")) return;
+      // A locked phone can pause the element momentarily while keeping the
+      // document hidden. Retry from the native media pipeline after the
+      // browser has finished changing its audio session. Do not resume a
+      // deliberate user pause: resumeElement checks the store state.
+      if (document.hidden) {
+        window.setTimeout(() => resumeElement(audio), 120);
+        window.setTimeout(() => resumeElement(audio), 900);
+      } else {
+        resumeElement(audio);
+      }
+    };
+
+    const handleWaiting = () => {
+      if (document.hidden) resumeElement(audio);
+      if (fallbackTimer.current !== null) window.clearTimeout(fallbackTimer.current);
+      fallbackTimer.current = window.setTimeout(() => {
+        // A stream can legitimately buffer for a few seconds (especially
+        // through the public tunnel). Do not pause and replace the current
+        // track here: doing so restarts the same song from 0.
+        fallbackTimer.current = null;
+      }, 8000);
+    };
+
+    const handleError = () => {
+      const s = useFlowStore.getState();
+      const id = s.current?.videoId;
+      if (!id) return;
+      // One recovery attempt per track at a time. Re-assigning the source on
+      // every error creates the exact loop where the same song keeps jumping
+      // back to 0 when the upstream provider is unavailable.
+      if (recovering.current === id && Date.now() - recoveringAt.current < 12000) return;
+      recovering.current = id;
+      recoveringAt.current = Date.now();
+      const resumeAt = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+      const fresh = getStreamApiUrl(id, { r: Date.now() });
+      applySrc(audio, fresh, s.isPlaying, true);
+      audio.addEventListener(
+        "loadedmetadata",
+        () => {
+          try {
+            if (resumeAt > 0) audio.currentTime = Math.min(resumeAt, Math.max(0, audio.duration - 0.25));
+          } catch {
+            /* ignore */
+          }
+          if (s.isPlaying) void audio.play().catch(() => {});
+          else if (recovering.current === id) recovering.current = "";
+        },
+        { once: true },
+      );
+    };
+
+    const handleStalled = () => {
+      if (document.hidden) {
+        resumeElement(audio);
+        const s = useFlowStore.getState();
+        const id = s.current?.videoId;
+        if (id && s.isPlaying) {
+          const position = Number.isFinite(audio.currentTime) ? audio.currentTime : s.currentTime;
+          window.setTimeout(() => {
+            if (document.hidden && useFlowStore.getState().isPlaying && audio.readyState < 3) {
+              recover(id, position);
+            }
+          }, 3500);
+        }
+      }
+    };
+
+    const handleEnded = () => {
+      const d = audio.duration;
+      const t = audio.currentTime;
+      // A range response can end early while the media metadata still reports
+      // the full song duration. Do not interpret that premature EOF as a real
+      // track completion, otherwise Butterfly (and any affected track) skips
+      // to the next song. Reconnect from the current position instead.
+      if (Number.isFinite(d) && d > 0 && Number.isFinite(t) && t > 0 && t < d - 1.5) {
+        const id = useFlowStore.getState().current?.videoId;
+        if (id && useFlowStore.getState().isPlaying) recover(id, t);
+        return;
+      }
+      // If the browser reports ended without reliable duration metadata,
+      // still advance the queue. Waiting for duration here could leave the
+      // player stuck on the finished song.
+      onEnded();
+    };
+
+    audio.addEventListener("timeupdate", handleTimeUpdate);
+    audio.addEventListener("durationchange", handleDurationChange);
+    audio.addEventListener("loadedmetadata", handleDurationChange);
+    audio.addEventListener("playing", handlePlaying);
+    audio.addEventListener("pause", handlePause);
+    audio.addEventListener("waiting", handleWaiting);
+    audio.addEventListener("error", handleError);
+    audio.addEventListener("stalled", handleStalled);
+    audio.addEventListener("ended", handleEnded);
+
+    return () => {
+      audio.removeEventListener("timeupdate", handleTimeUpdate);
+      audio.removeEventListener("durationchange", handleDurationChange);
+      audio.removeEventListener("loadedmetadata", handleDurationChange);
+      audio.removeEventListener("playing", handlePlaying);
+      audio.removeEventListener("pause", handlePause);
+      audio.removeEventListener("waiting", handleWaiting);
+      audio.removeEventListener("error", handleError);
+      audio.removeEventListener("stalled", handleStalled);
+      audio.removeEventListener("ended", handleEnded);
+      if (fallbackTimer.current !== null) window.clearTimeout(fallbackTimer.current);
+    };
+  }, [setCurrentTime, setDuration, onEnded]);
+
+  useEffect(() => {
+    const audio = getGlobalAudio();
     if (!audio || !current) return;
+    setOfficialFallbackId(null);
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
     if (current.duration && current.duration > 0) setDuration(current.duration);
     else setDuration(0);
     const wantPlay = useFlowStore.getState().isPlaying;
-    applySrc(audio, fallbackSrc(current), wantPlay, true);
+    const src = getStreamUrlForTrack(current);
+    applySrc(audio, src, wantPlay, true);
+    // Do not preflight the stream with HEAD. Cloudflare tunnels and some
+    // mobile proxies can delay or rewrite HEAD responses even when the audio
+    // GET stream is healthy; treating that preflight as fatal caused repeated
+    // pause/restart loops. The audio element now remains the source of truth.
     claimAudioFocus();
     if (wantPlay) {
       markPlayingForFocus(true);
@@ -247,17 +364,14 @@ export function AudioEngine() {
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
     notifyNativeTrackChange(current, wantPlay, 0);
-    const st = useFlowStore.getState();
-    const nxt = st.queue[st.queueIndex + 1];
-    if (nxt?.videoId && nxt.videoId !== current.videoId) prefetchAudio(nxt.videoId);
-  }, [current?.id, current?.videoId, current?.streamUrl, setDuration]);
+  }, [current?.id, current?.videoId, setDuration]);
 
   useEffect(() => {
-    const audio = audioRef.current;
+    const audio = getGlobalAudio();
     if (!audio) return;
     markPlayingForFocus(isPlaying);
     claimAudioFocus();
-    applyOutput(audio);
+    syncAudioOutput(audio);
     if (isPlaying) {
       void audio.play().catch(() => {});
     } else {
@@ -267,24 +381,24 @@ export function AudioEngine() {
       pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
       notifyNativeTrackChange(current, isPlaying, audio.currentTime || 0);
     }
-  }, [isPlaying, current]);
+  }, [isPlaying, current?.id, current?.videoId]);
 
   useEffect(() => {
-    const audio = audioRef.current;
-    if (audio) applyOutput(audio);
+    const audio = getGlobalAudio();
+    if (audio) syncAudioOutput(audio);
   }, [volume, isMuted, voiceDuck, playbackRate, normalize]);
 
   useEffect(() => {
     if (seekVersion === lastSeek.current) return;
     lastSeek.current = seekVersion;
-    const audio = audioRef.current;
+    const audio = getGlobalAudio();
     if (!audio) return;
     if (Math.abs(audio.currentTime - currentTime) > 0.4) audio.currentTime = currentTime;
   }, [seekVersion, currentTime]);
 
   useEffect(() => {
     const kick = () => {
-      const audio = audioRef.current;
+      const audio = getGlobalAudio();
       const s = useFlowStore.getState();
       if (!audio || !s.isPlaying || !s.current) return;
       claimAudioFocus();
@@ -299,83 +413,40 @@ export function AudioEngine() {
         lastMove.current = Date.now();
         return;
       }
-      if (Date.now() - lastMove.current > 4000 && s.current.videoId && audio.error) {
+      const stalled = audio.readyState < 2 && audio.networkState === HTMLMediaElement.NETWORK_LOADING;
+      if (Date.now() - lastMove.current > (document.hidden ? 6000 : 15000) && s.current.videoId && (audio.error || stalled)) {
+        // Mobile browsers can remain in NETWORK_LOADING without exposing a
+        // MediaError, especially after the screen locks. Allow one bounded
+        // recovery per track, preserving the current position. The guard in
+        // recover() prevents an endless restart loop.
         recover(s.current.videoId, t || s.currentTime);
       }
     };
     document.addEventListener("visibilitychange", kick);
     window.addEventListener("pageshow", kick);
     window.addEventListener("focus", kick);
+    window.addEventListener("online", kick);
+    window.addEventListener("offline", kick);
     window.addEventListener("freeze", kick);
     window.addEventListener("resume", kick);
+    const connection = (navigator as Navigator & { connection?: EventTarget }).connection;
+    connection?.addEventListener("change", kick);
     const watchdog = window.setInterval(kick, 2000);
     return () => {
       document.removeEventListener("visibilitychange", kick);
       window.removeEventListener("pageshow", kick);
       window.removeEventListener("focus", kick);
+      window.removeEventListener("online", kick);
+      window.removeEventListener("offline", kick);
       window.removeEventListener("freeze", kick);
       window.removeEventListener("resume", kick);
+      connection?.removeEventListener("change", kick);
       window.clearInterval(watchdog);
     };
   }, []);
 
-  return (
-    <audio
-      ref={audioRef}
-      playsInline
-      preload="auto"
-      className="pointer-events-none fixed bottom-0 left-0 h-px w-px opacity-[0.01]"
-      onTimeUpdate={(e) => {
-        const el = e.currentTarget;
-        const t = el.currentTime;
-        if (!Number.isFinite(t)) return;
-        setCurrentTime(t);
-        if (t > lastPos.current) {
-          lastPos.current = t;
-          lastMove.current = Date.now();
-        }
-        const track = useFlowStore.getState().current;
-        if (track) pushLockScreen(track, !el.paused, t, el.duration || 0, 1);
-      }}
-      onDurationChange={(e) => {
-        const d = e.currentTarget.duration;
-        if (Number.isFinite(d) && d > 0) setDuration(d);
-      }}
-      onPlaying={() => {
-        lastMove.current = Date.now();
-        recovering.current = "";
-        const track = useFlowStore.getState().current;
-        if (track) {
-          markPlayingForFocus(true);
-          pushLockScreen(track, true, audioRef.current?.currentTime || 0, audioRef.current?.duration || 0, 1);
-        }
-      }}
-      onPause={() => {
-        resumeElement(audioRef.current);
-      }}
-      onWaiting={() => {
-        if (document.hidden) resumeElement(audioRef.current);
-      }}
-      onError={() => {
-        const s = useFlowStore.getState();
-        const id = s.current?.videoId;
-        const audio = audioRef.current;
-        if (!id || !audio) return;
-        if (document.hidden) {
-          resumeElement(audio);
-          return;
-        }
-        const blob = cachedAudioUrl(id);
-        if (blob) applySrc(audio, blob, s.isPlaying, true);
-        else if (!audio.src.includes("/api/stream")) applySrc(audio, `/api/stream?v=${id}`, s.isPlaying, true);
-        else if (s.isPlaying) recover(id, s.currentTime);
-      }}
-      onStalled={() => {
-        if (document.hidden) resumeElement(audioRef.current);
-      }}
-      onEnded={onEnded}
-    />
-  );
+  // Disabled YouTube iframe fallback: on mobile Safari/Chrome an iframe cannot play in background or update lockscreen
+  return null;
 }
 
 export function MiniPlayer() {
@@ -406,7 +477,7 @@ export function MiniPlayer() {
   const RepeatIcon = repeat === "one" ? Repeat1 : Repeat;
   const rightTime = remainingTime && duration > 0 ? Math.max(0, duration - currentTime) : duration;
   return (
-    <div className={cn("now-bar pointer-events-auto bg-elevated/95 md:bg-bg", (!open || showFull) && "is-away")}>
+    <div className={cn("now-bar pointer-events-auto border-t border-primary/20 bg-slate-950/90 shadow-[0_-16px_50px_rgba(3,7,18,0.72)] backdrop-blur-2xl md:bg-bg/90", (!open || showFull) && "is-away")}>
       <div className="md:hidden">
         <div className="mx-2.5 mb-1 overflow-hidden rounded-2xl bg-[#14171E]/95 shadow-xl ring-1 ring-white/10 backdrop-blur-xl">
           <div className="flex items-center gap-2 px-2.5 py-2">
@@ -424,12 +495,13 @@ export function MiniPlayer() {
           <div className="h-1 w-full bg-white/5"><div className="h-full bg-primary transition-all duration-150" style={{ width: `${progress}%` }} /></div>
         </div>
       </div>
-      <div className="hidden h-[90px] items-center gap-4 px-4 md:flex">
+        <div className="hidden h-[96px] items-center gap-4 px-5 md:flex">
         <button type="button" onClick={() => setShowFullPlayer(true)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
-          <span className="size-14 shrink-0 overflow-hidden rounded bg-surface"><TrackArt src={current.artwork} alt="" /></span>
+          <span className="flow-cosmic-glow size-14 shrink-0 overflow-hidden rounded-xl bg-surface"><TrackArt src={current.artwork} alt="" /></span>
           <span className="min-w-0">
-            <span className="block max-w-[14rem] truncate text-sm font-medium">{current.title}</span>
-            <span className="block max-w-[14rem] truncate text-xs text-muted">{current.artist}</span>
+            <span className="block max-w-[14rem] truncate text-sm font-bold">{current.title}</span>
+            <span className="block max-w-[14rem] truncate font-mono text-[10px] uppercase tracking-wider text-muted">{current.artist}</span>
+            <span className="mt-1 inline-flex rounded border border-cyan/20 px-1.5 py-0.5 font-mono text-[8px] tracking-[0.16em] text-cyan">LOSSLESS · 24 BIT</span>
           </span>
         </button>
         <button type="button" onClick={() => toggleLike(current)} className={cn("size-8", liked ? "text-primary" : "text-muted")}>
@@ -439,7 +511,7 @@ export function MiniPlayer() {
           <div className="flex items-center gap-3">
             <button type="button" onClick={toggleShuffle} className={cn("size-8", shuffle ? "text-primary" : "text-muted")}><Shuffle className="size-4" /></button>
             <button type="button" onClick={prev} className="size-8 text-muted" aria-label="Prev"><SkipBack className="size-5 fill-current" /></button>
-            <button type="button" onClick={togglePlay} className="flex size-10 items-center justify-center rounded-full bg-fg text-bg" aria-label="Play">
+            <button type="button" onClick={togglePlay} className="flow-cosmic-glow flex size-11 items-center justify-center rounded-full bg-primary text-primary-fg" aria-label="Play">
               {isPlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
             </button>
             <button type="button" onClick={next} className="size-8 text-muted" aria-label="Next"><SkipForward className="size-5 fill-current" /></button>
@@ -447,7 +519,7 @@ export function MiniPlayer() {
           </div>
           <div className="flex w-full items-center gap-2">
             <span className="w-10 text-right text-[11px] tabular-nums text-subtle">{formatTime(currentTime)}</span>
-            <input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="seek flex-1" />
+            <div className="relative flex-1"><AudioVisualizer className="absolute inset-x-0 bottom-0 h-5 w-full opacity-45" barCount={48} /><input type="range" min={0} max={duration || 1} step={0.25} value={Math.min(currentTime, duration || 1)} onChange={(e) => seek(Number(e.target.value))} className="seek relative z-10 flex-1" /></div>
             <span className="w-10 text-[11px] tabular-nums text-subtle">{remainingTime ? `-${formatTime(rightTime)}` : formatTime(rightTime)}</span>
           </div>
         </div>
