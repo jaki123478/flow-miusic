@@ -7,15 +7,17 @@ export function getStreamApiBase(): string {
   if (typeof window === "undefined") return "";
   const configured = (import.meta.env.VITE_STREAM_API_BASE as string | undefined)?.trim();
   if (configured) return configured.replace(/\/+$/, "");
-  const host = window.location.hostname;
-  if (host.includes("web.app") || host.includes("firebaseapp.com")) {
-    return "https://flow-miusic.onrender.com";
-  }
-  return "";
+  return "https://flow-miusic.onrender.com";
+}
+
+export function isValidVideoId(videoId?: string | null): videoId is string {
+  return /^[A-Za-z0-9_-]{11}$/.test((videoId || "").trim());
 }
 
 export function getStreamApiUrl(videoId: string, params?: Record<string, string | number | boolean>): string {
-  const search = new URLSearchParams({ v: videoId });
+  const cleanVideoId = videoId.trim();
+  if (!isValidVideoId(cleanVideoId)) return "";
+  const search = new URLSearchParams({ v: cleanVideoId });
   for (const [key, value] of Object.entries(params || {})) {
     search.set(key, String(value));
   }
@@ -32,13 +34,26 @@ export function getStreamUrlForTrack(
     }
     return track.streamUrl;
   }
-  if (track.videoId) {
+  if (isValidVideoId(track.videoId)) {
     const cached = cachedAudioUrl(track.videoId);
     if (cached) return cached;
     return getStreamApiUrl(track.videoId);
   }
   if (track.streamUrl) return track.streamUrl;
   return "";
+}
+
+export function configureAudioCorsForSrc(audio: HTMLAudioElement, src: string) {
+  try {
+    const url = new URL(src, typeof window !== "undefined" ? window.location.href : "https://flow-music-app.web.app/");
+    if (url.hostname === "flow-stream-proxy.netlify.app" || url.hostname === "flow-miusic.onrender.com") {
+      audio.crossOrigin = "anonymous";
+    } else {
+      audio.removeAttribute("crossorigin");
+    }
+  } catch {
+    audio.removeAttribute("crossorigin");
+  }
 }
 
 export function getGlobalAudio(): HTMLAudioElement | null {
@@ -51,9 +66,9 @@ export function getGlobalAudio(): HTMLAudioElement | null {
     el.setAttribute("x5-playsinline", "true");
     el.setAttribute("x-webkit-airplay", "allow");
     el.preload = "auto";
-    // Do not set crossOrigin here. A number of legitimate radio providers do
-    // not send CORS headers; Safari then refuses to start the media even
-    // though the stream itself is public and playable.
+    // crossOrigin is configured per-source. The Netlify music proxy sends
+    // Access-Control-Allow-Origin and needs CORS mode to avoid Chromium ORB,
+    // while many public radio streams break if CORS is forced globally.
     el.style.position = "fixed";
     el.style.bottom = "0";
     el.style.left = "0";
@@ -106,6 +121,7 @@ export function unlockAudioInUserGesture(
       if (src) {
         const fullUrl = new URL(src, window.location.href).href;
         if (audio.src !== fullUrl && audio.src !== src) {
+          configureAudioCorsForSrc(audio, src);
           audio.src = src;
           audio.load();
         }

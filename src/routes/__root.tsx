@@ -2,7 +2,9 @@ import { createRootRoute, HeadContent, Outlet, Scripts } from "@tanstack/react-r
 import { AuthProvider } from "@/lib/auth/provider";
 import { PreviewHostBridge } from "@/components/preview-host-bridge";
 import { AppShell } from "@/components/flow/shell";
+import { AppVersionGuard } from "@/components/flow/app-version-guard";
 import appCss from "../styles.css?url";
+import { useIsIOS } from "@/hooks/useIsIOS";
 
 const APP_NAME = "Flow";
 
@@ -52,19 +54,18 @@ export const Route = createRootRoute({
       { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
       { rel: "manifest", href: "/manifest.json" },
       { rel: "stylesheet", href: appCss },
-      {
-        rel: "stylesheet",
-        href: "https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800&display=swap",
-      },
     ],
   }),
-  component: () => (
+  component: () => {
+    const { isIOS, isStandalone } = useIsIOS();
+    return (
     <html lang="it" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
-      <body className="antialiased">
+      <body className={`antialiased ${isIOS || isStandalone ? "ios-glass-theme" : ""}`}>
         <PreviewHostBridge />
+        <AppVersionGuard />
         <AuthProvider>
           <AppShell>
             <Outlet />
@@ -73,5 +74,6 @@ export const Route = createRootRoute({
         <Scripts />
       </body>
     </html>
-  ),
+    );
+  },
 });

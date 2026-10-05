@@ -49,7 +49,13 @@ import { TrackArt, TrackRow } from "./tracks";
 import { bindLockScreenActions, pushLockScreen } from "@/lib/music/lock-screen";
 import { bindAudioFocus, claimAudioFocus, markPlayingForFocus, shouldResumeAfterFocus } from "@/lib/music/audio-focus";
 import { showAndroidNowPlaying } from "@/lib/music/android-bg";
-import { getGlobalAudio, getStreamApiUrl, getStreamUrlForTrack, syncAudioOutput } from "@/lib/music/native-audio";
+import {
+  configureAudioCorsForSrc,
+  getGlobalAudio,
+  getStreamApiUrl,
+  getStreamUrlForTrack,
+  syncAudioOutput,
+} from "@/lib/music/native-audio";
 import {
   canDownloadTrack,
   downloadTrack,
@@ -65,9 +71,17 @@ function applyOutput(audio: HTMLAudioElement) {
   syncAudioOutput(audio);
 }
 
+function postYouTubeCommand(frame: HTMLIFrameElement | null, func: "playVideo" | "pauseVideo" | "seekTo", args: unknown[] = []) {
+  frame?.contentWindow?.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube.com");
+}
+
 export function AudioEngine() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const [officialFallbackId, setOfficialFallbackId] = useState<string | null>(null);
+  const officialFrameRef = useRef<HTMLIFrameElement | null>(null);
+  const officialFallbackActive = useRef<string | null>(null);
+  const officialStartedAt = useRef(0);
+  const officialBaseTime = useRef(0);
   const current = useFlowStore((s) => s.current);
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const volume = useFlowStore((s) => s.volume);
@@ -93,6 +107,31 @@ export function AudioEngine() {
     if (useFlowStore.getState().isPlaying && audio.paused) void audio.play().catch(() => {});
   };
 
+  const startOfficialFallback = (id: string, message?: string) => {
+    const s = useFlowStore.getState();
+    if (!s.current || s.current.videoId !== id) return;
+    const audio = getGlobalAudio();
+    officialFallbackActive.current = id;
+    s.setOfficialFallbackVideoId(id);
+    setOfficialFallbackId(id);
+    if (s.current.duration > 0) setDuration(s.current.duration);
+    officialBaseTime.current = Math.max(0, s.currentTime || 0);
+    officialStartedAt.current = Date.now();
+    // Stop the failed <audio> pipeline from continuing to emit timeupdate/error
+    // events at 0:00 while the YouTube fallback owns playback.
+    if (audio) {
+      try {
+        audio.pause();
+        audio.removeAttribute("src");
+        audio.load();
+      } catch {
+        /* ignore */
+      }
+    }
+    if (officialBaseTime.current < 0.25) setCurrentTime(0.25);
+    if (message) s.notify(message);
+  };
+
   const applySrc = (audio: HTMLAudioElement, src: string, play: boolean, force = false) => {
     if (!src) return;
     const fullUrl = typeof window !== "undefined" ? new URL(src, window.location.href).href : src;
@@ -109,6 +148,7 @@ export function AudioEngine() {
     if (document.hidden && playing && !force) return;
 
     lastSrc.current = src;
+    configureAudioCorsForSrc(audio, src);
     audio.src = src;
     syncAudioOutput(audio);
     if (play) {
@@ -201,6 +241,7 @@ export function AudioEngine() {
     }
 
     const handleTimeUpdate = () => {
+      if (officialFallbackActive.current) return;
       const t = audio.currentTime;
       if (!Number.isFinite(t)) return;
       setCurrentTime(t);
@@ -248,17 +289,26 @@ export function AudioEngine() {
       if (document.hidden) resumeElement(audio);
       if (fallbackTimer.current !== null) window.clearTimeout(fallbackTimer.current);
       fallbackTimer.current = window.setTimeout(() => {
-        // A stream can legitimately buffer for a few seconds (especially
-        // through the public tunnel). Do not pause and replace the current
-        // track here: doing so restarts the same song from 0.
+        const s = useFlowStore.getState();
+        const id = s.current?.videoId;
+        if (id && s.isPlaying && audio.currentTime < 0.25 && audio.readyState < 2) {
+          startOfficialFallback(id, "Stream diretto lento: uso fallback ufficiale");
+        }
         fallbackTimer.current = null;
-      }, 8000);
+      }, 1500);
     };
 
     const handleError = () => {
       const s = useFlowStore.getState();
       const id = s.current?.videoId;
       if (!id) return;
+      window.setTimeout(() => {
+        const latest = useFlowStore.getState();
+        if (latest.current?.videoId === id && latest.isPlaying && audio.readyState === 0) {
+          startOfficialFallback(id, "Stream diretto non disponibile: uso fallback ufficiale");
+        }
+      }, 900);
+      if (audio.currentTime < 0.25 && audio.readyState === 0) return;
       // One recovery attempt per track at a time. Re-assigning the source on
       // every error creates the exact loop where the same song keeps jumping
       // back to 0 when the upstream provider is unavailable.
@@ -344,7 +394,11 @@ export function AudioEngine() {
   useEffect(() => {
     const audio = getGlobalAudio();
     if (!audio || !current) return;
+    officialFallbackActive.current = null;
+    useFlowStore.getState().setOfficialFallbackVideoId(null);
     setOfficialFallbackId(null);
+    officialBaseTime.current = 0;
+    officialStartedAt.current = 0;
     recovering.current = "";
     lastMove.current = Date.now();
     lastPos.current = 0;
@@ -353,6 +407,18 @@ export function AudioEngine() {
     const wantPlay = useFlowStore.getState().isPlaying;
     const src = getStreamUrlForTrack(current);
     applySrc(audio, src, wantPlay, true);
+    const id = current.videoId;
+    const startupTimer = window.setTimeout(() => {
+      const s = useFlowStore.getState();
+      if (
+        id &&
+        s.current?.videoId === id &&
+        s.isPlaying &&
+        audio.currentTime < 0.5
+      ) {
+        startOfficialFallback(id, "Brano fermo a 0: uso player YouTube ufficiale");
+      }
+    }, 2500);
     // Do not preflight the stream with HEAD. Cloudflare tunnels and some
     // mobile proxies can delay or rewrite HEAD responses even when the audio
     // GET stream is healthy; treating that preflight as fatal caused repeated
@@ -364,6 +430,7 @@ export function AudioEngine() {
     }
     pushLockScreen(current, wantPlay, 0, current.duration || 0, 1);
     notifyNativeTrackChange(current, wantPlay, 0);
+    return () => window.clearTimeout(startupTimer);
   }, [current?.id, current?.videoId, setDuration]);
 
   useEffect(() => {
@@ -374,14 +441,34 @@ export function AudioEngine() {
     syncAudioOutput(audio);
     if (isPlaying) {
       void audio.play().catch(() => {});
+      postYouTubeCommand(officialFrameRef.current, "playVideo");
     } else {
       audio.pause();
+      postYouTubeCommand(officialFrameRef.current, "pauseVideo");
     }
     if (current) {
       pushLockScreen(current, isPlaying, audio.currentTime || 0, audio.duration || 0, 1);
       notifyNativeTrackChange(current, isPlaying, audio.currentTime || 0);
     }
   }, [isPlaying, current?.id, current?.videoId]);
+
+  useEffect(() => {
+    if (!officialFallbackId) return;
+    officialBaseTime.current = useFlowStore.getState().currentTime || 0;
+    officialStartedAt.current = Date.now();
+    const tick = window.setInterval(() => {
+      const s = useFlowStore.getState();
+      if (!s.isPlaying || s.current?.videoId !== officialFallbackId) return;
+      const next = officialBaseTime.current + (Date.now() - officialStartedAt.current) / 1000;
+      const max = s.current.duration || s.duration || 0;
+      if (max > 0 && next >= max - 0.5) {
+        s.onEnded();
+        return;
+      }
+      s.setCurrentTime(next);
+    }, 500);
+    return () => window.clearInterval(tick);
+  }, [officialFallbackId]);
 
   useEffect(() => {
     const audio = getGlobalAudio();
@@ -394,7 +481,12 @@ export function AudioEngine() {
     const audio = getGlobalAudio();
     if (!audio) return;
     if (Math.abs(audio.currentTime - currentTime) > 0.4) audio.currentTime = currentTime;
-  }, [seekVersion, currentTime]);
+    if (officialFallbackId) {
+      officialBaseTime.current = currentTime;
+      officialStartedAt.current = Date.now();
+      postYouTubeCommand(officialFrameRef.current, "seekTo", [currentTime, true]);
+    }
+  }, [seekVersion, currentTime, officialFallbackId]);
 
   useEffect(() => {
     const kick = () => {
@@ -414,6 +506,11 @@ export function AudioEngine() {
         return;
       }
       const stalled = audio.readyState < 2 && audio.networkState === HTMLMediaElement.NETWORK_LOADING;
+      const zeroLocked = (audio.currentTime || s.currentTime || 0) < 0.5 && Date.now() - lastMove.current > 3000;
+      if (s.current.videoId && zeroLocked) {
+        startOfficialFallback(s.current.videoId, "Brano fermo a 0: uso player YouTube ufficiale");
+        return;
+      }
       if (Date.now() - lastMove.current > (document.hidden ? 6000 : 15000) && s.current.videoId && (audio.error || stalled)) {
         // Mobile browsers can remain in NETWORK_LOADING without exposing a
         // MediaError, especially after the screen locks. Allow one bounded
@@ -445,8 +542,36 @@ export function AudioEngine() {
     };
   }, []);
 
-  // Disabled YouTube iframe fallback: on mobile Safari/Chrome an iframe cannot play in background or update lockscreen
-  return null;
+  if (!officialFallbackId) return null;
+  return (
+    <div className="fixed right-3 bottom-[calc(6.5rem+env(safe-area-inset-bottom))] z-[70] w-[min(92vw,320px)] overflow-hidden rounded-2xl border border-red-500/25 bg-black/90 shadow-2xl shadow-black/60 ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="flex items-center justify-between gap-2 px-3 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-red-100">
+        <span>Fallback YouTube attivo</span>
+        <button
+          type="button"
+          onClick={() => {
+            setOfficialFallbackId(null);
+            officialFallbackActive.current = null;
+            useFlowStore.getState().setOfficialFallbackVideoId(null);
+          }}
+          className="rounded-full px-2 py-1 text-white/70 hover:bg-white/10 hover:text-white"
+          aria-label="Chiudi fallback YouTube"
+        >
+          ×
+        </button>
+      </div>
+      <iframe
+        ref={officialFrameRef}
+        title="Flow official audio fallback"
+        allow="autoplay; encrypted-media; picture-in-picture"
+        src={`https://www.youtube.com/embed/${officialFallbackId}?autoplay=1&playsinline=1&enablejsapi=1&controls=1&disablekb=0&modestbranding=1&rel=0`}
+        className="aspect-video w-full bg-black"
+      />
+      <p className="px-3 py-2 text-xs leading-snug text-white/65">
+        Lo stream diretto è bloccato dal proxy: usa questo player ufficiale se resta a 00.
+      </p>
+    </div>
+  );
 }
 
 export function MiniPlayer() {
@@ -454,6 +579,7 @@ export function MiniPlayer() {
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const currentTime = useFlowStore((s) => s.currentTime);
   const duration = useFlowStore((s) => s.duration);
+  const officialFallbackVideoId = useFlowStore((s) => s.officialFallbackVideoId);
   const remainingTime = useFlowStore((s) => s.settings.remainingTime);
   const togglePlay = useFlowStore((s) => s.togglePlay);
   const next = useFlowStore((s) => s.next);
@@ -486,6 +612,7 @@ export function MiniPlayer() {
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold text-fg">{current.title}</span>
                 <span className="block truncate text-xs text-muted">{current.artist}</span>
+                {officialFallbackVideoId ? <span className="mt-0.5 block truncate text-[10px] font-bold uppercase tracking-wide text-red-300">Fallback YouTube</span> : null}
               </span>
             </button>
             <button type="button" onClick={togglePlay} className="flex size-11 shrink-0 items-center justify-center rounded-full text-primary hover:bg-white/5 active:scale-90 transition-transform" aria-label="Play">
@@ -501,7 +628,9 @@ export function MiniPlayer() {
           <span className="min-w-0">
             <span className="block max-w-[14rem] truncate text-sm font-bold">{current.title}</span>
             <span className="block max-w-[14rem] truncate font-mono text-[10px] uppercase tracking-wider text-muted">{current.artist}</span>
-            <span className="mt-1 inline-flex rounded border border-cyan/20 px-1.5 py-0.5 font-mono text-[8px] tracking-[0.16em] text-cyan">LOSSLESS · 24 BIT</span>
+            <span className={cn("mt-1 inline-flex rounded border px-1.5 py-0.5 font-mono text-[8px] tracking-[0.16em]", officialFallbackVideoId ? "border-red-400/30 text-red-300" : "border-cyan/20 text-cyan")}>
+              {officialFallbackVideoId ? "YOUTUBE FALLBACK" : "LOSSLESS · 24 BIT"}
+            </span>
           </span>
         </button>
         <button type="button" onClick={() => toggleLike(current)} className={cn("size-8", liked ? "text-primary" : "text-muted")}>
@@ -539,6 +668,7 @@ export function FullPlayer() {
   const isPlaying = useFlowStore((s) => s.isPlaying);
   const currentTime = useFlowStore((s) => s.currentTime);
   const duration = useFlowStore((s) => s.duration);
+  const officialFallbackVideoId = useFlowStore((s) => s.officialFallbackVideoId);
   const remainingTime = useFlowStore((s) => s.settings.remainingTime);
   const queue = useFlowStore((s) => s.queue);
   const show = useFlowStore((s) => s.showFullPlayer);
@@ -1026,6 +1156,13 @@ export function FullPlayer() {
                   </button>
                 </div>
               </div>
+
+              {/* Material You Waveform / Scrubbing Seekbar */}
+              {officialFallbackVideoId ? (
+                <div className="mt-3 rounded-2xl border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-100">
+                  Stream diretto non disponibile: usa il riquadro YouTube ufficiale se il contatore resta a 00.
+                </div>
+              ) : null}
 
               {/* Material You Waveform / Scrubbing Seekbar */}
               <div className="mt-4">
