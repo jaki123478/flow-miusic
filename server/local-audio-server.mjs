@@ -14,22 +14,125 @@ async function getTube() {
   return ytInstance;
 }
 
+const SIMPMUSIC_AUDIO_ITAGS = [251, 250, 141, 774];
+const SIMPMUSIC_MUXED_FALLBACK_ITAGS = [18];
+
+function formatMime(format) {
+  return String(format?.mimeType || format?.mime_type || format?.type || '');
+}
+
+function formatItag(format) {
+  return Number(format?.itag || 0);
+}
+
+function sortByAudioPreference(a, b) {
+  const ap = SIMPMUSIC_AUDIO_ITAGS.indexOf(formatItag(a));
+  const bp = SIMPMUSIC_AUDIO_ITAGS.indexOf(formatItag(b));
+  if (ap !== -1 || bp !== -1) return (ap === -1 ? 999 : ap) - (bp === -1 ? 999 : bp);
+  return Number(b?.bitrate || b?.averageBitrate || 0) - Number(a?.bitrate || a?.averageBitrate || 0);
+}
+
+function pickPlayableFormat(formats) {
+  const playable = formats.filter((f) => f?.url || typeof f?.decipher === 'function');
+  const audio = playable
+    .filter((f) => formatMime(f).startsWith('audio/') || SIMPMUSIC_AUDIO_ITAGS.includes(formatItag(f)))
+    .sort(sortByAudioPreference);
+  if (audio[0]) return audio[0];
+  return playable.find((f) => SIMPMUSIC_MUXED_FALLBACK_ITAGS.includes(formatItag(f)) || f?.has_audio || f?.hasAudio) || null;
+}
+
+async function resolveViaPlayerApi(id) {
+  const clients = [
+    {
+      name: 'IOS',
+      num: '5',
+      userAgent: 'com.google.ios.youtube/20.11.6 (iPhone16,2; U; CPU iOS 17_5_1 like Mac OS X)',
+      context: {
+        clientName: 'IOS',
+        clientVersion: '20.11.6',
+        deviceMake: 'Apple',
+        deviceModel: 'iPhone16,2',
+        osName: 'iOS',
+        osVersion: '17.5.1.21F90',
+        platform: 'MOBILE',
+        hl: 'it',
+        gl: 'IT',
+      },
+    },
+    {
+      name: 'ANDROID',
+      num: '3',
+      userAgent: 'com.google.android.youtube/20.10.36 (Linux; U; Android 14; it_IT) gzip',
+      context: {
+        clientName: 'ANDROID',
+        clientVersion: '20.10.36',
+        hl: 'it',
+        gl: 'IT',
+      },
+    },
+  ];
+
+  for (const client of clients) {
+    try {
+      const res = await fetch('https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': client.userAgent,
+          'X-YouTube-Client-Name': client.num,
+          'X-YouTube-Client-Version': client.context.clientVersion,
+        },
+        body: JSON.stringify({
+          videoId: id,
+          context: { client: client.context },
+          contentCheckOk: true,
+          racyCheckOk: true,
+        }),
+        signal: AbortSignal.timeout(12000),
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      if (data?.playabilityStatus?.status !== 'OK') continue;
+      const picked = pickPlayableFormat([
+        ...(data?.streamingData?.adaptiveFormats || []),
+        ...(data?.streamingData?.formats || []),
+      ]);
+      if (picked?.url) return picked.url;
+    } catch (err) {
+      console.warn('[resolveViaPlayerApi]', client.name, err?.message || err);
+    }
+  }
+  return null;
+}
+
 async function resolveAudioUrl(id) {
   const hit = urlCache.get(id);
   if (hit && hit.exp > Date.now()) return hit.url;
 
-  const yt = await getTube();
+  const direct = await resolveViaPlayerApi(id);
+  if (direct) {
+    urlCache.set(id, { url: direct, exp: Date.now() + 45 * 60_000 });
+    return direct;
+  }
+
+  let yt = null;
+  try {
+    yt = await getTube();
+  } catch (err) {
+    console.error('[resolveAudioUrl init error]', id, err?.message || err);
+    ytInstance = null;
+    return null;
+  }
   const clients = ['IOS', 'ANDROID', 'YTMUSIC', 'WEB'];
 
   for (const client of clients) {
     try {
       const info = await yt.getBasicInfo(id, { client });
       const format =
+        pickPlayableFormat([...(info.streaming_data?.adaptive_formats || []), ...(info.streaming_data?.formats || [])]) ||
         info.chooseFormat({ type: 'audio' }) ||
         info.chooseFormat({ type: 'audio', quality: 'best' }) ||
-        info.chooseFormat({ type: 'audio', format: 'mp4' }) ||
-        info.streaming_data?.adaptive_formats?.find(f => (f.mime_type || '').startsWith('audio/')) ||
-        info.streaming_data?.formats?.find(f => (f.mime_type || '').startsWith('audio/') || f.has_audio);
+        info.chooseFormat({ type: 'audio', format: 'mp4' });
 
       if (format?.url) {
         urlCache.set(id, { url: format.url, exp: Date.now() + 60 * 60_000 });
@@ -124,47 +227,55 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const audioEntry = await getAudioBuffer(id);
-    if (!audioEntry) {
-      // Fallback to direct redirect if buffering failed
-      const directUrl = await resolveAudioUrl(id);
-      if (directUrl) {
-        res.writeHead(302, { Location: directUrl });
-        res.end();
-        return;
-      }
+    const directUrl = await resolveAudioUrl(id);
+    if (!directUrl) {
       res.writeHead(404);
       res.end('No stream found');
       return;
     }
 
-    const { buffer, contentType, length } = audioEntry;
-    const rangeHeader = req.headers.range;
-
-    if (rangeHeader) {
-      const parts = rangeHeader.replace(/bytes=/, '').split('-');
-      const start = parseInt(parts[0], 10) || 0;
-      const end = parts[1] ? parseInt(parts[1], 10) : length - 1;
-      const chunkSize = end - start + 1;
-
-      res.writeHead(206, {
-        'Content-Range': 'bytes ' + start + '-' + end + '/' + length,
-        'Accept-Ranges': 'bytes',
-        'Content-Length': chunkSize,
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400, immutable',
-        'Access-Control-Allow-Origin': '*',
+    try {
+      const upstream = await fetch(directUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15',
+          Accept: 'audio/*,*/*',
+          ...(req.headers.range ? { Range: req.headers.range } : {}),
+        },
+        signal: AbortSignal.timeout(25000),
       });
-      res.end(buffer.subarray(start, end + 1));
-    } else {
-      res.writeHead(200, {
-        'Content-Length': length,
-        'Content-Type': contentType,
+
+      if (!upstream.ok && upstream.status !== 206) {
+        throw new Error('upstream ' + upstream.status);
+      }
+
+      const headers = {
+        'Content-Type': upstream.headers.get('content-type') || 'audio/mp4',
         'Accept-Ranges': 'bytes',
-        'Cache-Control': 'public, max-age=86400, immutable',
+        'Cache-Control': 'public, max-age=86400',
         'Access-Control-Allow-Origin': '*',
-      });
-      res.end(buffer);
+      };
+      const contentRange = upstream.headers.get('content-range');
+      const contentLength = upstream.headers.get('content-length');
+      if (contentRange) headers['Content-Range'] = contentRange;
+      if (contentLength) headers['Content-Length'] = contentLength;
+
+      res.writeHead(upstream.status, headers);
+      if (!upstream.body || req.method === 'HEAD') {
+        res.end();
+        return;
+      }
+
+      const reader = upstream.body.getReader();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!res.write(value)) await new Promise((resolve) => res.once('drain', resolve));
+      }
+      res.end();
+    } catch (err) {
+      console.error('[stream proxy error]', id, err?.message || err);
+      res.writeHead(502);
+      res.end('Stream proxy error');
     }
     return;
   }

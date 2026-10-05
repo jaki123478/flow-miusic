@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: flow-music
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: STREAM_PORT=$PORT node server/local-audio-server.mjs
+    healthCheckPath: /health
+    autoDeploy: true
