@@ -131,10 +131,14 @@ async function resolveUrl(id) {
   const { webPoMinter, innertube } = await session();
   const pot = await webPoMinter.mintAsWebsafeString(id);
   let info;
-  try {
-    info = await innertube.getBasicInfo(id, { client: "YTMUSIC" });
-  } catch {
-    info = await innertube.getBasicInfo(id, { client: "MUSIC" });
+  const clients = ["YTMUSIC", "IOS", "ANDROID", "WEB"];
+  for (const client of clients) {
+    try {
+      info = await innertube.getBasicInfo(id, { client });
+      break;
+    } catch (err) {
+      if (client === clients[clients.length - 1]) throw err;
+    }
   }
   const format = info.chooseFormat({ quality: "best", type: "audio" });
   if (!format) throw new Error("no audio");
