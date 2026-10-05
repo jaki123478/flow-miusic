@@ -1,9 +1,8 @@
-/** Off-Vercel catalog audio. Same host must resolve InnerTube and proxy googlevideo. */
-export const STREAM_PROXY_ORIGIN = "https://hose-enrolled-hindu-label.trycloudflare.com";
+/** Off-Firebase catalog audio. Same host must resolve InnerTube and proxy googlevideo. */
+export const STREAM_PROXY_ORIGIN = "https://flow-miusic.onrender.com";
 
-/** Bump when Vercel serves a stale client bundle without the tunnel host. */
-/** rebuild-kick: force production client to embed trycloudflare host */
-export const STREAM_PROXY_BUILD = "20260918f";
+/** Bump when Firebase/old service workers serve a stale client bundle. */
+export const STREAM_PROXY_BUILD = "20261005-render-audio";
 
 export function catalogStreamUrl(videoId: string): string {
   const id = String(videoId || "").trim();
