@@ -37,6 +37,8 @@ export interface Playlist {
   folder?: string;
   publicId?: string;
   collab?: boolean;
+  /** Full tracks for these ids, so a second device can show songs that are not in liked/recents. */
+  tracks?: Track[];
 }
 
 export type RepeatMode = "off" | "all" | "one";

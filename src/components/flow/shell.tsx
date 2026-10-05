@@ -2,7 +2,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { Link, Navigate, useNavigate, useRouterState } from "@tanstack/react-router";
 import { Compass, Heart, House, Library, Plus, Radio, Search, Settings, Trophy } from "lucide-react";
 import { authEnabled } from "@/lib/auth/client";
-import { useCurrentUserState } from "@/lib/auth/use-current-user";
+import { useCurrentUser, useCurrentUserState } from "@/lib/auth/use-current-user";
 import { cn } from "@/lib/utils";
 import { useFlowStore } from "@/stores/flow-store";
 import { AudioEngine, FullPlayer, MiniPlayer } from "./player";
@@ -48,6 +48,8 @@ function LibraryRail() {
   const recents = useFlowStore((s) => s.recents);
   const trackMap = useFlowStore((s) => s.trackMap);
   const createPlaylist = useFlowStore((s) => s.createPlaylist);
+  const notify = useFlowStore((s) => s.notify);
+  const user = useCurrentUser();
 
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded-lg bg-surface">
@@ -64,7 +66,10 @@ function LibraryRail() {
         </Link>
         <button
           type="button"
-          onClick={() => createPlaylist("Nuova playlist")}
+          onClick={() => {
+            const id = createPlaylist("Nuova playlist");
+            if (id && !user) notify("Playlist salvata su questo dispositivo. Accedi per tenerla sull'account.");
+          }}
           className="pressable flex size-8 items-center justify-center rounded-full text-muted hover:bg-elevated hover:text-fg"
           aria-label="Crea playlist"
         >

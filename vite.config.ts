@@ -171,7 +171,12 @@ export default defineConfig(({ command, isPreview }) => ({
     ...(command === "build" || isPreview
       ? [
           nitro({
-            preset: "vercel",
+            // Vercel Hobby is paused — Render (and other Node hosts) set
+            // RENDER=true or NITRO_PRESET=node_server. Keep vercel as default
+            // so existing Vercel deploys stay valid when unpaused.
+            preset:
+              process.env.NITRO_PRESET ||
+              (process.env.RENDER ? "node_server" : "vercel"),
             // Auto-registers server/middleware/* (the PWA install page +
             // manifest + head-tag middleware). Nitro v3 defaults serverDir to
             // false, so removing this silently unwires /?install=1 on deploys.

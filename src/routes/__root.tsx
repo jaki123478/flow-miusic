@@ -31,7 +31,7 @@ export const Route = createRootRoute({
   head: () => {
     const description =
       "Musica, radio live, playlist e testi. Scopri hit, mix e radio dal mondo — ascolta ovunque su Flow.";
-    const siteUrl = "https://flow-music-web.vercel.app";
+    const siteUrl = "https://flow-music-web.onrender.com";
     const ogImage = `${siteUrl}/og.jpg`;
     const title = "Flow — Musica, radio e playlist";
     return {
@@ -92,7 +92,7 @@ export const Route = createRootRoute({
               "@context": "https://schema.org",
               "@type": "WebApplication",
               name: "Flow",
-              url: "https://flow-music-web.vercel.app",
+              url: "https://flow-music-web.onrender.com",
               description:
                 "Musica, radio live, playlist e testi. Scopri hit, mix e radio dal mondo — ascolta ovunque su Flow.",
               applicationCategory: "MultimediaApplication",

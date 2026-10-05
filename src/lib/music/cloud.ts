@@ -93,7 +93,9 @@ export const saveLibrary = createServerFn({ method: "POST" })
            updated_at = now()`,
         [context.userId, liked, recents, playlists, settings, volume, listenMs],
       );
-    } catch {
-      /* ignore */
+      return { ok: true as const };
+    } catch (err) {
+      console.error("saveLibrary failed", err instanceof Error ? err.message : "error");
+      return { ok: false as const };
     }
   });

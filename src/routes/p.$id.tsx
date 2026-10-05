@@ -43,6 +43,11 @@ function SharedPage() {
           </Link>
           {pl.collab ? " · collaborativa" : ""}
         </p>
+        {pl.collab ? (
+          <p className="mt-2 max-w-xl text-xs text-muted">
+            I brani aggiunti qui restano sulla playlist condivisa. Non tornano nella libreria di chi l&apos;ha creata.
+          </p>
+        ) : null}
       </header>
       <div className="flex flex-wrap gap-2">
         <button

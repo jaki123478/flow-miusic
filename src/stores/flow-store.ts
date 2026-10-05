@@ -182,6 +182,27 @@ function remember(track: Track, recents: Track[], privateSession: boolean): Trac
   return [track, ...recents.filter((t) => t.id !== track.id)].slice(0, 80);
 }
 
+function stampPlaylists(playlists: Playlist[], trackMap: Record<string, Track>): Playlist[] {
+  return playlists.map((pl) => {
+    const byId = new Map<string, Track>();
+    for (const t of pl.tracks ?? []) {
+      if (t?.id) byId.set(t.id, t);
+    }
+    for (const id of pl.trackIds) {
+      const live = trackMap[id];
+      if (live) byId.set(id, live);
+    }
+    const tracks = pl.trackIds.map((id) => byId.get(id)).filter((t): t is Track => Boolean(t));
+    return { ...pl, tracks };
+  });
+}
+
+function commitPlaylists(playlists: Playlist[], trackMap: Record<string, Track>): Playlist[] {
+  const stamped = stampPlaylists(playlists, trackMap);
+  writeJson(PLAYLISTS_KEY, stamped);
+  return stamped;
+}
+
 function sanitizeTrack(track: Track): Track {
   if (track.artist && track.artist !== "YouTube Music" && track.artist !== "Flow" && track.artist !== "Flow Music") return track;
   const dash = track.title.match(/^(.{2,48}?)\s+[-–—]\s+(.+)$/);
@@ -253,6 +274,11 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const profileName = readJson<string>("flow_profile_name", "Flow User");
     const hasSeenOnboarding = readJson<boolean>("flow_onboarding_done", true);
     const trackMap: Record<string, Track> = {};
+    for (const pl of playlists) {
+      for (const t of pl.tracks ?? []) {
+        if (t?.id) trackMap[t.id] = sanitizeTrack(t);
+      }
+    }
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
     set({ liked, recents, playlists, volume, trackMap, settings, listenMs, plays, followedArtists, profileName, hasSeenOnboarding });
   },
@@ -511,8 +537,10 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const clean = title.trim();
     if (!clean) return null;
     const id = `pl_${Date.now()}`;
-    const playlists = [{ id, title: clean, createdAt: Date.now(), trackIds: [] }, ...get().playlists];
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      [{ id, title: clean, createdAt: Date.now(), trackIds: [] }, ...get().playlists],
+      get().trackMap,
+    );
     set({ playlists });
     get().notify("Playlist creata");
     return id;
@@ -522,64 +550,77 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     const id = `pl_${Date.now()}`;
     const trackMap = { ...get().trackMap };
     for (const t of tracks) trackMap[t.id] = t;
-    const playlists = [
-      { id, title: clean, createdAt: Date.now(), trackIds: tracks.map((t) => t.id) },
-      ...get().playlists,
-    ];
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      [
+        { id, title: clean, createdAt: Date.now(), trackIds: tracks.map((t) => t.id) },
+        ...get().playlists,
+      ],
+      trackMap,
+    );
     set({ playlists, trackMap });
     get().notify(`${tracks.length} brani importati`);
     return id;
   },
   addToPlaylist: (playlistId, track) => {
-    const playlists = get().playlists.map((p) =>
+    const next = get().playlists.map((p) =>
       p.id === playlistId && !p.trackIds.includes(track.id)
         ? { ...p, trackIds: [...p.trackIds, track.id] }
         : p,
     );
-    writeJson(PLAYLISTS_KEY, playlists);
-    set({ playlists, trackMap: { ...get().trackMap, [track.id]: track } });
+    const trackMap = { ...get().trackMap, [track.id]: track };
+    const playlists = commitPlaylists(next, trackMap);
+    set({ playlists, trackMap });
     get().notify("Salvato in playlist");
   },
   removeFromPlaylist: (playlistId, trackId) => {
-    const playlists = get().playlists.map((p) =>
+    const next = get().playlists.map((p) =>
       p.id === playlistId ? { ...p, trackIds: p.trackIds.filter((id) => id !== trackId) } : p,
     );
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(next, get().trackMap);
     set({ playlists });
   },
   removePlaylist: (id) => {
-    const playlists = get().playlists.filter((p) => p.id !== id);
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      get().playlists.filter((p) => p.id !== id),
+      get().trackMap,
+    );
     set({ playlists });
     get().notify("Playlist eliminata");
   },
   renamePlaylist: (id, title) => {
     const clean = title.trim();
     if (!clean) return;
-    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, title: clean } : p));
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      get().playlists.map((p) => (p.id === id ? { ...p, title: clean } : p)),
+      get().trackMap,
+    );
     set({ playlists });
   },
   duplicatePlaylist: (id) => {
     const src = get().playlists.find((p) => p.id === id);
     if (!src) return;
-    const playlists = [
-      { ...src, id: `pl_${Date.now()}`, title: `${src.title} (copia)`, createdAt: Date.now() },
-      ...get().playlists,
-    ];
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      [
+        { ...src, id: `pl_${Date.now()}`, title: `${src.title} (copia)`, createdAt: Date.now() },
+        ...get().playlists,
+      ],
+      get().trackMap,
+    );
     set({ playlists });
     get().notify("Playlist duplicata");
   },
   setPlaylistFolder: (id, folder) => {
-    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, folder: folder.trim() || undefined } : p));
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      get().playlists.map((p) => (p.id === id ? { ...p, folder: folder.trim() || undefined } : p)),
+      get().trackMap,
+    );
     set({ playlists });
   },
   setPlaylistPublic: (id, publicId, collab) => {
-    const playlists = get().playlists.map((p) => (p.id === id ? { ...p, publicId, collab } : p));
-    writeJson(PLAYLISTS_KEY, playlists);
+    const playlists = commitPlaylists(
+      get().playlists.map((p) => (p.id === id ? { ...p, publicId, collab } : p)),
+      get().trackMap,
+    );
     set({ playlists });
   },
   moveQueue: (from, to) => {
@@ -618,15 +659,19 @@ export const useFlowStore = create<FlowState>((set, get) => ({
   importCloud: (data) => {
     const liked = (data.liked ?? []).map(sanitizeTrack);
     const recents = (data.recents ?? []).map(sanitizeTrack);
-    const playlists = data.playlists ?? [];
     const settings = { ...get().settings, ...(data.settings ?? {}) };
     const volume = typeof data.volume === "number" ? data.volume : get().volume;
     const listenMs = typeof data.listenMs === "number" ? data.listenMs : get().listenMs;
     const trackMap: Record<string, Track> = { ...get().trackMap };
+    for (const pl of data.playlists ?? []) {
+      for (const t of pl.tracks ?? []) {
+        if (t?.id) trackMap[t.id] = sanitizeTrack(t);
+      }
+    }
     for (const t of [...liked, ...recents]) trackMap[t.id] = t;
+    const playlists = commitPlaylists(data.playlists ?? [], trackMap);
     writeJson(LIKED_KEY, liked);
     writeJson(RECENT_KEY, recents);
-    writeJson(PLAYLISTS_KEY, playlists);
     writeJson(SETTINGS_KEY, settings);
     writeJson(VOLUME_KEY, volume);
     writeJson(STATS_KEY, listenMs);
@@ -637,7 +682,7 @@ export const useFlowStore = create<FlowState>((set, get) => ({
     return {
       liked: s.liked,
       recents: s.recents,
-      playlists: s.playlists,
+      playlists: stampPlaylists(s.playlists, s.trackMap),
       settings: s.settings,
       volume: s.volume,
       listenMs: s.listenMs,
