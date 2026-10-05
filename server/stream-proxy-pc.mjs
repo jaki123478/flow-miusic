@@ -136,7 +136,7 @@ function pickAudioFormat(formats = []) {
 async function resolveViaLyraPlayer(id) {
   for (const client of LYRA_CLIENTS) {
     try {
-      const res = await fetch("https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false", {
+      const res = await fetch("https://youtubei.googleapis.com/youtubei/v1/player?prettyPrint=false&key=AIzaSyAO_FJ2SlqU8Q4STEHLGCilw_Y9_11qcW8", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -154,14 +154,21 @@ async function resolveViaLyraPlayer(id) {
         }),
         signal: AbortSignal.timeout(15_000),
       });
-      if (!res.ok) continue;
+      if (!res.ok) {
+        console.warn("[lyra-player]", client.name, "http", res.status);
+        continue;
+      }
       const data = await res.json();
-      if (data?.playabilityStatus?.status !== "OK") continue;
+      if (data?.playabilityStatus?.status !== "OK") {
+        console.warn("[lyra-player]", client.name, "playability", data?.playabilityStatus?.status, data?.playabilityStatus?.reason || "");
+        continue;
+      }
       const format = pickAudioFormat([...(data?.streamingData?.adaptiveFormats || []), ...(data?.streamingData?.formats || [])]);
       if (format?.url) {
         const length = Number(format.contentLength || format.content_length || new URL(format.url).searchParams.get("clen") || 0) || 0;
         return { url: format.url, length, exp: Date.now() + 8 * 60_000 };
       }
+      console.warn("[lyra-player]", client.name, "no-audio-format");
     } catch (err) {
       console.warn("[lyra-player]", client.name, err instanceof Error ? err.message : err);
     }
